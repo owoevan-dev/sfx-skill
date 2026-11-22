@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -172,10 +173,15 @@ class WhatALicenceCovers(unittest.TestCase):
 
 class TheReleaseCheck(unittest.TestCase):
     def test_a_full_check_with_no_release_named_fails(self):
-        proc = subprocess.run([sys.executable, str(helpers.REPO / 'tools' / 'check_release.py'), '--full', 'data', 'library'],
-                              capture_output=True, text=True, encoding='utf-8', errors='replace', env=helpers.child_env())
-        self.assertNotEqual(proc.returncode, 0)
-        self.assertIn('release', proc.stdout + proc.stderr)
+        import check_release
+        online = AssertionError('the check went online')
+        with mock.patch.object(check_release.fsd50k, 'RELEASE_URL', ''), \
+                mock.patch.object(check_release, 'check_links', side_effect=online), \
+                mock.patch.object(check_release, 'check_install', side_effect=online), \
+                mock.patch.object(sys, 'argv', ['check_release.py', '--full', 'data', 'library']):
+            with self.assertRaises(SystemExit) as caught:
+                check_release.main()
+        self.assertIn('names no release', str(caught.exception))
 
 
 class TheDocumentsSayWhatHappens(unittest.TestCase):
