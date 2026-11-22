@@ -64,7 +64,7 @@ https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
 
 3. 打开 agent 给你的试听页。播放每个音效和它的变体，标记保留、修改或不要，留下意见，再把反馈贴回给 agent。
 
-装好 skill 就能用合成音色。需要真实录音时，agent 会先问过你，才下载一次音效库（3.1 GB）。
+装好 skill 就能用合成音色。需要真实录音时，agent 会先问过你，才下载一次音效库：下载 3.1 GB，导入后连同压缩包约占 8 GB，压缩包之后可以自行删除。
 
 **也需要配乐？** [music-skill](https://github.com/owoevan-dev/music-skill) 能写出可编辑的原创器乐和游戏循环音乐。两个 skill 都能单独使用。
 

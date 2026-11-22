@@ -473,7 +473,8 @@ def cmd_samples(args):
     if not args.map and not args.events and not args.spectrogram and not (lib / samples.INDEX).is_file():
         print('A sample library holds the recordings sample layers play. Fill it in either way:')
         print(f'  FSD50K ({fsd50k.PAGE}): {fsd50k.RELEASE_RECORDINGS:,} screened CC0 recordings in 190 labelled classes, from '
-              "this project's release. Fetch and import (ask the person first: 3.1 GB, 4.7 GB once imported): sfx.py samples "
+              "this project's release. Fetch and import (ask the person first: a 3.1 GB download, 4.7 GB once imported, about 8 GB until the "
+              "archives are removed): sfx.py samples "
               f'--download-fsd50k DATA_FOLDER. With --source zenodo, a whole set of the dataset instead: --set eval '
               f'({fsd50k.CC0_COUNTS["eval"]:,} CC0 recordings, 6.3 GB) or --set dev ({fsd50k.CC0_COUNTS["dev"]:,}, 18.4 GB).')
         print('  Sounds the person has (their own recordings, a library they downloaded or bought, the game\'s sounds): '

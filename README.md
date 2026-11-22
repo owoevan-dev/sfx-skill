@@ -64,7 +64,7 @@ These sounds and their project files are CC0. They are on the release [examples-
 
 3. Open the audition page the agent gives you. Play each sound and its variants, mark it keep, change or drop, leave a note, and paste the feedback back to the agent.
 
-Synthesis works as soon as the skill is installed. For real recordings, the agent asks you once before it downloads the library (3.1 GB).
+Synthesis works as soon as the skill is installed. For real recordings, the agent asks you once before it downloads the library: 3.1 GB to fetch, and about 8 GB on disk until you remove the downloaded archives.
 
 **Need music too?** [music-skill](https://github.com/owoevan-dev/music-skill) writes original instrumental music and game loops as editable notes. Each skill works without the other.
 

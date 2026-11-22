@@ -311,6 +311,47 @@ class Checks(unittest.TestCase):
         self.assertEqual([f['kind'] for f in opposed['flags']], ['stereo'])
 
 
+class ALoopAgainstTheOneShots(unittest.TestCase):
+    """A bed is levelled on its integrated loudness and a hit on its loudest 200 ms, so left untrimmed the bed reads as loud as
+    the hits and sits on top of them: the first agent to use the published skill from nothing handed that over unflagged."""
+
+    def flags(self, name, bed_db, hit_db=-20.0, beds=1):
+        folder = helpers.scratch(name)
+        (folder / 'master').mkdir()
+        variants = []
+        for k in range(beds):
+            x = noise(2 * RATE, 21 + k)
+            x = x * 10 ** ((bed_db - loudness.loop_integrated(x)) / 20)
+            file = f'master/bed_{k + 1:02d}.wav'
+            wav.write(folder / file, x, bits=24, dither=False, loop=(0, len(x)))
+            variants.append({'n': k + 1, 'file': file})
+        sounds = [{'id': 'bed', 'category': 'ambience', 'use': 'loop', 'vary': {}, 'variants': variants}]
+        if hit_db is not None:
+            t = np.arange(int(0.3 * RATE)) / RATE
+            hit = np.sin(2 * np.pi * 500.0 * t) * np.exp(-t / 0.05)
+            hit = hit * 10 ** ((hit_db - loudness.brief(hit)) / 20)
+            wav.write(folder / 'master' / 'hit_01.wav', hit, bits=24, dither=False)
+            sounds.append({'id': 'hit', 'category': 'impact', 'use': 'one_shot', 'vary': {},
+                           'variants': [{'n': 1, 'file': 'master/hit_01.wav'}]})
+        resolved = {'level': {'mode': 'match', 'ceiling_dbtp': -1.0, 'target_lufs': None, 'limited_by': None}, 'sounds': sounds}
+        (folder / 'resolved.json').write_text(json.dumps(resolved), encoding='utf-8')
+        return [f for f in check.run(folder)['flags'] if f['kind'] == 'loop_level']
+
+    def test_a_bed_as_loud_as_the_hits_is_flagged_once(self):
+        found = self.flags('loop_level_even', -20.0, beds=2)
+        self.assertEqual([f['sound'] for f in found], ['bed'])
+        self.assertIn('trim_db', found[0]['message'])
+
+    def test_a_bed_just_under_the_hits_is_flagged(self):
+        self.assertEqual(len(self.flags('loop_level_close', -22.0)), 1)
+
+    def test_a_bed_trimmed_under_the_hits_is_not(self):
+        self.assertEqual(self.flags('loop_level_under', -24.0), [])
+
+    def test_loops_with_nothing_to_cover_are_not(self):
+        self.assertEqual(self.flags('loop_level_alone', -20.0, hit_db=None), [])
+
+
 class Schema(unittest.TestCase):
     def test_a_loop_recipe_makes_loops_of_twelve_seconds_unless_told(self):
         proj = project.validate(project_with({'id': 'rain', 'category': 'ambience', 'recipe': 'ambience.rain_light'}))

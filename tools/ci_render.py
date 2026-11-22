@@ -17,7 +17,7 @@ PROJECT = {
         {'id': 'knock', 'category': 'impact', 'recipe': 'impact.wood_knock'},
         {'id': 'zap', 'category': 'scifi', 'recipe': 'scifi.zap'},
         {'id': 'sparkle', 'category': 'magic', 'recipe': 'magic.sparkle'},
-        {'id': 'breeze', 'category': 'ambience', 'recipe': 'ambience.breeze', 'loop': {'seconds': 4}},
+        {'id': 'breeze', 'category': 'ambience', 'recipe': 'ambience.breeze', 'loop': {'seconds': 4}, 'trim_db': -9},
     ],
 }
 
