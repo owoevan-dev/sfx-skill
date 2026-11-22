@@ -25,6 +25,29 @@ sfx-skill 是一个 [Agent Skill](https://agentskills.io)，让 AI agent 像音�
 
 整个过程没有用到任何音频生成模型。每个音效都是项目文件里看得懂的一条设置：改其中一层，重新渲染就好。
 
+## 试听
+
+一段原创游戏场景和六组音效。每个音效都由 agent 用这个 skill，以合成音色和 CC0 实地录音做成可编辑的层。这些是打磨过的示例，不是第一次的结果：由真人试听挑选版本并退回一个音效，场景的编排和混音则用另外的脚本完成。
+
+**记得打开声音。** 《雨夜神社》，0:40：冒雨穿过铁门，黑暗里的怪物、封印和刀光，找到遗物，再走回雨中。[MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
+
+https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="重铁门的声音频谱"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">重铁门</a></b><br>同一扇门的三个版本：<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">单纯关上</a>、<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">重很多、不像铃铛</a>、<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">慢慢推开再重重撞上</a></td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3"><img src="assets/listen/chain-seal.jpg" alt="锁链封印的声音频谱"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3">锁链封印</a></b><br>锁链从两侧收紧，最后一记铁击，4 秒</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3"><img src="assets/listen/swift-slash.jpg" alt="疾风斩的声音频谱"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3">疾风斩</a></b><br>三连斩加收刀，2 秒</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3"><img src="assets/listen/abyss-growl.jpg" alt="深渊低吼的声音频谱"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3">深渊低吼</a></b><br>把录制的低吼降调叠层成更巨大的生物，4 秒</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3"><img src="assets/listen/rain-and-thunder.jpg" alt="雨夜远雷的声音频谱"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3">雨夜远雷</a></b><br>24 秒无缝循环</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3"><img src="assets/listen/rare-chest.jpg" alt="稀有宝箱的声音频谱"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3">稀有宝箱</a></b><br>像素宝箱加一段原创旋律，纯合成，3 秒</td>
+</tr>
+</table>
+
+这些音效和项目文件都以 CC0 发布，放在 Release [examples-1](https://github.com/owoevan-dev/sfx-skill/releases/tag/examples-1)，并附上[用到的每段录音](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/CREDITS.md)。
+
 ## 快速开始
 
 1. 安装 skill。在 Claude Code 中：

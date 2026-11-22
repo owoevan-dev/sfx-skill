@@ -25,6 +25,29 @@ sfx-skill は、サウンドデザイナーのやり方でゲームの効果音�
 
 音声生成モデルは一切使いません。どの音もプロジェクトファイル内の読める設定です。レイヤーを一つ変えて、レンダリングし直すだけです。
 
+## 試聴
+
+オリジナルゲームの短いシーンと 6 つの効果音です。どの音も、エージェントがこのスキルで合成音と CC0 のフィールド録音から編集できるレイヤーとして作りました。これらは磨き上げた作例で、最初の出力そのままではありません。人が聴いてバージョンを選び、1 つの音は作り直させました。シーンの配置とミックスは別のスクリプトで行っています。
+
+**音声をオンにしてください。** 『雨の社』0:40：雨の中で鉄の門をくぐり、闇にひそむ怪物、封印と一閃、遺物を見つけて、また雨の中へ。[MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
+
+https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="鉄の門の音のスペクトログラム"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">鉄の門</a></b><br>1 つの門の 3 つのバージョン：<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">普通に閉まる</a>、<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">ずっと重く、鈴のように鳴らない</a>、<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">ゆっくり押し開け、激しく閉まる</a></td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3"><img src="assets/listen/chain-seal.jpg" alt="鎖の封印の音のスペクトログラム"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3">鎖の封印</a></b><br>両側から鎖が迫り、鉄の一撃で閉じる。4 秒</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3"><img src="assets/listen/swift-slash.jpg" alt="疾風斬りの音のスペクトログラム"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3">疾風斬り</a></b><br>三連撃と締めの一太刀。2 秒</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3"><img src="assets/listen/abyss-growl.jpg" alt="深淵のうなりの音のスペクトログラム"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3">深淵のうなり</a></b><br>録音したうなり声を低くして重ね、より巨大な生き物に。4 秒</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3"><img src="assets/listen/rain-and-thunder.jpg" alt="雨と遠雷の音のスペクトログラム"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3">雨と遠雷</a></b><br>24 秒のシームレスなループ</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3"><img src="assets/listen/rare-chest.jpg" alt="レアな宝箱の音のスペクトログラム"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3">レアな宝箱</a></b><br>ピクセルの宝箱とオリジナルの短い旋律。合成音のみ。3 秒</td>
+</tr>
+</table>
+
+これらの音とプロジェクトファイルは CC0 です。リリース [examples-1](https://github.com/owoevan-dev/sfx-skill/releases/tag/examples-1) に、[使用した録音の一覧](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/CREDITS.md)とともに置いています。
+
 ## クイックスタート
 
 1. スキルをインストールします。Claude Code では:
