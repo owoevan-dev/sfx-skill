@@ -35,7 +35,7 @@ https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
 
 <table>
 <tr>
-<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="重鐵門的聲音頻譜"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">重鐵門</a></b><br>同一扇門的三個版本：<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">單純關上</a>、<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">重很多、不像鈴鐺</a>、<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">慢慢推開再重重撞上</a></td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="重鐵門的聲音頻譜"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">重鐵門</a></b><br>同一扇門的三個版本：<a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">單純關上</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">重很多、不像鈴鐺</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">慢慢推開再重重撞上</a></td>
 <td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3"><img src="assets/listen/chain-seal.jpg" alt="鎖鏈封印的聲音頻譜"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3">鎖鏈封印</a></b><br>鎖鏈從兩側收緊，最後一記鐵擊，4 秒</td>
 <td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3"><img src="assets/listen/swift-slash.jpg" alt="疾風斬的聲音頻譜"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3">疾風斬</a></b><br>三連斬加收刀，2 秒</td>
 </tr>
@@ -46,7 +46,7 @@ https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
 </tr>
 </table>
 
-這些音效和專案檔都以 CC0 釋出，放在 Release [examples-1](https://github.com/owoevan-dev/sfx-skill/releases/tag/examples-1)，並附上[用到的每段錄音](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/CREDITS.md)。
+這些音效和專案檔都以 CC0 釋出，放在 Release [examples-1](https://github.com/owoevan-dev/sfx-skill/releases/tag/examples-1)，並附上[每段錄音的出處](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/CREDITS.md)。
 
 ## 快速開始
 

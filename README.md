@@ -35,7 +35,7 @@ https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
 
 <table>
 <tr>
-<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="Iron Gate: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">Iron Gate</a></b><br>One gate, three versions: <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">a plain close</a>, <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">much heavier, no bell-like ring</a>, <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">pushed open slowly, then slammed</a></td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="Iron Gate: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">Iron Gate</a></b><br>One gate, three versions: <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">a plain close</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">much heavier, no bell-like ring</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">pushed open slowly, then slammed</a></td>
 <td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3"><img src="assets/listen/chain-seal.jpg" alt="Chain Seal: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3">Chain Seal</a></b><br>chains close in from both sides, then one iron strike, 4 s</td>
 <td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3"><img src="assets/listen/swift-slash.jpg" alt="Swift Slash: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3">Swift Slash</a></b><br>three cuts and a finishing stroke, 2 s</td>
 </tr>
@@ -46,7 +46,7 @@ https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
 </tr>
 </table>
 
-These sounds and their project files are CC0. They are on the release [examples-1](https://github.com/owoevan-dev/sfx-skill/releases/tag/examples-1), with [every recording they use](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/CREDITS.md).
+These sounds and their project files are CC0. They are on the release [examples-1](https://github.com/owoevan-dev/sfx-skill/releases/tag/examples-1), with [credits for every recording they use](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/CREDITS.md).
 
 ## Quick start
 

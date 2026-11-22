@@ -27,22 +27,22 @@ sfx-skill은 사운드 디자이너가 일하는 방식으로 게임 효과음�
 
 ## 들어보기
 
-오리지널 게임의 짧은 장면과 효과음 여섯 가지입니다. 각 소리는 에이전트가 이 스킬로 합성음과 CC0 현장 녹음을 사용해 편집 가능한 레이어로 만들었습니다. 다듬은 예시이며 첫 결과물 그대로는 아닙니다. 사람이 직접 듣고 버전을 고르고 한 소리는 다시 만들게 했으며, 장면의 배치와 믹스는 별도 스크립트로 작업했습니다.
+오리지널 게임의 짧은 장면과 효과음 여섯 가지입니다. 각 소리는 에이전트가 이 스킬로 합성음과 CC0 현장 녹음을 사용해 편집 가능한 레이어로 만들었습니다. 다듬은 예시이며 첫 결과물 그대로는 아닙니다. 사람이 직접 듣고 버전을 고르고 한 소리는 다시 만들게 했으며, 장면 속 소리의 배치와 믹스는 별도 스크립트로 작업했습니다.
 
-**소리를 켜 주세요.** 《비 내리는 신사》, 0:40: 빗속에서 철문을 지나 어둠 속 괴물, 봉인과 일격, 유물을 찾고 다시 빗속으로. [MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
+**소리를 켜 주세요.** 《비 내리는 신사》, 0:40: 빗속에서 철문을 지나면 어둠 속의 괴물. 봉인과 일격 끝에 유물을 손에 넣고 다시 빗속으로. [MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
 
 https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
 
 <table>
 <tr>
-<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="무거운 철문의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">무거운 철문</a></b><br>같은 문의 세 가지 버전: <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">평범하게 닫힘</a>, <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">훨씬 무겁고 종처럼 울리지 않음</a>, <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">천천히 밀어 열고 쾅 닫힘</a></td>
-<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3"><img src="assets/listen/chain-seal.jpg" alt="사슬 봉인의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3">사슬 봉인</a></b><br>양쪽에서 사슬이 조여 오고 마지막에 쇠의 일격, 4초</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="무거운 철문의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">무거운 철문</a></b><br>같은 문의 세 가지 버전: <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">평범하게 닫힘</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">훨씬 무겁고 종처럼 울리지 않음</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">천천히 밀어 열고 쾅 닫힘</a></td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3"><img src="assets/listen/chain-seal.jpg" alt="사슬 봉인의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3">사슬 봉인</a></b><br>양쪽에서 사슬이 조여 오고 마지막에 쇠를 내리치는 일격, 4초</td>
 <td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3"><img src="assets/listen/swift-slash.jpg" alt="질풍참의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3">질풍참</a></b><br>세 번의 베기와 마무리 일격, 2초</td>
 </tr>
 <tr>
 <td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3"><img src="assets/listen/abyss-growl.jpg" alt="심연의 으르렁거림의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3">심연의 으르렁거림</a></b><br>녹음한 으르렁거림을 낮추고 겹쳐 더 거대한 생물로, 4초</td>
 <td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3"><img src="assets/listen/rain-and-thunder.jpg" alt="비와 먼 천둥의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3">비와 먼 천둥</a></b><br>24초 끊김 없는 루프</td>
-<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3"><img src="assets/listen/rare-chest.jpg" alt="희귀 보물상자의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3">희귀 보물상자</a></b><br>픽셀 보물상자와 오리지널 짧은 선율, 합성음만 사용, 3초</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3"><img src="assets/listen/rare-chest.jpg" alt="희귀 보물상자의 소리 스펙트로그램"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3">희귀 보물상자</a></b><br>픽셀 보물상자와 직접 만든 짧은 선율, 칩 음색만 사용, 3초</td>
 </tr>
 </table>
 
