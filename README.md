@@ -25,6 +25,29 @@ sfx-skill is an [Agent Skill](https://agentskills.io) for making a game's sound 
 
 No audio-generation model is involved. Every sound is a readable entry in a project file: change one layer and render again.
 
+## Listen
+
+A short scene from an original game and six sounds. An agent built each sound with this skill, as editable layers from synthesis and CC0 field recordings. These are polished examples, not first attempts: a person chose between versions by ear and sent one sound back, and the scene was arranged and mixed with a separate script.
+
+**Turn the sound on.** *The Rain Shrine*, 0:40: through the rain and an iron gate, something in the dark, a seal and a blade, a relic, and back out into the rain. [MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
+
+https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
+
+<table>
+<tr>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3"><img src="assets/listen/iron-gate.jpg" alt="Iron Gate: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">Iron Gate</a></b><br>One gate, three versions: <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-1.mp3">a plain close</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-2.mp3">much heavier, no bell-like ring</a> / <a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/iron-gate-3.mp3">pushed open slowly, then slammed</a></td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3"><img src="assets/listen/chain-seal.jpg" alt="Chain Seal: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/chain-seal.mp3">Chain Seal</a></b><br>chains close in from both sides, then one iron strike, 4 s</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3"><img src="assets/listen/swift-slash.jpg" alt="Swift Slash: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/swift-slash.mp3">Swift Slash</a></b><br>three cuts and a finishing stroke, 2 s</td>
+</tr>
+<tr>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3"><img src="assets/listen/abyss-growl.jpg" alt="Abyss Growl: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/abyss-growl.mp3">Abyss Growl</a></b><br>a recorded growl, lowered and layered into something larger, 4 s</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3"><img src="assets/listen/rain-and-thunder.jpg" alt="Rain and Thunder: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rain-and-thunder-loop.mp3">Rain and Thunder</a></b><br>a seamless 24-second loop</td>
+<td width="33%" valign="top"><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3"><img src="assets/listen/rare-chest.jpg" alt="Rare Chest: a picture of its sound"></a><br><b><a href="https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/rare-chest.mp3">Rare Chest</a></b><br>a pixel chest and an original tune, chip voices only, 3 s</td>
+</tr>
+</table>
+
+These sounds and their project files are CC0. They are on the release [examples-1](https://github.com/owoevan-dev/sfx-skill/releases/tag/examples-1), with [credits for every recording they use](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/CREDITS.md).
+
 ## Quick start
 
 1. Install the skill. In Claude Code:
