@@ -146,7 +146,7 @@ the sound made with them; a pack someone imports may (see below).
 **Field recordings (`sample` layers).** The main source is FSD50K (Fonseca et al. 2022): Freesound recordings
 labelled with 200 classes of everyday sound (doors, engines, footsteps, water, wind, tools, animals, impacts, crowds,
 machines and more), of which only those their authors dedicated to the public domain (CC0) are used. With the user's
-agreement to a 3.1 GB download (4.7 GB once imported), `sfx.py samples --library LIB --download-fsd50k DATA` fetches this
+agreement to a 3.1 GB download (4.7 GB once imported, about 8 GB until the downloaded archives are removed), `sfx.py samples --library LIB --download-fsd50k DATA` fetches this
 project's release packs: 7,405 screened CC0 recordings in 190 of the classes, each checked against its SHA-256. With
 `--source zenodo` it fetches a whole set from the dataset's Zenodo record instead (its robots.txt allows this; MD5-checked,
 resumable): the evaluation set's 4,914 CC0 recordings (6.3 GB) or, with `--set dev`, 14,959 more (18.4 GB). Each recording

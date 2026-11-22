@@ -53,7 +53,9 @@ Run the commands from the game's project folder, by the full path of this skill'
    - **Recordings**, for what is hard to synthesize convincingly: doors, footsteps, metal, engines, water, animals.
      `sample` layers play FSD50K's CC0 field recordings (7,405 screened ones in 190 labelled classes) or packs the user
      imported. If `doctor` shows no library, `python scripts/sfx.py samples --download-fsd50k DATA` fetches and imports
-     them once the user agrees to the 3.1 GB download (4.7 GB once imported). Then, since you cannot hear them:
+     them once the user agrees. Tell them what it takes: a 3.1 GB download into DATA, which stays until they remove it,
+     and 4.7 GB once imported, in the home folder unless `--library` or `$SFX_SKILL_LIBRARY` names another (about 8 GB
+     in all). Then, since you cannot hear them:
      1. `samples --find "metal door" --passing` lists the cleanest matches first (whole words, all of them: if nothing
         comes back, use fewer; `--not WORD` and `--max-seconds` narrow it; without `--passing` it also lists the others,
         with why they failed). `samples --labels` lists the classes of sound the library is labelled with. Titles, tags and
@@ -92,7 +94,8 @@ Run the commands from the game's project folder, by the full path of this skill'
 Loops: a sound with `"use": "loop"` (the ambience recipes make them) is one period whose end runs into its start; its
 masters carry the loop in their `smpl` chunk. A longer loop repeats less often; the page shows each loop's integrated
 loudness, loudness range and how its halves differ, which tell you whether a swell inside it will be heard every time
-round. Audition the length that ships, since the page holds it whole (about 13 MB for 48 stereo seconds): one variant of
+round. The level step brings a loop to the one-shots' loudness, so a bed needs a negative `trim_db` to sit under them (the
+check flags one within 3 dB of the loudest one-shot). Audition the length that ships, since the page holds it whole (about 13 MB for 48 stereo seconds): one variant of
 a long loop keeps the page small.
 
 ## Sounds the user already has

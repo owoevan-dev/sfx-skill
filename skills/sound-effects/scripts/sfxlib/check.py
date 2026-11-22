@@ -19,7 +19,8 @@ VARIANT_SPREAD_FLAG_DB = 0.5         # variants of one sound should sit at one l
 STRIKE_SPREAD_FLAG_MS = 20.0         # variants of a struck sound landing further apart than this fall unevenly in turn
 CLICK_LAYER_S = 0.005                # a layer peaking this close to a click is named in the flag
 BURIED_DB = 3.0                      # an event of a loop less than this over the rest there, in its own octave
-HALVES_FLAG_DB = 20.0                # a loop this much louder in one half pulses each time round
+LOOP_UNDER_DB = 3.0                  # a loop closer than this to the loudest one-shot sits on top of it (this skill's choice)
+HALVES_FLAG_DB = 20.0               # a loop this much louder in one half pulses each time round
 STRIKE_WITHIN_MS = 150.0             # ... counting those that land this soon in their file
 STRIKE_RISE_MS = 50.0                # ... and reach their loudest this soon after (a swell has no landing to keep)
 THIRD_OCTAVES = 100.0 * 2 ** (np.arange(0, 22) / 3)   # 100 Hz to about 12.7 kHz
@@ -238,6 +239,16 @@ def run(render_dir):
         sounds.append({'id': sound['id'], 'category': sound['category'], 'variants': len(audio),
                        'variant_loudness_spread_db': spread, 'variants_against_first': moves,
                        'traits': traits.summary(audio, loop=is_loop)})
+    hits = [f['brief_lufs'] for f in files if f.get('brief_lufs') is not None and math.isfinite(f['brief_lufs'])]
+    for sound in resolved['sounds'] if hits else ():
+        beds = [f for f in files if sound.get('use') == 'loop' and f['sound'] == sound['id']
+                and f['integrated_lufs'] is not None and math.isfinite(f['integrated_lufs'])]
+        if beds:
+            bed = max(beds, key=lambda f: f['integrated_lufs'])
+            if bed['integrated_lufs'] > max(hits) - LOOP_UNDER_DB:
+                flag('loop_level', sound['id'], bed['file'], f"this loop ({bed['integrated_lufs']:.1f} LUFS) is within "
+                     f'{LOOP_UNDER_DB:.0f} dB of the loudest one-shot ({max(hits):.1f} LUFS, its loudest 200 ms), so it will sit on '
+                     'top of the sounds played over it: give it a negative trim_db, or leave it if this loop is meant to lead')
     report = {'level': resolved['level'], 'files': [_finite(f) for f in files], 'sounds': sounds, 'flags': flags}
     (folder / 'check.json').write_text(json.dumps(report, indent=1) + '\n', encoding='utf-8', newline='\n')
     return report

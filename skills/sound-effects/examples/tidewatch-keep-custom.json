@@ -937,6 +937,7 @@
       "id": "sea_wash",
       "category": "ambience",
       "use": "loop",
+      "trim_db": -9,
       "loop": {
         "seconds": 12
       },

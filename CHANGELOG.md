@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `check` flags a loop within 3 dB of the loudest one-shot (`loop_level`). The level step brings a bed to the one-shots' loudness,
+  so an untrimmed one sits on top of them. The worked example's sea now sits 9 dB under its set.
+- The READMEs and the guide give the library's whole disk cost: a 3.1 GB download, 4.7 GB once imported, about 8 GB until the
+  downloaded archives are removed.
+
 ## 0.1.0 (2026-11-22)
 
 The first version.
