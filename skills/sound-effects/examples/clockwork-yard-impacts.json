@@ -1,0 +1,20 @@
+{
+  "schema": "sound-effects/1",
+  "title": "Clockwork Yard Impacts",
+  "notes": "Impacts for a workshop brawler: blows, falls, wood, metal hits and clangs, glass, and the swing before a blow. Every sound uses its recipe's defaults first.",
+  "variants": 4,
+  "sounds": [
+    {"id": "punch", "category": "impact", "recipe": "impact.punch", "params": {}, "notes": "a fist landing"},
+    {"id": "thud", "category": "impact", "recipe": "impact.thud", "params": {}, "notes": "a crate dropped on a mat"},
+    {"id": "wood_knock", "category": "impact", "recipe": "impact.wood_knock", "params": {}, "notes": "knocking on a bench"},
+    {"id": "metal_hit", "category": "impact", "recipe": "impact.metal_hit", "params": {}, "notes": "a wrench striking a vice"},
+    {"id": "metal_clang", "category": "impact", "recipe": "impact.metal_clang", "params": {}, "notes": "a hammer on a hanging pipe"},
+    {"id": "glass_tink", "category": "impact", "recipe": "impact.glass_tink", "params": {}, "notes": "a gear on a glass jar"},
+    {"id": "swing", "category": "impact", "recipe": "impact.swing", "params": {}, "notes": "a staff swung"}
+  ],
+  "flows": [
+    {"name": "brawl", "sounds": ["swing", "punch", "swing", "punch", "thud"], "gap": 0.08},
+    {"name": "workbench", "sounds": ["wood_knock", "wood_knock", "metal_hit", "metal_clang"], "gap": 0.25},
+    {"name": "shelf", "sounds": ["glass_tink", "glass_tink", "thud"], "gap": 0.2}
+  ]
+}

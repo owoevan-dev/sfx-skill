@@ -1,0 +1,23 @@
+{
+  "name": "sfx-skill",
+  "owner": {
+    "name": "sfx-skill contributors"
+  },
+  "description": "Design original game sound effects as editable layers of synthesis and CC0 recordings. No audio-generation model.",
+  "plugins": [
+    {
+      "name": "sfx-skill",
+      "source": "./",
+      "description": "Design original sound effects for games and apps as editable layers: the agent builds each sound from synthesis and CC0 field recordings, and the skill renders variants, matches their loudness, makes seamless loops, measures every file and writes an audition page and exports for Godot, Unity, Unreal, Roblox and the web. No audio-generation model is involved.",
+      "category": "creative",
+      "keywords": [
+        "sound-effects",
+        "sfx",
+        "game-audio",
+        "sound-design",
+        "godot",
+        "unity"
+      ]
+    }
+  ]
+}

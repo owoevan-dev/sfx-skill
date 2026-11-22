@@ -1,0 +1,131 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A pull request's branch is tested once, and a newer commit on it cancels the older run. Each push to main is its own
+# group, so a waiting run is never replaced by a later push.
+concurrency:
+  group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: ${{ matrix.os }}, Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python-version: "3.10"
+          - os: ubuntu-24.04
+            python-version: "3.13"
+            godot: true
+          - os: ubuntu-24.04
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.13"
+    steps:
+      # Each action by its commit, so that a tag moved later cannot change what runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install FFmpeg (Ubuntu)
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update
+          for attempt in 1 2 3; do
+            timeout 240 sudo apt-get install -y --no-install-recommends --download-only ffmpeg && break
+            echo "The package download stalled (attempt $attempt); starting again"
+          done
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --no-progress -y
+      - name: Install Godot, checked by its SHA-512
+        if: matrix.godot
+        env:
+          GODOT_URL: https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          GODOT_SHA512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/godot.zip" "$GODOT_URL"
+          echo "$GODOT_SHA512  $RUNNER_TEMP/godot.zip" | sha512sum -c -
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          echo "SFX_TEST_GODOT=$RUNNER_TEMP/godot/Godot_v4.7.2-stable_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Install the Python packages
+        # requirements.txt pins NumPy by hash, which puts pip in hash-checking mode for that command: PyYAML, which only
+        # the tests read the skill's metadata with, goes in a command of its own.
+        run: |
+          python -m pip install -r skills/sound-effects/requirements.txt
+          python -m pip install pyyaml
+      - name: Compile every script
+        run: python -m compileall -q skills tests tools
+      - name: Run the tests
+        env:
+          # a tool named here must be found: the tests using it may not pass by being skipped
+          SFX_TEST_REQUIRE: ffmpeg,node${{ matrix.godot && ',godot' || '' }}
+        run: python -m unittest discover -s tests -t tests
+      - name: Render the project every system must render alike
+        run: python tools/ci_render.py "$RUNNER_TEMP/render"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: render-${{ matrix.os }}-${{ matrix.python-version }}
+          path: ${{ runner.temp }}/render/master
+          retention-days: 3
+
+  same-sound:
+    name: The same sound on every system
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -r skills/sound-effects/requirements.txt
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: render-*
+          path: renders
+      - run: python tools/ci_compare.py renders/*
+
+  browsers:
+    name: The audition page in real browsers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - run: python -m pip install -r skills/sound-effects/requirements.txt
+      - run: python tools/ci_render.py "$RUNNER_TEMP/render"
+      - name: Install the browsers
+        working-directory: tests/browser
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox webkit
+      - name: Open the page in each
+        working-directory: tests/browser
+        run: node audition.mjs "$RUNNER_TEMP/render/audition.html"

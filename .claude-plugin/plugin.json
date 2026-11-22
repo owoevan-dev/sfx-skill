@@ -1,0 +1,30 @@
+{
+  "name": "sfx-skill",
+  "displayName": "SFX Skill",
+  "version": "0.1.0",
+  "description": "Design original sound effects for games and apps as editable layers: the agent builds each sound from synthesis and CC0 field recordings, and the skill renders variants, matches their loudness, makes seamless loops, measures every file and writes an audition page and exports for Godot, Unity, Unreal, Roblox and the web. No audio-generation model is involved.",
+  "author": {
+    "name": "owoevan-dev",
+    "url": "https://github.com/owoevan-dev"
+  },
+  "homepage": "https://github.com/owoevan-dev/sfx-skill",
+  "repository": "https://github.com/owoevan-dev/sfx-skill",
+  "privacyPolicyUrl": "https://github.com/owoevan-dev/sfx-skill/blob/main/PRIVACY.md",
+  "license": "MIT",
+  "icon": "./assets/brand/icon-512.png",
+  "keywords": [
+    "sound-effects",
+    "sfx",
+    "game-audio",
+    "sound-design",
+    "foley",
+    "ui-sounds",
+    "chiptune",
+    "ambience",
+    "godot",
+    "unity"
+  ],
+  "skills": [
+    "./skills/sound-effects"
+  ]
+}

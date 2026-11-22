@@ -1,0 +1,27 @@
+{
+  "schema": "sound-effects/1",
+  "title": "Lantern Market UI",
+  "notes": "Interface sounds for a calm market-building game, short and clear. Every sound uses its recipe's defaults first, which a softer game would lower and darken; the developer's listening decides the changes.",
+  "variants": 4,
+  "sounds": [
+    {"id": "tick", "category": "ui", "recipe": "ui.tick", "params": {}, "notes": "stepping through a list"},
+    {"id": "hover", "category": "ui", "recipe": "ui.hover", "params": {}, "notes": "pointer onto a stall card"},
+    {"id": "select", "category": "ui", "recipe": "ui.select", "params": {}, "notes": "picking a stall card"},
+    {"id": "confirm", "category": "ui", "recipe": "ui.confirm", "params": {}, "notes": "placing a stall"},
+    {"id": "back", "category": "ui", "recipe": "ui.back", "params": {}, "notes": "leaving a menu"},
+    {"id": "error", "category": "ui", "recipe": "ui.error", "params": {}, "notes": "not enough coins"},
+    {"id": "toggle_on", "category": "ui", "recipe": "ui.toggle_on", "params": {}, "notes": "music on"},
+    {"id": "toggle_off", "category": "ui", "recipe": "ui.toggle_off", "params": {}, "notes": "music off"},
+    {"id": "open", "category": "ui", "recipe": "ui.open", "params": {}, "notes": "the ledger opens"},
+    {"id": "close", "category": "ui", "recipe": "ui.close", "params": {}, "notes": "the ledger closes"},
+    {"id": "notify", "category": "ui", "recipe": "ui.notify", "params": {}, "notes": "a customer arrives"},
+    {"id": "success", "category": "ui", "recipe": "ui.success", "params": {}, "notes": "a day's goal reached"}
+  ],
+  "flows": [
+    {"name": "choose and place", "sounds": ["hover", "select", "confirm"], "gap": 0.3},
+    {"name": "try and fail", "sounds": ["hover", "select", "error"], "gap": 0.3},
+    {"name": "ledger", "sounds": ["open", "tick", "tick", "tick", "close"], "gap": 0.25},
+    {"name": "settings", "sounds": ["toggle_off", "toggle_on", "back"], "gap": 0.4},
+    {"name": "good news", "sounds": ["notify", "success"], "gap": 0.6}
+  ]
+}

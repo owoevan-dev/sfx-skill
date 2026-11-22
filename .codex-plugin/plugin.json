@@ -1,0 +1,47 @@
+{
+  "name": "sfx-skill",
+  "version": "0.1.0",
+  "description": "Design original sound effects for games and apps as editable layers: the agent builds each sound from synthesis and CC0 field recordings, and the skill renders variants, matches their loudness, makes seamless loops, measures every file and writes an audition page and exports for Godot, Unity, Unreal, Roblox and the web. No audio-generation model is involved.",
+  "author": {
+    "name": "owoevan-dev",
+    "url": "https://github.com/owoevan-dev"
+  },
+  "homepage": "https://github.com/owoevan-dev/sfx-skill",
+  "repository": "https://github.com/owoevan-dev/sfx-skill",
+  "license": "MIT",
+  "keywords": [
+    "sound-effects",
+    "sfx",
+    "game-audio",
+    "sound-design",
+    "foley",
+    "ui-sounds",
+    "chiptune",
+    "ambience",
+    "godot",
+    "unity"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "SFX Skill",
+    "shortDescription": "Design original sound effects",
+    "longDescription": "sfx-skill designs a game's sound effects the way a sound designer would. Your agent writes each sound as layers: a transient, a body, a low end and a tail, from oscillators, FM, chip voices, noise, struck modes, rain and wind, and from CC0 field recordings of the FSD50K dataset or sounds you hand it. The skill renders each sound with variants, brings the set to one loudness under a true-peak ceiling, makes seamless loops, and measures every file so the agent can read what it cannot hear.\n\nYou get 48 kHz WAV masters, a single-file audition page where you listen and leave notes, and exports with suggested settings for Godot, Unity, Unreal, Roblox and the web. Change one layer and render again.\n\nNo audio-generation model is involved. It runs locally in Python with NumPy; FFmpeg is needed only for compressed formats. The recordings are an optional download.\n\nLimitations: it makes offline files rather than running inside a game engine, and its measurements point at problems; a person still has to listen.",
+    "developerName": "owoevan-dev",
+    "category": "Creativity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/owoevan-dev/sfx-skill",
+    "supportURL": "https://github.com/owoevan-dev/sfx-skill/issues",
+    "privacyPolicyURL": "https://github.com/owoevan-dev/sfx-skill/blob/main/PRIVACY.md",
+    "defaultPrompt": [
+      "Make the sound effects for my game: footsteps, a door, a sword, pickups and menu sounds.",
+      "Design a heavy iron gate closing, with three variants, and give me a page to listen.",
+      "Make a seamless rain loop for a night scene and export it for Godot."
+    ],
+    "brandColor": "#111111",
+    "composerIcon": "./assets/brand/icon-small.svg",
+    "logo": "./assets/brand/icon-512.png"
+  }
+}

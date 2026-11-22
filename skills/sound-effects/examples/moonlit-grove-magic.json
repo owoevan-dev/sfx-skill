@@ -1,0 +1,18 @@
+{
+  "schema": "sound-effects/1",
+  "title": "Moonlit Grove Magic",
+  "notes": "Magic sounds for a gentle forest adventure: airy and bright for good magic, low and murky for bad. Every sound uses its recipe's defaults first.",
+  "variants": 4,
+  "sounds": [
+    {"id": "sparkle", "category": "magic", "recipe": "magic.sparkle", "params": {}, "notes": "fairy dust"},
+    {"id": "cast", "category": "magic", "recipe": "magic.cast", "params": {}, "notes": "the hero casts a light spell"},
+    {"id": "heal", "category": "magic", "recipe": "magic.heal", "params": {}, "notes": "health restored"},
+    {"id": "curse", "category": "magic", "recipe": "magic.curse", "params": {}, "notes": "a witch's curse"},
+    {"id": "pickup_chime", "category": "magic", "recipe": "magic.pickup_chime", "params": {}, "notes": "a moonstone collected"}
+  ],
+  "flows": [
+    {"name": "spell", "sounds": ["cast", "sparkle"], "gap": 0.1},
+    {"name": "duel", "sounds": ["curse", "heal"], "gap": 0.4},
+    {"name": "treasure", "sounds": ["pickup_chime", "pickup_chime", "sparkle"], "gap": 0.25}
+  ]
+}

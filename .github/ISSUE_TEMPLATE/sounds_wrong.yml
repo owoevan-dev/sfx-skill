@@ -1,0 +1,21 @@
+name: It sounds wrong
+description: A click, a thin or harsh sound, a loop you can hear join, a sound that does not fit what it should be.
+labels: [listening]
+body:
+  - type: textarea
+    id: where
+    attributes:
+      label: Which sound, and what you hear
+      description: The sound's id or what it is for, the variant, and where in it (seconds, or "at the start").
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: How it should sound instead, or a reference you can describe in words.
+  - type: textarea
+    id: files
+    attributes:
+      label: Files
+      description: The project JSON and, if you can, the sound itself. Please only attach files you have the right to share.

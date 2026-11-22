@@ -1,0 +1,17 @@
+{
+  "schema": "sound-effects/1",
+  "title": "Lighthouse Cove Ambience",
+  "notes": "Weather loops for a small coastal exploration game, heard behind everything else. Stereo, ten-second loops, every sound on its recipe's defaults first.",
+  "channels": 2,
+  "variants": 2,
+  "sounds": [
+    {"id": "rain_light", "category": "ambience", "recipe": "ambience.rain_light", "params": {}, "loop": {"seconds": 10},
+     "notes": "drizzle on the harbour"},
+    {"id": "rain_heavy", "category": "ambience", "recipe": "ambience.rain_heavy", "params": {}, "loop": {"seconds": 10},
+     "notes": "a storm rolling in"},
+    {"id": "breeze", "category": "ambience", "recipe": "ambience.breeze", "params": {}, "loop": {"seconds": 10},
+     "notes": "a calm evening on the cliffs"},
+    {"id": "wind_gusty", "category": "ambience", "recipe": "ambience.wind_gusty", "params": {}, "loop": {"seconds": 10},
+     "notes": "wind around the lighthouse railings"}
+  ]
+}

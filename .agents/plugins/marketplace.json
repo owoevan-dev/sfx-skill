@@ -1,0 +1,20 @@
+{
+  "name": "sfx-skill",
+  "interface": {
+    "displayName": "SFX Skill"
+  },
+  "plugins": [
+    {
+      "name": "sfx-skill",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Creativity"
+    }
+  ]
+}

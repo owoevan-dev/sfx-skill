@@ -1,0 +1,1033 @@
+{
+ "schema": "sound-effects/1",
+ "title": "Hollow Road",
+ "notes": "An original example of what recordings can do: each sound shows one technique of references/sound-design.md, section 6, on CC0 recordings of FSD50K.",
+ "variants": 2,
+ "sounds": [
+  {
+   "id": "bell_far",
+   "category": "ambience",
+   "notes": "Distance. A church bell (FSD50K 378799) across a valley: a low-pass takes the highs that air would take, most of what is left is the room, and a slow echo comes back off the hills.",
+   "layers": [
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "378799"
+     },
+     "start": 0.0,
+     "length": 3.1,
+     "env": [
+      [
+       0,
+       0,
+       "cos"
+      ],
+      [
+       0.004,
+       1
+      ],
+      [
+       1.9000000000000001,
+       1,
+       "cos"
+      ],
+      [
+       3.1,
+       0
+      ]
+     ],
+     "gain_db": -4,
+     "filter": {
+      "type": "lowpass",
+      "cutoff": 1100,
+      "q": 0.7071
+     }
+    }
+   ],
+   "chain": {
+    "eq": {
+     "low_cut_hz": 120
+    },
+    "delay": {
+     "time": 0.42,
+     "feedback": 0.3,
+     "mix": 0.25,
+     "damping_hz": 1400
+    },
+    "room": {
+     "size": 3.0,
+     "decay": 3.0,
+     "mix": 0.45
+    }
+   },
+   "channels": 1
+  },
+  {
+   "id": "giant_footfall",
+   "category": "impact",
+   "notes": "Size and weight. One hammer blow (337815) an octave lower and half as fast is a huge foot; a sine falling to 30 Hz and low noise, placed on its onset, give it the mass the recording never had.",
+   "layers": [
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "337815",
+      "offset": 3.815,
+      "cents": -1200
+     },
+     "start": 0.0,
+     "length": 1.5,
+     "env": [
+      [
+       0,
+       0,
+       "cos"
+      ],
+      [
+       0.003,
+       1
+      ],
+      [
+       0.7,
+       1,
+       "cos"
+      ],
+      [
+       1.5,
+       0
+      ]
+     ]
+    },
+    {
+     "source": {
+      "type": "osc",
+      "wave": "sine"
+     },
+     "start": 0.03,
+     "length": 0.9,
+     "pitch": [
+      [
+       0,
+       62,
+       "exp"
+      ],
+      [
+       0.08,
+       30
+      ]
+     ],
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.003,
+       1,
+       "db"
+      ],
+      [
+       0.9,
+       0
+      ]
+     ],
+     "gain_db": -10
+    },
+    {
+     "source": {
+      "type": "noise",
+      "color": "brown"
+     },
+     "start": 0.03,
+     "length": 1.1,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.01,
+       1,
+       "db"
+      ],
+      [
+       1.1,
+       0
+      ]
+     ],
+     "filter": {
+      "type": "lowpass",
+      "cutoff": 130,
+      "q": 0.7071
+     },
+     "gain_db": -15
+    }
+   ],
+   "chain": {
+    "eq": {
+     "low_cut_hz": 26
+    },
+    "saturation": {
+     "drive": 0.25,
+     "mix": 0.3
+    },
+    "room": {
+     "size": 1.8,
+     "decay": 1.5,
+     "mix": 0.16
+    }
+   },
+   "channels": 1
+  },
+  {
+   "id": "stone_bounce",
+   "category": "impact",
+   "notes": "Timing. One knock (202231) repeated at gaps that shrink by the same ratio and at falling levels is a stone bouncing to rest: the timing alone says what is happening.",
+   "layers": [
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "202231",
+      "offset": 0.755,
+      "cents": 300
+     },
+     "start": 0.0,
+     "length": 0.14,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.001,
+       1,
+       "db"
+      ],
+      [
+       0.14,
+       0
+      ]
+     ]
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "202231",
+      "offset": 0.755,
+      "cents": 325
+     },
+     "start": 0.3,
+     "length": 0.14,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.001,
+       1,
+       "db"
+      ],
+      [
+       0.14,
+       0
+      ]
+     ],
+     "gain_db": -2.6
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "202231",
+      "offset": 0.755,
+      "cents": 350
+     },
+     "start": 0.51,
+     "length": 0.14,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.001,
+       1,
+       "db"
+      ],
+      [
+       0.14,
+       0
+      ]
+     ],
+     "gain_db": -5.2
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "202231",
+      "offset": 0.755,
+      "cents": 375
+     },
+     "start": 0.66,
+     "length": 0.14,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.001,
+       1,
+       "db"
+      ],
+      [
+       0.14,
+       0
+      ]
+     ],
+     "gain_db": -7.800000000000001
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "202231",
+      "offset": 0.755,
+      "cents": 400
+     },
+     "start": 0.765,
+     "length": 0.14,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.001,
+       1,
+       "db"
+      ],
+      [
+       0.14,
+       0
+      ]
+     ],
+     "gain_db": -10.4
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "202231",
+      "offset": 0.755,
+      "cents": 425
+     },
+     "start": 0.84,
+     "length": 0.14,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.001,
+       1,
+       "db"
+      ],
+      [
+       0.14,
+       0
+      ]
+     ],
+     "gain_db": -13.0
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "202231",
+      "offset": 0.755,
+      "cents": 450
+     },
+     "start": 0.892,
+     "length": 0.14,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.001,
+       1,
+       "db"
+      ],
+      [
+       0.14,
+       0
+      ]
+     ],
+     "gain_db": -15.600000000000001
+    }
+   ],
+   "chain": {
+    "room": {
+     "size": 0.6,
+     "decay": 0.4,
+     "mix": 0.1
+    }
+   },
+   "channels": 1
+  },
+  {
+   "id": "gate_swell",
+   "category": "magic",
+   "notes": "Reversal. The ring of an iron gate (54269) played backwards rushes up into its own strike, which then plays forwards: a swell that lands exactly on the hit.",
+   "layers": [
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "54269",
+      "cents": -500,
+      "reverse": true
+     },
+     "start": 0.0,
+     "length": 1.069,
+     "env": [
+      [
+       0,
+       0,
+       "cos"
+      ],
+      [
+       1.0369220595544657,
+       1,
+       "cos"
+      ],
+      [
+       1.068991813973676,
+       0
+      ]
+     ],
+     "gain_db": -2
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "54269",
+      "offset": 4.815,
+      "cents": -500
+     },
+     "start": 1.069,
+     "length": 1.6,
+     "env": [
+      [
+       0,
+       0,
+       "cos"
+      ],
+      [
+       0.002,
+       1
+      ],
+      [
+       0.8,
+       1,
+       "cos"
+      ],
+      [
+       1.6,
+       0
+      ]
+     ]
+    },
+    {
+     "source": {
+      "type": "osc",
+      "wave": "sine"
+     },
+     "start": 1.069,
+     "length": 0.9,
+     "pitch": [
+      [
+       0,
+       70,
+       "exp"
+      ],
+      [
+       0.08,
+       30
+      ]
+     ],
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.003,
+       1,
+       "db"
+      ],
+      [
+       0.9,
+       0
+      ]
+     ],
+     "gain_db": -9
+    },
+    {
+     "source": {
+      "type": "noise",
+      "color": "brown"
+     },
+     "start": 1.069,
+     "length": 1.2,
+     "env": [
+      [
+       0,
+       0
+      ],
+      [
+       0.01,
+       1,
+       "db"
+      ],
+      [
+       1.2,
+       0
+      ]
+     ],
+     "filter": {
+      "type": "lowpass",
+      "cutoff": 140,
+      "q": 0.7071
+     },
+     "gain_db": -13
+    }
+   ],
+   "chain": {
+    "eq": {
+     "low_cut_hz": 28
+    },
+    "room": {
+     "size": 2.2,
+     "decay": 2.4,
+     "mix": 0.28
+    }
+   },
+   "channels": 1
+  },
+  {
+   "id": "dusk_drone",
+   "category": "ambience",
+   "notes": "Time without pitch. Six seconds of wind (410369) stretched to three times their length by random-phase smearing become a smooth, slowly moving bed.",
+   "layers": [
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "410369",
+      "offset": 0.1,
+      "time_stretch": {
+       "factor": 3.0,
+       "method": "smear"
+      }
+     },
+     "start": 0.0,
+     "length": 8.0,
+     "env": [
+      [
+       0,
+       0,
+       "cos"
+      ],
+      [
+       1.8,
+       1
+      ],
+      [
+       5.8,
+       1,
+       "cos"
+      ],
+      [
+       8.0,
+       0
+      ]
+     ],
+     "filter": {
+      "type": "lowpass",
+      "cutoff": 2000,
+      "q": 0.7071
+     }
+    }
+   ],
+   "chain": {
+    "eq": {
+     "low_cut_hz": 40
+    },
+    "room": {
+     "size": 2.0,
+     "decay": 2.2,
+     "mix": 0.2
+    }
+   },
+   "channels": 1
+  },
+  {
+   "id": "blade_ring",
+   "category": "impact",
+   "notes": "A kept attack. A knife strike (118799) whose ring is stretched to three times its length while its first 25 ms play at their own speed, so the strike stays sharp and the blade sings on.",
+   "layers": [
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "118799",
+      "time_stretch": {
+       "factor": 3.0,
+       "keep_attack_ms": 25
+      }
+     },
+     "start": 0.0,
+     "length": 2.4,
+     "env": [
+      [
+       0,
+       0,
+       "cos"
+      ],
+      [
+       0.001,
+       1
+      ],
+      [
+       1.5,
+       1,
+       "cos"
+      ],
+      [
+       2.4,
+       0
+      ]
+     ]
+    },
+    {
+     "source": {
+      "type": "noise",
+      "color": "white"
+     },
+     "start": 0.0,
+     "length": 0.008,
+     "env": [
+      [
+       0,
+       1,
+       "db"
+      ],
+      [
+       0.008,
+       0
+      ]
+     ],
+     "filter": {
+      "type": "highpass",
+      "cutoff": 3500,
+      "q": 0.7071
+     },
+     "gain_db": -14
+    }
+   ],
+   "chain": {
+    "room": {
+     "size": 1.0,
+     "decay": 0.8,
+     "mix": 0.12
+    }
+   },
+   "channels": 1
+  },
+  {
+   "id": "rain_loop",
+   "category": "ambience",
+   "trim_db": -14,
+   "notes": "A seamless loop from a recording (119500). A recording cannot be a loop's bed, but two takes can: each half the loop plus a crossfade, the second running past the end and wrapping round to the start. Two different pairs, left and right, make it wide.",
+   "layers": [
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "119500",
+      "offset": 0.2
+     },
+     "start": 0.0,
+     "length": 8.0,
+     "env": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.25,
+       0.19509
+      ],
+      [
+       0.5,
+       0.38268
+      ],
+      [
+       0.75,
+       0.55557
+      ],
+      [
+       1.0,
+       0.70711
+      ],
+      [
+       1.25,
+       0.83147
+      ],
+      [
+       1.5,
+       0.92388
+      ],
+      [
+       1.75,
+       0.98079
+      ],
+      [
+       2.0,
+       1.0
+      ],
+      [
+       6.0,
+       1.0
+      ],
+      [
+       6.25,
+       0.98079
+      ],
+      [
+       6.5,
+       0.92388
+      ],
+      [
+       6.75,
+       0.83147
+      ],
+      [
+       7.0,
+       0.70711
+      ],
+      [
+       7.25,
+       0.55557
+      ],
+      [
+       7.5,
+       0.38268
+      ],
+      [
+       7.75,
+       0.19509
+      ],
+      [
+       8.0,
+       0.0
+      ]
+     ],
+     "filter": {
+      "type": "highpass",
+      "cutoff": 120,
+      "q": 0.7071
+     },
+     "pan": -0.65
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "119500",
+      "offset": 7.2
+     },
+     "start": 6.0,
+     "length": 8.0,
+     "env": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.25,
+       0.19509
+      ],
+      [
+       0.5,
+       0.38268
+      ],
+      [
+       0.75,
+       0.55557
+      ],
+      [
+       1.0,
+       0.70711
+      ],
+      [
+       1.25,
+       0.83147
+      ],
+      [
+       1.5,
+       0.92388
+      ],
+      [
+       1.75,
+       0.98079
+      ],
+      [
+       2.0,
+       1.0
+      ],
+      [
+       6.0,
+       1.0
+      ],
+      [
+       6.25,
+       0.98079
+      ],
+      [
+       6.5,
+       0.92388
+      ],
+      [
+       6.75,
+       0.83147
+      ],
+      [
+       7.0,
+       0.70711
+      ],
+      [
+       7.25,
+       0.55557
+      ],
+      [
+       7.5,
+       0.38268
+      ],
+      [
+       7.75,
+       0.19509
+      ],
+      [
+       8.0,
+       0.0
+      ]
+     ],
+     "filter": {
+      "type": "highpass",
+      "cutoff": 120,
+      "q": 0.7071
+     },
+     "pan": -0.65
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "119500",
+      "offset": 3.6
+     },
+     "start": 0.0,
+     "length": 8.0,
+     "env": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.25,
+       0.19509
+      ],
+      [
+       0.5,
+       0.38268
+      ],
+      [
+       0.75,
+       0.55557
+      ],
+      [
+       1.0,
+       0.70711
+      ],
+      [
+       1.25,
+       0.83147
+      ],
+      [
+       1.5,
+       0.92388
+      ],
+      [
+       1.75,
+       0.98079
+      ],
+      [
+       2.0,
+       1.0
+      ],
+      [
+       6.0,
+       1.0
+      ],
+      [
+       6.25,
+       0.98079
+      ],
+      [
+       6.5,
+       0.92388
+      ],
+      [
+       6.75,
+       0.83147
+      ],
+      [
+       7.0,
+       0.70711
+      ],
+      [
+       7.25,
+       0.55557
+      ],
+      [
+       7.5,
+       0.38268
+      ],
+      [
+       7.75,
+       0.19509
+      ],
+      [
+       8.0,
+       0.0
+      ]
+     ],
+     "filter": {
+      "type": "highpass",
+      "cutoff": 120,
+      "q": 0.7071
+     },
+     "pan": 0.65
+    },
+    {
+     "source": {
+      "type": "sample",
+      "library": "fsd50k-eval",
+      "file": "119500",
+      "offset": 5.6
+     },
+     "start": 6.0,
+     "length": 8.0,
+     "env": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       0.25,
+       0.19509
+      ],
+      [
+       0.5,
+       0.38268
+      ],
+      [
+       0.75,
+       0.55557
+      ],
+      [
+       1.0,
+       0.70711
+      ],
+      [
+       1.25,
+       0.83147
+      ],
+      [
+       1.5,
+       0.92388
+      ],
+      [
+       1.75,
+       0.98079
+      ],
+      [
+       2.0,
+       1.0
+      ],
+      [
+       6.0,
+       1.0
+      ],
+      [
+       6.25,
+       0.98079
+      ],
+      [
+       6.5,
+       0.92388
+      ],
+      [
+       6.75,
+       0.83147
+      ],
+      [
+       7.0,
+       0.70711
+      ],
+      [
+       7.25,
+       0.55557
+      ],
+      [
+       7.5,
+       0.38268
+      ],
+      [
+       7.75,
+       0.19509
+      ],
+      [
+       8.0,
+       0.0
+      ]
+     ],
+     "filter": {
+      "type": "highpass",
+      "cutoff": 120,
+      "q": 0.7071
+     },
+     "pan": 0.65
+    }
+   ],
+   "chain": {},
+   "channels": 2,
+   "use": "loop",
+   "loop": {
+    "seconds": 12.0
+   },
+   "variants": 1
+  }
+ ]
+}

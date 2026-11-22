@@ -1,0 +1,22 @@
+{
+  "schema": "sound-effects/1",
+  "title": "Pocket Arcade Retro",
+  "notes": "Eight-bit-style sounds for a small platform game: bright, quick and crunchy, on chip voices with the NES output filter. Every sound uses its recipe's defaults first.",
+  "variants": 4,
+  "sounds": [
+    {"id": "jump", "category": "retro", "recipe": "retro.jump", "params": {}, "notes": "the hero jumps"},
+    {"id": "coin", "category": "retro", "recipe": "retro.coin", "params": {}, "notes": "a coin collected"},
+    {"id": "powerup", "category": "retro", "recipe": "retro.powerup", "params": {}, "notes": "a power-up taken"},
+    {"id": "shoot", "category": "retro", "recipe": "retro.shoot", "params": {}, "notes": "a shot fired"},
+    {"id": "hit", "category": "retro", "recipe": "retro.hit", "params": {}, "notes": "the hero is hurt"},
+    {"id": "explosion", "category": "retro", "recipe": "retro.explosion", "params": {}, "notes": "an enemy explodes"},
+    {"id": "blip", "category": "retro", "recipe": "retro.blip", "params": {}, "notes": "moving through the menu"},
+    {"id": "extra_life", "category": "retro", "recipe": "retro.extra_life", "params": {}, "notes": "an extra life"}
+  ],
+  "flows": [
+    {"name": "run and collect", "sounds": ["jump", "coin", "jump", "coin"], "gap": 0.15},
+    {"name": "fight", "sounds": ["shoot", "shoot", "hit", "shoot", "explosion"], "gap": 0.12},
+    {"name": "lucky", "sounds": ["powerup", "extra_life"], "gap": 0.3},
+    {"name": "menu", "sounds": ["blip", "blip", "blip", "coin"], "gap": 0.2}
+  ]
+}

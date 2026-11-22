@@ -1,0 +1,83 @@
+name: release check
+
+# What the skill depends on outside this repository: the packs on the release, the dataset's record, and music-production,
+# whose configuration and command line instrument layers use.
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      packs:
+        description: Also download and use the packs of the published release
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    name: The release and the dataset answer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -r skills/sound-effects/requirements.txt
+      - run: python tools/check_release.py
+
+  install:
+    name: Download and use the packs (${{ matrix.os }})
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.packs)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -r skills/sound-effects/requirements.txt
+      - run: python tools/check_release.py --full "$RUNNER_TEMP/data" "$RUNNER_TEMP/library"
+
+  music-production:
+    name: Instrument layers on the released music-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install FluidSynth and FFmpeg
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fluidsynth ffmpeg libarchive-tools
+      - run: python -m pip install -r skills/sound-effects/requirements.txt
+      - name: Set up the latest music-skill release with its default bank
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo owoevan-dev/music-skill --json tagName --jq .tagName)
+          git clone --quiet --depth 1 --branch "$tag" https://github.com/owoevan-dev/music-skill "$RUNNER_TEMP/music-skill"
+          python "$RUNNER_TEMP/music-skill/skills/music-production/scripts/bootstrap.py" --system --no-surge \
+            --runtime "$RUNNER_TEMP/runtime" --config "$RUNNER_TEMP/runtime/local-config.json"
+          python - <<'PY'
+          import json, os
+          temp = os.environ['RUNNER_TEMP']
+          json.dump({'music_skill': f'{temp}/music-skill/skills/music-production',
+                     'music_config': f'{temp}/runtime/local-config.json'}, open('tools/local.json', 'w'))
+          PY
+      - name: Run the tests that use it
+        run: python -m unittest discover -s tests -t tests -p "test_*music*.py" && python -m unittest discover -s tests -t tests -p "test_instruments.py"

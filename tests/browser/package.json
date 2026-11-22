@@ -1,0 +1,9 @@
+{
+  "name": "sfx-skill-browser-tests",
+  "private": true,
+  "description": "Opens the audition page in real browsers (CI only).",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.65.0"
+  }
+}

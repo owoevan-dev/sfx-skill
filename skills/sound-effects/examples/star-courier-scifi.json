@@ -1,0 +1,20 @@
+{
+  "schema": "sound-effects/1",
+  "title": "Star Courier Sci-fi",
+  "notes": "Sci-fi sounds for a small spaceship delivery game: clean, electric and a little playful. Every sound uses its recipe's defaults first.",
+  "variants": 4,
+  "sounds": [
+    {"id": "zap", "category": "scifi", "recipe": "scifi.zap", "params": {}, "notes": "the ship's blaster"},
+    {"id": "charge", "category": "scifi", "recipe": "scifi.charge", "params": {}, "notes": "the jump drive charging"},
+    {"id": "shield_hit", "category": "scifi", "recipe": "scifi.shield_hit", "params": {}, "notes": "a rock on the shield"},
+    {"id": "teleport", "category": "scifi", "recipe": "scifi.teleport", "params": {}, "notes": "a parcel beamed aboard"},
+    {"id": "console_beep", "category": "scifi", "recipe": "scifi.console_beep", "params": {}, "notes": "the console confirms"},
+    {"id": "power_down", "category": "scifi", "recipe": "scifi.power_down", "params": {}, "notes": "the engines shut off"},
+    {"id": "explosion", "category": "scifi", "recipe": "scifi.explosion", "params": {}, "notes": "a pirate drone destroyed"}
+  ],
+  "flows": [
+    {"name": "skirmish", "sounds": ["zap", "zap", "shield_hit", "zap", "explosion"], "gap": 0.12},
+    {"name": "launch", "sounds": ["console_beep", "charge", "teleport"], "gap": 0.2},
+    {"name": "landing", "sounds": ["console_beep", "power_down"], "gap": 0.3}
+  ]
+}

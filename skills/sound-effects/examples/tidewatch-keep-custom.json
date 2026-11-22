@@ -1,0 +1,1155 @@
+{
+  "schema": "sound-effects/1",
+  "title": "Tidewatch Keep",
+  "notes": "Brief: a small coastal-fortress defence game, stylized but grounded: wet stone walls, oak hoardings, an iron gate and brass fittings; the keeper calls up tide magic. Palette: one stone space for the world (style.space) and a slightly dark balance (tilt -1 dB); interface sounds stay dry, short and made of the keep's own oak and of a marimba in D; world sounds are heavier and share the space. Instrument layers need render --config; the gate, the door and the footsteps play CC0 field recordings of FSD50K's evaluation set (sfx.py samples --download-fsd50k), and need render --samples. Each sound's notes say why it is built as it is.",
+  "variants": 4,
+  "style": {
+    "space": {
+      "size": 1.4,
+      "decay": 0.9,
+      "mix": 0.12
+    },
+    "tilt_db": -1.0
+  },
+  "sounds": [
+    {
+      "id": "ui_tap",
+      "category": "ui",
+      "style": false,
+      "notes": "Hover and select: a small oak peg tapped, the board's own wood. A hard contact, wood modes and a little hollow body behind them (darker than most interface sounds, as the oak interface of the brief asks); dry and short, as a frequent sound should be.",
+      "layers": [
+        {
+          "source": {
+            "type": "modal",
+            "material": "wood",
+            "modes": 6,
+            "hardness": 0.75,
+            "detune_cents": 6
+          },
+          "length": 0.08,
+          "pitch": 620
+        },
+        {
+          "source": {
+            "type": "modal",
+            "t_d": 5,
+            "modes": 2,
+            "hardness": 0.3
+          },
+          "length": 0.15,
+          "pitch": 340,
+          "gain_db": -6
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "white"
+          },
+          "length": 0.004,
+          "env": [
+            [
+              0,
+              1,
+              "db"
+            ],
+            [
+              0.004,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "bandpass",
+            "cutoff": 4200,
+            "q": 1.2
+          },
+          "gain_db": -14
+        }
+      ],
+      "vary": {
+        "pitch_cents": 30,
+        "gain_db": 1
+      }
+    },
+    {
+      "id": "ui_confirm",
+      "category": "ui",
+      "style": false,
+      "notes": "Confirm: two marimba notes rising a fifth (D5 to A5, upward for a positive result), the first a little louder and the second longer, with the oak tap's click as its transient.",
+      "layers": [
+        {
+          "source": {
+            "type": "instrument",
+            "soundfont": "vcsl",
+            "program": 12,
+            "notes": [
+              [
+                0,
+                74,
+                0.12,
+                112
+              ],
+              [
+                0.09,
+                81,
+                0.3,
+                100
+              ]
+            ]
+          },
+          "length": 0.5,
+          "env": [
+            [
+              0,
+              1,
+              "hold"
+            ],
+            [
+              0.3,
+              1,
+              "db"
+            ],
+            [
+              0.5,
+              0
+            ]
+          ]
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "white"
+          },
+          "length": 0.004,
+          "env": [
+            [
+              0,
+              1,
+              "db"
+            ],
+            [
+              0.004,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "bandpass",
+            "cutoff": 4200,
+            "q": 1.2
+          },
+          "gain_db": -18
+        }
+      ],
+      "vary": {
+        "pitch_cents": 15,
+        "gain_db": 1
+      }
+    },
+    {
+      "id": "ui_back",
+      "category": "ui",
+      "style": false,
+      "notes": "Back: the confirm's mirror image, A5 down to D5, a little softer.",
+      "layers": [
+        {
+          "source": {
+            "type": "instrument",
+            "soundfont": "vcsl",
+            "program": 12,
+            "notes": [
+              [
+                0,
+                81,
+                0.12,
+                104
+              ],
+              [
+                0.09,
+                74,
+                0.3,
+                92
+              ]
+            ]
+          },
+          "length": 0.5,
+          "env": [
+            [
+              0,
+              1,
+              "hold"
+            ],
+            [
+              0.3,
+              1,
+              "db"
+            ],
+            [
+              0.5,
+              0
+            ]
+          ]
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "white"
+          },
+          "length": 0.004,
+          "env": [
+            [
+              0,
+              1,
+              "db"
+            ],
+            [
+              0.004,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "bandpass",
+            "cutoff": 4200,
+            "q": 1.2
+          },
+          "gain_db": -18
+        }
+      ],
+      "vary": {
+        "pitch_cents": 15,
+        "gain_db": 1
+      }
+    },
+    {
+      "id": "place_stone",
+      "category": "impact",
+      "notes": "A stone block set on the wall: no recipe makes stone, so it is written as a stack. The low thump of its weight, the stone's body (inharmonic modes of an irregular block, damped by the wall: t_d 6, this skill's choice between the study's wood and glass), a grit of crushed mortar, and the shared stone space as its tail.",
+      "layers": [
+        {
+          "source": {
+            "type": "osc",
+            "wave": "sine"
+          },
+          "length": 0.4,
+          "pitch": [
+            [
+              0,
+              85,
+              "exp"
+            ],
+            [
+              0.05,
+              48
+            ]
+          ],
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.006,
+              1,
+              "db"
+            ],
+            [
+              0.4,
+              0
+            ]
+          ]
+        },
+        {
+          "source": {
+            "type": "modal",
+            "t_d": 6,
+            "ratios": [
+              1,
+              1.47,
+              2.09,
+              2.56,
+              3.18,
+              3.9,
+              4.71
+            ],
+            "hardness": 0.45,
+            "detune_cents": 10
+          },
+          "length": 0.3,
+          "pitch": 210,
+          "gain_db": -4
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "pink"
+          },
+          "length": 0.07,
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.002,
+              1,
+              "db"
+            ],
+            [
+              0.07,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "bandpass",
+            "cutoff": 1800,
+            "q": 0.7
+          },
+          "gain_db": 4
+        }
+      ],
+      "chain": {
+        "saturation": {
+          "drive": 0.25,
+          "mix": 0.4
+        }
+      },
+      "vary": {
+        "pitch_cents": 40,
+        "time_pct": 6,
+        "gain_db": 1.5
+      }
+    },
+    {
+      "id": "arrow_hit_wood",
+      "category": "impact",
+      "recipe": "impact.wood_knock",
+      "params": {
+        "base_hz": 260,
+        "hardness": 0.85,
+        "hollow_db": -5
+      },
+      "notes": "An arrow striking an oak post: the wood-knock recipe adapted for the game. A higher, harder strike (the arrow's tip) and a quieter hollow body, as a solid post has little hollow behind it (at -10 dB the knock measured far peakier than the wood knocks measured during development, so the body stays at -5)."
+    },
+    {
+      "id": "gate_slam",
+      "category": "impact",
+      "notes": "The keep's iron gate swung shut: a sequence, as a heavy gate closes. The recording is a wrought-iron gate (FSD50K 54269, CC0): its closing squeal, strike and latch, played 300 cents lower, so slower and larger. It was recorded outdoors with steady noise about 25 dB under the gate, between 60 Hz and 1 kHz: a high-pass at 1 kHz under the squeal (which has nothing below it) opens to 300 Hz for the strike, and the quiet gap and the end of the ring are faded out, so no noise is heard alone. The recorded gate is light, so the weight is synthesized and unpitched, placed on the measured onsets: under the strike at 1.3506 s a thump falling to 36 Hz, a burst of low noise for the frame's mass and a rumble; under the latch at 1.6387 s a smaller thump. Nothing in it rings at a pitch: long, pitched modes made the first versions sound like a bell. Variants move only 10 cents, so the recording's strike stays within about 6 ms of its thump. Needs FSD50K's evaluation set (render --samples).",
+      "layers": [
+        {
+          "source": {
+            "type": "sample",
+            "library": "fsd50k-eval",
+            "file": "54269",
+            "offset": 3.45,
+            "cents": -300
+          },
+          "length": 2.5498,
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.1008,
+              0,
+              "cos"
+            ],
+            [
+              0.1308,
+              1
+            ],
+            [
+              0.8206,
+              1,
+              "cos"
+            ],
+            [
+              0.9157,
+              0
+            ],
+            [
+              1.3386,
+              0,
+              "cos"
+            ],
+            [
+              1.3486,
+              1
+            ],
+            [
+              2.0641,
+              1,
+              "db"
+            ],
+            [
+              2.5398,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "highpass",
+            "cutoff": [
+              [
+                0,
+                1000
+              ],
+              [
+                1.3206,
+                1000,
+                "exp"
+              ],
+              [
+                1.3486,
+                300
+              ]
+            ],
+            "q": 0.7071
+          }
+        },
+        {
+          "source": {
+            "type": "osc",
+            "wave": "sine"
+          },
+          "start": 1.3506,
+          "length": 0.45,
+          "pitch": [
+            [
+              0,
+              60,
+              "exp"
+            ],
+            [
+              0.1,
+              36
+            ]
+          ],
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.003,
+              1,
+              "db"
+            ],
+            [
+              0.45,
+              0
+            ]
+          ],
+          "gain_db": -6
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "brown"
+          },
+          "start": 1.3506,
+          "length": 0.35,
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.002,
+              1,
+              "db"
+            ],
+            [
+              0.35,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "lowpass",
+            "cutoff": 300,
+            "q": 0.7071
+          },
+          "gain_db": -6
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "brown"
+          },
+          "start": 1.3506,
+          "length": 0.9,
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.002,
+              1,
+              "db"
+            ],
+            [
+              0.9,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "lowpass",
+            "cutoff": 120,
+            "q": 0.7071
+          },
+          "gain_db": -12
+        },
+        {
+          "source": {
+            "type": "osc",
+            "wave": "sine"
+          },
+          "start": 1.6387,
+          "length": 0.3,
+          "pitch": [
+            [
+              0,
+              55,
+              "exp"
+            ],
+            [
+              0.1,
+              34
+            ]
+          ],
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.003,
+              1,
+              "db"
+            ],
+            [
+              0.3,
+              0
+            ]
+          ],
+          "gain_db": -10
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "brown"
+          },
+          "start": 1.6387,
+          "length": 0.25,
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.002,
+              1,
+              "db"
+            ],
+            [
+              0.25,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "lowpass",
+            "cutoff": 300,
+            "q": 0.7071
+          },
+          "gain_db": -11
+        }
+      ],
+      "chain": {
+        "eq": {
+          "low_cut_hz": 30
+        },
+        "compressor": {
+          "threshold_db": -16,
+          "ratio": 3,
+          "attack_ms": 3,
+          "release_ms": 120
+        },
+        "fade": {
+          "in": 0.01,
+          "out": 0.3
+        }
+      },
+      "vary": {
+        "pitch_cents": 10,
+        "gain_db": 1
+      }
+    },
+    {
+      "id": "keep_door",
+      "category": "foley",
+      "notes": "The keep's oak door pulled shut: a recorded plywood door with a spring latch, closed with moderate force (FSD50K 34585, CC0; its author notes that a change of pitch suits other doors), played 300 cents lower, so slower and larger: the latch's click, then the door striking its frame at 0.2351 s. Under the strike, a synthesized hollow body (two low wood modes ringing a little longer) makes it a heavier door than the recording alone. Its ring is faded out where it meets the recording's room noise, about 50 dB under the strike. Needs FSD50K's evaluation set (render --samples).",
+      "layers": [
+        {
+          "source": {
+            "type": "sample",
+            "library": "fsd50k-eval",
+            "file": "34585",
+            "offset": 0.12,
+            "cents": -300
+          },
+          "length": 1.0465,
+          "env": [
+            [
+              0,
+              0,
+              "cos"
+            ],
+            [
+              0.01,
+              1
+            ],
+            [
+              0.7492,
+              1,
+              "db"
+            ],
+            [
+              1.0465,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "highpass",
+            "cutoff": 35,
+            "q": 0.7071
+          }
+        },
+        {
+          "source": {
+            "type": "modal",
+            "t_d": 5,
+            "modes": 2,
+            "hardness": 0.3
+          },
+          "start": 0.2351,
+          "length": 0.6,
+          "pitch": 85,
+          "gain_db": -10
+        }
+      ],
+      "vary": {
+        "pitch_cents": 10,
+        "gain_db": 1
+      }
+    },
+    {
+      "id": "footsteps_stone",
+      "category": "foley",
+      "variants": 4,
+      "trim_db": -6,
+      "notes": "The keeper's shoes on the stone floors: four steps of one recording of a man walking in leather shoes across a large marble hall (FSD50K 118985, CC0; its author's note gives explicit permission to use it without attribution), one step for each variant (takes with their own offsets, from the onsets the time map shows), so no two steps in a row are the same. The hall's steady low noise (about 30 dB under the steps, 20-500 Hz) is subtracted using its quietest stretch (1.23-1.53 s), at most 15 dB, and a high-pass at 90 Hz takes the rest of the rumble; the steps chosen peak within 4.5 dB of each other. A short low thump under each adds the weight of a guard in armour. Set 6 dB under the rest of the set: a frequent sound stays understated, and as the peakiest sound here it would otherwise hold every other sound down. Needs FSD50K's evaluation set (render --samples).",
+      "layers": [
+        {
+          "source": {
+            "type": "sample",
+            "library": "fsd50k-eval",
+            "file": [
+              {
+                "file": "118985",
+                "offset": 3.2999
+              },
+              {
+                "file": "118985",
+                "offset": 4.4909
+              },
+              {
+                "file": "118985",
+                "offset": 5.0848
+              },
+              {
+                "file": "118985",
+                "offset": 5.6926
+              }
+            ],
+            "denoise": {
+              "noise": [
+                1.23,
+                1.53
+              ],
+              "reduce_db": 15
+            }
+          },
+          "length": 0.3,
+          "env": [
+            [
+              0,
+              0,
+              "cos"
+            ],
+            [
+              0.004,
+              1
+            ],
+            [
+              0.12,
+              1,
+              "db"
+            ],
+            [
+              0.3,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "highpass",
+            "cutoff": 90,
+            "q": 0.7071
+          }
+        },
+        {
+          "source": {
+            "type": "osc",
+            "wave": "sine"
+          },
+          "start": 0.008,
+          "length": 0.14,
+          "pitch": [
+            [
+              0,
+              75,
+              "exp"
+            ],
+            [
+              0.04,
+              50
+            ]
+          ],
+          "env": [
+            [
+              0,
+              0
+            ],
+            [
+              0.002,
+              1,
+              "db"
+            ],
+            [
+              0.14,
+              0
+            ]
+          ],
+          "gain_db": -12
+        }
+      ],
+      "vary": {
+        "pitch_cents": 30,
+        "gain_db": 1.5
+      }
+    },
+    {
+      "id": "tide_spell",
+      "category": "magic",
+      "notes": "The keeper's tide magic: water rising. A swell of noise sweeping up (upward for a spell that starts something), a fizz of small bubbles, a chord in D rising a fourth, and a glassy bell where the spell lands.",
+      "layers": [
+        {
+          "source": {
+            "type": "noise",
+            "color": "pink"
+          },
+          "length": 0.9,
+          "env": [
+            [
+              0,
+              0,
+              "cos"
+            ],
+            [
+              0.6,
+              1,
+              "cos"
+            ],
+            [
+              0.9,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "bandpass",
+            "cutoff": [
+              [
+                0,
+                300
+              ],
+              [
+                0.7,
+                3200
+              ]
+            ],
+            "q": 1.5
+          },
+          "gain_db": 6
+        },
+        {
+          "source": {
+            "type": "drops",
+            "rate": 4000,
+            "r_min_mm": 0.3,
+            "r_max_mm": 2.0,
+            "size_slope": 3
+          },
+          "length": 0.9,
+          "env": [
+            [
+              0,
+              0,
+              "cos"
+            ],
+            [
+              0.5,
+              1,
+              "cos"
+            ],
+            [
+              0.9,
+              0
+            ]
+          ],
+          "gain_db": -6
+        },
+        {
+          "source": {
+            "type": "osc",
+            "wave": "triangle"
+          },
+          "length": 1.1,
+          "pitch": [
+            [
+              0,
+              293.66
+            ],
+            [
+              0.6,
+              392.0
+            ]
+          ],
+          "env": [
+            [
+              0,
+              0,
+              "cos"
+            ],
+            [
+              0.6,
+              1
+            ],
+            [
+              0.75,
+              1,
+              "db"
+            ],
+            [
+              1.1,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "lowpass",
+            "cutoff": 2400,
+            "q": 0.7071
+          },
+          "gain_db": -6
+        },
+        {
+          "source": {
+            "type": "osc",
+            "wave": "triangle"
+          },
+          "length": 1.1,
+          "pitch": [
+            [
+              0,
+              440.0
+            ],
+            [
+              0.6,
+              587.33
+            ]
+          ],
+          "env": [
+            [
+              0,
+              0,
+              "cos"
+            ],
+            [
+              0.6,
+              1
+            ],
+            [
+              0.75,
+              1,
+              "db"
+            ],
+            [
+              1.1,
+              0
+            ]
+          ],
+          "filter": {
+            "type": "lowpass",
+            "cutoff": 3000,
+            "q": 0.7071
+          },
+          "gain_db": -9
+        },
+        {
+          "source": {
+            "type": "fm",
+            "ratio": 3.0,
+            "index": [
+              [
+                0,
+                1.0,
+                "db"
+              ],
+              [
+                0.6,
+                0.2
+              ]
+            ]
+          },
+          "start": 0.6,
+          "length": 0.6,
+          "pitch": 1174.66,
+          "env": {
+            "attack": 0.002,
+            "decay": 0.598
+          },
+          "gain_db": -10
+        }
+      ],
+      "vary": {
+        "pitch_cents": 20,
+        "time_pct": 5,
+        "gain_db": 1
+      }
+    },
+    {
+      "id": "sea_wash",
+      "category": "ambience",
+      "use": "loop",
+      "loop": {
+        "seconds": 12
+      },
+      "channels": 2,
+      "variants": 2,
+      "style": false,
+      "notes": "The sea on the rocks below the walls: two waves in each loop. Each wave's body builds and opens up as it rises and breaks (a roar of noise whose low-pass rises from 400 Hz to 2.5 kHz at the break, then closes as the wave falls back), the break throws up foam, a hiss of high noise that peaks 0.2 s after the break and dies away in about 1.5 s (exponentially: 17 dB), and the surf's low rumble runs under it all. The foam is noise rather than bubbles: bubbles at fewer than about ten thousand a second are heard one by one, as drips (van den Doel 2004). Every layer is a bed that ends where it starts, so the loop joins itself.",
+      "layers": [
+        {
+          "source": {
+            "type": "noise",
+            "color": "pink"
+          },
+          "length": 12,
+          "spread": 1,
+          "env": [
+            [
+              0,
+              0.3
+            ],
+            [
+              2.0,
+              0.7,
+              "cos"
+            ],
+            [
+              2.6,
+              1.0,
+              "cos"
+            ],
+            [
+              5.5,
+              0.35,
+              "cos"
+            ],
+            [
+              8.0,
+              0.65,
+              "cos"
+            ],
+            [
+              8.6,
+              0.95,
+              "cos"
+            ],
+            [
+              11.5,
+              0.32,
+              "cos"
+            ],
+            [
+              12,
+              0.3
+            ]
+          ],
+          "filter": {
+            "type": "lowpass",
+            "cutoff": [
+              [
+                0,
+                400
+              ],
+              [
+                2.0,
+                900
+              ],
+              [
+                2.6,
+                2500
+              ],
+              [
+                5.5,
+                500
+              ],
+              [
+                8.0,
+                850
+              ],
+              [
+                8.6,
+                2300
+              ],
+              [
+                11.5,
+                420
+              ],
+              [
+                12,
+                400
+              ]
+            ],
+            "q": 0.7071
+          },
+          "gain_db": 2
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "pink"
+          },
+          "length": 12,
+          "spread": 1,
+          "env": [
+            [
+              0,
+              0.12
+            ],
+            [
+              2.6,
+              0.15,
+              "cos"
+            ],
+            [
+              2.8,
+              1.0,
+              "db"
+            ],
+            [
+              4.3,
+              0.14,
+              "cos"
+            ],
+            [
+              8.6,
+              0.15,
+              "cos"
+            ],
+            [
+              8.8,
+              0.9,
+              "db"
+            ],
+            [
+              10.3,
+              0.13,
+              "cos"
+            ],
+            [
+              12,
+              0.12
+            ]
+          ],
+          "filter": {
+            "type": "highpass",
+            "cutoff": 2500,
+            "q": 0.7071
+          },
+          "gain_db": 0
+        },
+        {
+          "source": {
+            "type": "noise",
+            "color": "brown"
+          },
+          "length": 12,
+          "spread": 1,
+          "filter": {
+            "type": "lowpass",
+            "cutoff": 160,
+            "q": 0.7071
+          },
+          "gain_db": -2
+        }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "name": "build",
+      "sounds": [
+        "ui_tap",
+        "ui_tap",
+        "ui_confirm",
+        "place_stone"
+      ],
+      "gap": 0.25
+    },
+    {
+      "name": "siege",
+      "sounds": [
+        "arrow_hit_wood",
+        "arrow_hit_wood",
+        "gate_slam"
+      ],
+      "gap": 0.3
+    },
+    {
+      "name": "cast",
+      "sounds": [
+        "ui_tap",
+        "tide_spell"
+      ],
+      "gap": 0.2
+    },
+    {
+      "name": "menu",
+      "sounds": [
+        "ui_tap",
+        "ui_confirm",
+        "ui_back"
+      ],
+      "gap": 0.35
+    },
+    {
+      "name": "patrol",
+      "sounds": [
+        "footsteps_stone",
+        "footsteps_stone",
+        "footsteps_stone",
+        "footsteps_stone",
+        "keep_door"
+      ],
+      "gap": 0.32
+    }
+  ]
+}

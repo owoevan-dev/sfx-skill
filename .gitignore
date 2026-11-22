@@ -1,0 +1,10 @@
+# Scratch outputs of tools and tests (never committed)
+/work/
+/tools/local.json
+
+# Browser tests
+node_modules/
+
+# Python
+__pycache__/
+*.pyc

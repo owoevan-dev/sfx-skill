@@ -1,0 +1,9 @@
+interface:
+  display_name: "Sound Effects"
+  short_description: "Design, render and export original game sound effects"
+  icon_small: "./assets/icon-small.svg"
+  icon_large: "./assets/icon-large.png"
+  brand_color: "#111111"
+  default_prompt: "Use $sound-effects to design the sound effects for my game, with variants, an audition page and an export for my engine."
+policy:
+  allow_implicit_invocation: true
