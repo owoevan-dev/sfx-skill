@@ -43,6 +43,8 @@ sfx-skill 是一個 [Agent Skill](https://agentskills.io)，讓 AI agent 像音�
 
 裝好 skill 就能用合成音色。需要真實錄音時，agent 會先問過你，才下載一次音效庫（3.1 GB）。
 
+**也需要配樂？** [music-skill](https://github.com/owoevan-dev/music-skill) 能寫出可編輯的原創器樂和遊戲循環音樂。兩個 skill 都能單獨使用。
+
 ## 為什麼不直接生成？
 
 | | 文字生成音效的模型 | sfx-skill |

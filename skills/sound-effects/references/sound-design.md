@@ -156,7 +156,7 @@ floor (not asked of steady sounds such as rain, wind, surf, fire, engines and cr
 sound), and whether its label is the predominant sound (FSD50K's ratings). A recording whose description asks for
 credit, permission or notice, or speaks of commercial use, is flagged as well ('author note'): CC0 puts no condition on
 it, but read the note (`--find` prints it) and respect the author's wish; many such notes only say that no credit is
-needed. `samples --labels` lists the classes they are labelled with, and `--find "iron gate" --passing` lists the recordings that pass every screen, the cleanest first, with their titles,
+needed. `samples --labels` lists the classes they are labelled with, and `--find "metal door" --passing` lists the recordings that pass every screen, the cleanest first, with their titles,
 labels, peak and range; it matches whole words, `--not WORD`, `--min-seconds` and `--max-seconds` narrow it, and without
 `--passing` a recording that fails is listed with its reasons. Adult content, speech, singing and voices that may hold
 words are screened out; people's sounds without words stay (laughter, screams, breathing, coughs), so a bed that must hold

@@ -43,6 +43,8 @@ No audio-generation model is involved. Every sound is a readable entry in a proj
 
 Synthesis works as soon as the skill is installed. For real recordings, the agent asks you once before it downloads the library (3.1 GB).
 
+**Need music too?** [music-skill](https://github.com/owoevan-dev/music-skill) writes original instrumental music and game loops as editable notes. Each skill works without the other.
+
 ## Why not just generate it?
 
 | | A text-to-sound model | sfx-skill |
