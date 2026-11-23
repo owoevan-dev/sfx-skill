@@ -157,7 +157,7 @@ npx skills add owoevan-dev/sfx-skill
 
 只用合成不需要其他東西。想要真實的起音和質感時，skill 可以疊上錄音：
 
-- **FSD50K。** 本專案的 Release 收錄了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。這是西班牙龐培法布拉大學音樂科技研究組公開的研究資料集。收錄的 6,720 段錄音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 貢獻到公有領域、並通過本 skill 品質篩選的錄音；讀過說明後，來源、使用條件或內容仍有疑慮的一律不收。用它們做出來的音效不需要標示來源。Release 裡列出每段錄音的作者、標題和頁面。
+- **FSD50K。** 本專案的 Release 收錄了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。這是西班牙龐培法布拉大學音樂科技研究組公開的研究資料集。收錄的 6,720 段錄音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 貢獻到公有領域、並經過本 skill 品質篩選的錄音；讀過說明後，來源、使用條件或內容仍有疑慮的一律不收。用它們做出來的音效不需要標示來源。Release 裡列出每段錄音的作者、標題和頁面。
 - **你已經有的音效。** 把資料夾或 zip 交給 agent（「用這些腳步聲」），它就會匯入。agent 會把隨附的授權內容拿給你確認一次，並把授權的要求帶進所有用到它們的成品。
 
 如果這裡面有你錄的聲音，而你不希望被收錄，請[開一個 issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml)，下一版就會拿掉。
