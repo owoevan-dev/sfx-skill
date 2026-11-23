@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 (2026-11-23)
 
+- The library now holds 7,003 recordings. 402 whose source, terms of use or content left room for doubt when their descriptions
+  were read were taken out, to keep it clean. Search, the packs and the dataset import no longer offer them, and a project that
+  names one is asked to choose another. A library that imported them earlier keeps the files.
+- The READMEs and the packs' notice say plainly that a recording's CC0 mark is its author's own statement, with no warranty.
 - `check` flags a loop within 3 dB of the loudest one-shot (`loop_level`). The level step brings a bed to the one-shots' loudness,
   so an untrimmed one sits on top of them. The worked example's sea now sits 9 dB under its set.
-- The READMEs and the guide give the library's whole disk cost: a 3.1 GB download, 4.7 GB once imported, about 8 GB until the
+- The READMEs and the guide give the library's whole disk cost: a 3.0 GB download, 4.5 GB once imported, about 7.4 GB until the
   downloaded archives are removed.
 
 ## 0.1.0 (2026-11-22)

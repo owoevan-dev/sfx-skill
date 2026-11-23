@@ -4,7 +4,7 @@ description: "Designs and makes original sound effects for games and apps. The a
 license: MIT
 compatibility: "Python 3.10+ with NumPy. FFmpeg, if present, adds FLAC, Ogg and MP3 and reads recordings that are not WAV. An installed music-production skill adds layers on sampled instruments. CC0 field recordings are an optional download from the FSD50K dataset, with the user's agreement. No audio model."
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Sound effects
@@ -51,10 +51,10 @@ Run the commands from the game's project folder, by the full path of this skill'
      (recordings and takes, thumps, rumbles, whooshes, loops from a recording, envelopes) and checks the project as it
      saves it.
    - **Recordings**, for what is hard to synthesize convincingly: doors, footsteps, metal, engines, water, animals.
-     `sample` layers play FSD50K's CC0 field recordings (7,405 screened ones in 190 labelled classes) or packs the user
+     `sample` layers play FSD50K's CC0 field recordings (7,003 screened ones in 190 labelled classes) or packs the user
      imported. If `doctor` shows no library, `python scripts/sfx.py samples --download-fsd50k DATA` fetches and imports
-     them once the user agrees. Tell them what it takes: a 3.1 GB download into DATA, which stays until they remove it,
-     and 4.7 GB once imported, in the home folder unless `--library` or `$SFX_SKILL_LIBRARY` names another (about 8 GB
+     them once the user agrees. Tell them what it takes: a 3.0 GB download into DATA, which stays until they remove it,
+     and 4.5 GB once imported, in the home folder unless `--library` or `$SFX_SKILL_LIBRARY` names another (about 7.4 GB
      in all). Then, since you cannot hear them:
      1. `samples --find "metal door" --passing` lists the cleanest matches first (whole words, all of them: if nothing
         comes back, use fewer; `--not WORD` and `--max-seconds` narrow it; without `--passing` it also lists the others,

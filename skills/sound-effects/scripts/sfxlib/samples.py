@@ -116,6 +116,20 @@ def load_index(library):
     return data
 
 
+def offered(index):
+    """The index as the skill offers it: without the recordings this project has withdrawn. An earlier import keeps their
+    files and their entries in the library's own index."""
+    from . import fsd50k
+    kept = [f for f in index['files'] if not fsd50k.withdrawn(f['library'], f['file'])]
+    if len(kept) == len(index['files']):
+        return index
+    packs = {}
+    for name, pack in index['packs'].items():
+        mine = [f for f in kept if f['library'] == name]
+        packs[name] = dict(pack, files=len(mine), passing=sum(1 for f in mine if not f.get('screen')))
+    return dict(index, packs=packs, files=kept)
+
+
 def _free(folder, stem, suffix):
     """A path in `folder` nothing exists at yet (no link either): an import never writes over anything."""
     k = 0
@@ -693,6 +707,10 @@ class Library:
 
     def entry(self, library, file):
         """(pack, file entry) after checking that the pack may be used."""
+        from . import fsd50k
+        if fsd50k.withdrawn(library, file):
+            raise SampleError(f"{library}/{file} has been withdrawn from this project's library: choose another recording "
+                              'for this layer (sfx.py samples --find WORDS)')
         pack = self.index['packs'].get(library)
         if pack is None:
             names = ', '.join(sorted(self.index['packs'])) or 'none'
