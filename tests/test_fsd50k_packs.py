@@ -5,7 +5,9 @@ import csv
 import hashlib
 import io
 import json
+import re
 import unittest
+import urllib.error
 import zipfile
 from unittest import mock
 
@@ -136,6 +138,21 @@ class Build(unittest.TestCase):
         samples._write_index(partial, index)
         with self.assertRaisesRegex(SystemExit, 'fsd50k-dev'):
             maker.build(partial, partial / 'out', log=lambda m: None, also=())
+
+    def test_an_author_name_that_is_an_email_address_is_not_published(self):
+        folder = helpers.scratch('fsd50k_packs_email_author')
+        index = stand_in_library(folder / 'library')
+        address = 'someone' + chr(64) + 'example.com'                                 # this repository holds no address as text
+        index['files'][0]['author'] = address
+        samples._write_index(folder / 'library', index)
+        maker.build(folder / 'library', folder / 'packs', part_bytes=40000, log=lambda m: None, also=())
+        for name in ('CREDITS.csv', fsd50k.PACK_INDEX):
+            text = (folder / 'packs' / name).read_text(encoding='utf-8')
+            self.assertNotIn(address, text, name)
+            self.assertIn(fsd50k.NO_ADDRESS, text, name)
+            self.assertIn('https://freesound.org/s/100/', text, name)                 # the page still names them
+            self.assertIn('author200', text, name)                                    # other authors are left alone
+        self.assertEqual(samples.load_index(folder / 'library')['files'][0]['author'], address)
 
     def test_the_notice_says_some_recordings_are_there_for_the_examples(self):
         self.assertIn('examples', (self.folder / 'packs' / 'NOTICE.txt').read_text(encoding='utf-8'))
@@ -303,6 +320,26 @@ class Serving:
         return response
 
 
+class Answering(Serving):
+    """The stand-in release with some files gone (`code`), gone once they have been asked for (`later`), or answering
+    503 the first time (`busy`)."""
+
+    def __init__(self, folder, gone=(), code=404, later=(), busy=()):
+        super().__init__(folder)
+        self.gone, self.code, self.later, self.busy = set(gone), code, set(later), set(busy)
+
+    def __call__(self, url, headers):
+        name = url.rsplit('/', 1)[1]
+        if name in self.later and any(n == name for n, _ in self.requests):
+            self.gone.add(name)
+        if name in self.gone or name in self.busy:
+            self.requests.append((name, headers.get('Range')))
+            code = self.code if name in self.gone else 503
+            self.busy.discard(name)
+            raise urllib.error.HTTPError(url, code, 'answered', {}, io.BytesIO(b''))
+        return super().__call__(url, headers)
+
+
 class Download(unittest.TestCase):
     def setUp(self):
         self.folder = helpers.scratch(f'fsd50k_packs_{self._testMethodName}')
@@ -344,6 +381,37 @@ class Download(unittest.TestCase):
     def test_the_expected_index_passes(self):
         digest = fsd50k.sha256_of(self.folder / 'release' / fsd50k.PACK_INDEX)
         self.assertTrue(self.fetch(index_sha256=digest)['parts'])
+
+    def gone_is_said_at_once(self, name, code):
+        self.server, slept = Answering(self.folder / 'release', gone={name}, code=code), []
+        with self.assertRaisesRegex(fsd50k.FSD50KError, f'{re.escape(name)} is unavailable on this release.*update.*--source zenodo'):
+            fsd50k.download_packs(self.folder / 'data', url='https://example.invalid/r', index_sha256='',
+                                  opener=self.server, sleep=slept.append, log=lambda m: None)
+        self.assertEqual([n for n, _ in self.server.requests].count(name), 1)      # asked once, not retried
+        self.assertEqual(slept, [])
+
+    def test_a_part_gone_from_the_release_is_said_at_once(self):
+        self.gone_is_said_at_once('fsd50k-cc0-01.zip', 404)
+
+    def test_a_part_the_release_says_is_gone_for_good_too(self):
+        self.gone_is_said_at_once('fsd50k-cc0-01.zip', 410)
+
+    def test_an_index_gone_from_the_release_is_said_at_once(self):
+        self.gone_is_said_at_once(fsd50k.PACK_INDEX, 404)
+
+    def test_a_partial_file_stays_when_its_part_is_gone(self):
+        name = 'fsd50k-cc0-01.zip'
+        self.server = Answering(self.folder / 'release', later={name})
+        with self.assertRaisesRegex(fsd50k.FSD50KError, 'unavailable on this release'):
+            self.fetch()
+        self.assertGreater((self.folder / 'data' / f'{name}.part').stat().st_size, 0)
+
+    def test_a_server_error_on_a_part_is_still_retried(self):
+        name = 'fsd50k-cc0-01.zip'
+        self.server = Answering(self.folder / 'release', busy={name})
+        index = self.fetch()
+        self.assertEqual(fsd50k.sha256_of(self.folder / 'data' / name), index['parts'][0]['sha256'])
+        self.assertGreaterEqual([n for n, _ in self.server.requests].count(name), 2)
 
     def test_without_a_release_it_says_so(self):
         with mock.patch.object(fsd50k, 'RELEASE_URL', ''):
@@ -532,6 +600,33 @@ class Withdrawn(unittest.TestCase):
             library.provenance('fsd50k-dev', '201')
         self.assertEqual(library.provenance('fsd50k-eval', '101')['file'], '101')
 
+    def test_a_near_miss_is_not_pointed_at_a_withdrawn_recording(self):
+        library = samples.Library(self.library)
+        with self.assertRaises(samples.SampleError) as said:
+            library.recording('fsd50k-eval', '100x')
+        self.assertIn('no recording', str(said.exception))
+        self.assertNotIn("'100'", str(said.exception))
+
+    def test_a_render_credit_does_not_repeat_an_address_from_an_older_library(self):
+        address = 'someone' + chr(64) + 'example.com'                                 # this repository holds no address as text
+        index = samples.load_index(self.library)
+        row = next(f for f in index['files'] if f['file'] == '101')
+        row['author'] = address
+        samples._write_index(self.library, index)
+        credit = samples.Library(self.library).provenance('fsd50k-eval', '101')
+        self.assertEqual(credit['author'], fsd50k.NO_ADDRESS)
+        self.assertEqual(credit['page'], 'https://freesound.org/s/101/')
+        self.assertEqual(samples.load_index(self.library)['files'][1]['author'], address)  # the person's library is left as it is
+
+    def test_a_person_who_names_themselves_in_their_own_pack_is_left_alone(self):
+        address = 'me' + chr(64) + 'example.com'
+        folder = helpers.scratch('fsd50k_own_pack_address')
+        (folder / 'own').mkdir()
+        (folder / 'own' / 'tap.wav').write_bytes(wav_for(7))
+        samples.add(folder / 'own', folder / 'library', licence='own', author=address)
+        credit = samples.Library(folder / 'library').provenance('own', 'tap')
+        self.assertEqual(credit['author'], address)
+
     def test_a_library_without_the_file_says_the_same(self):
         index = samples.load_index(self.library)
         index['files'] = [f for f in index['files'] if f['file'] != '100']
@@ -573,7 +668,7 @@ class TheWithdrawnList(unittest.TestCase):
         self.assertFalse({file for _, file in maker.example_files()} & fsd50k.WITHDRAWN)
 
     def test_it_is_what_the_release_leaves_out(self):
-        self.assertEqual((len(fsd50k.WITHDRAWN), fsd50k.RELEASE_RECORDINGS), (685, 6720))
+        self.assertEqual((len(fsd50k.WITHDRAWN), fsd50k.RELEASE_RECORDINGS), (687, 6718))
 
 
 if __name__ == '__main__':

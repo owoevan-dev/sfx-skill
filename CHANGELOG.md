@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.3 (2026-11-23)
+
+- The library now holds 6,718 recordings. Two more whose source or author's wishes left room for doubt were taken out. As before, the
+  skill no longer offers them and a library that imported them earlier keeps the files, and a mistyped number no longer suggests one.
+- The credits no longer repeat an author name that is an email address. The recording's page still credits them.
+- A search with no Latin letters or digits now says so and asks for English words. It used to match the whole library.
+- When a game needs sounds that are hard to synthesize, the agent now suggests the recordings once and mentions that you can hand it
+  sounds of your own.
+- The removal form also works for someone whose sound was uploaded by another person, with no Freesound account needed, and a recording
+  comes out as soon as we can rather than waiting for the next release.
+- A file that is no longer on the release stops the download with a clear message, instead of retrying as if the connection had dropped.
+- The guide now says that with `reverse`, `offset` counts from the recording's end, and that a check with no flags does not prove a sound
+  is clean.
+
 ## 0.1.2 (2026-11-23)
 
 - The library now holds 6,720 recordings in the same 190 classes. 283 more whose source, terms of use or content left room for

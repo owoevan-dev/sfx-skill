@@ -7,7 +7,7 @@ been withdrawn (fsd50k.WITHDRAWN), and those the project's examples play, and wr
 
 - fsd50k-cc0-NN.zip: the recordings as they came, unchanged, in parts small enough for a release asset (2 GiB);
 - fsd50k-cc0-index.json: their library entries and each part's size and SHA-256 (what `sfx.py samples` reads);
-- CREDITS.csv: each recording's author, title and Freesound page;
+- CREDITS.csv: each recording's title, Freesound page and author (unless the name is an email address);
 - NOTICE.txt: where the recordings and the dataset come from, their licences and what was changed;
 - SHA256SUMS.txt: the sums of all of the above.
 
@@ -39,9 +39,10 @@ project and do not endorse it.
 
 The recordings. Each audio file is a recording from FSD50K whose author dedicated it to the public domain under CC0 1.0
 on Freesound (https://creativecommons.org/publicdomain/zero/1.0/). No credit is required. That mark is each author's own
-statement and comes with no warranty. CREDITS.csv names each
-recording's author, title and Freesound page all the same: the people who recorded these sounds gave them away. If you
-recorded one of them and would rather it were not included, tell us and it will be left out of the next release:
+statement and comes with no warranty. CREDITS.csv gives each recording's title and Freesound page all the same, and its
+author unless the name is an email address: the people who made these sounds gave them away. If one
+of them is yours or holds your work and you would rather it were not included, tell us and it will come out of the
+release as soon as we can (no Freesound account needed):
 https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml
 
 The dataset. FSD50K, by Eduardo Fonseca, Xavier Favory, Jordi Pons, Frederic Font and Xavier Serra, created at the Music
@@ -52,9 +53,10 @@ The dataset as a whole (its selection, labels and metadata) is licensed under CC
 (https://creativecommons.org/licenses/by/4.0/). No warranties are given.
 
 What was changed: a subset was selected (the CC0 recordings that pass this project's own quality screens, and a few more
-that its examples play; no adult content, speech or singing, and leaving out those whose source, terms of use or content
-left room for doubt when their descriptions were read), and the dataset's metadata for them was reorganised into
-fsd50k-cc0-index.json with this project's measurements added. The audio files themselves are unchanged.
+that its examples play; leaving out those that FSD50K labels as speech or singing, those whose title or tags name adult
+content, and those whose source, terms of use or content left room for doubt when their descriptions were read), and the
+dataset's metadata for them was reorganised into fsd50k-cc0-index.json with this project's measurements added. An author
+whose Freesound name is an email address is credited through the recording's page instead. The audio files are unchanged.
 """
 
 
@@ -89,6 +91,14 @@ def chosen(index, also=()):
     return sorted(rows, key=lambda r: (PACKS.index(r['library']), int(r['file'])))
 
 
+def published(row):
+    """A library entry as the packs publish it: an author whose Freesound name is an email address is credited through
+    the recording's page, so that the packs do not repeat the address."""
+    name = row.get('author', '')
+    credit = fsd50k.credited_author(name)
+    return row if credit == name else dict(row, author=credit)
+
+
 def _sha256(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -102,7 +112,7 @@ def build(library, out, part_bytes=PART_BYTES, log=print, also=None):
     absent = [p for p in PACKS if p not in index['packs']]
     if absent:
         raise SystemExit(f"this library has not imported {', '.join(absent)}: import both FSD50K sets first")
-    rows = chosen(index, example_files() if also is None else also)
+    rows = [published(r) for r in chosen(index, example_files() if also is None else also)]
     if not rows:
         raise SystemExit('no recordings to pack: import the FSD50K sets into this library first')
     parts, current, size = [], None, 0

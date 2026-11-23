@@ -183,6 +183,16 @@ class Import(unittest.TestCase):
         self.assertEqual(len(samples.find(index, 'wood pack')), 3)
         self.assertEqual([f['file'] for f in samples.find(index, 'footstep wood (1)')], ['footstep_wood_1'])
 
+    def test_a_text_with_no_latin_word_finds_nothing(self):
+        samples.add(as_folder(self.folder / 'Wood Pack', pack_members()), self.library, licence='CC0-1.0')
+        index = samples.load_index(self.library)
+        for text in ('揮劍', '剣', '검', '!!!', ''):
+            self.assertEqual(samples.find(index, text), [], text)
+            self.assertFalse(samples.searchable(text), text)
+        self.assertEqual(len(samples.find(index, '木 wood knock')), 2)           # the words it can read still count
+        self.assertTrue(samples.searchable('木 wood'))
+        self.assertTrue(samples.searchable('12345'))
+
 
 class Layer(unittest.TestCase):
     @classmethod
@@ -375,6 +385,38 @@ class CommandLine(unittest.TestCase):
                  'length': 0.3}]}]}), encoding='utf-8')
         proc = self.run_sfx('render', project_path, '--output', folder / 'render', env=env)   # default library
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_a_search_it_cannot_read_says_so(self):
+        folder = helpers.scratch('samples_cli_no_words')
+        env = dict(helpers.child_env(), SFX_SKILL_LIBRARY=str(folder / 'library'))
+        samples.add(as_folder(folder / 'Wood Pack', pack_members()), folder / 'library', licence='CC0-1.0')
+        for args in (['--find', '揮劍'], ['--find', ''], ['--find', 'wood', '--not', '音樂']):
+            proc = self.run_sfx('samples', *args, env=env)
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn('in English', proc.stdout)
+            self.assertNotIn('woodKnock', proc.stdout)
+        proc = self.run_sfx('samples', '--find', 'wood knock', '--not', 'footstep', env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn('woodKnock_light_000', proc.stdout)
+        proc = self.run_sfx('samples', env=env)                             # a plain listing is not a search
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+
+class ReverseOffset(unittest.TestCase):
+    def test_with_reverse_the_offset_counts_from_the_recordings_end(self):
+        # what project-format.md says: to play back from moment t of a d-second recording, offset is d - t
+        folder = helpers.scratch('samples_reverse_offset')
+        rate = 44100
+        low = 0.5 * np.sin(2 * np.pi * 600 * np.arange(int(0.1 * rate)) / rate)
+        high = 0.5 * np.sin(2 * np.pi * 3000 * np.arange(int(0.3 * rate)) / rate)
+        src = as_folder(folder / 'two-tones', {'two.wav': wav_bytes(np.concatenate([low, high])[:, None]),
+                                               'License.txt': CC0_TEXT.encode('utf-8')})
+        samples.add(src, folder / 'library', licence='CC0-1.0')
+        library = samples.Library(folder / 'library')
+        layer = {'source': {'type': 'sample', 'library': 'two-tones', 'file': 'two', 'reverse': True, 'offset': 0.4 - 0.1},
+                 'length': 0.08}
+        y = synth.render_sound({'layers': [layer]}, seed=1, samples=library)
+        self.assertAlmostEqual(dominant_hz(y[:3000]), 600, delta=60)
 
 
 if __name__ == '__main__':

@@ -47,8 +47,9 @@ authors' paper:
   examples play, leaving out those whose source, terms of use or content left room for doubt when their descriptions were
   read), reorganised the dataset's labels and metadata for them and added its own measurements. The audio files are unchanged.
 - Each recording keeps the licence its author gave it on [Freesound](https://freesound.org). The skill uses those dedicated
-  to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), and records each one's author,
-  title and page. The release lists them all in `CREDITS.csv`.
+  to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), and records each one's title,
+  page and author (an author whose Freesound name is an email address is credited through the page). The release lists
+  them all in `CREDITS.csv`.
 
 ## Brand
 

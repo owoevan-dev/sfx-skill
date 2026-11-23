@@ -157,16 +157,16 @@ Ask your agent in plain words:
 
 Synthesis needs nothing else. For real attacks and textures the skill can layer recordings:
 
-- **FSD50K.** This project's release carries a selection from [FSD50K](https://doi.org/10.5281/zenodo.4060432), the open research dataset from the Music Technology Group of Universitat Pompeu Fabra: the 6,720 screened recordings whose authors dedicated them to the public domain (CC0) on [Freesound](https://freesound.org), leaving out those whose source, terms of use or content left room for doubt when their descriptions were read. Sounds made with them need no credit. The release lists every recording's author, title and page.
+- **FSD50K.** This project's release carries a selection from [FSD50K](https://doi.org/10.5281/zenodo.4060432), the open research dataset from the Music Technology Group of Universitat Pompeu Fabra: the 6,718 screened recordings whose authors dedicated them to the public domain (CC0) on [Freesound](https://freesound.org), leaving out those whose source, terms of use or content left room for doubt when their descriptions were read. Sounds made with them need no credit. The release lists every recording's title and page, and its author unless the name is an email address.
 - **Sounds you already have.** Hand the agent a folder or a zip ("use these footsteps") and it imports them. The agent shows you the licence text that came with them and asks you to confirm it once, and what the licence asks for is carried into everything made with them.
 
-If you recorded one of these sounds and would rather it were not included, [open an issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml) and it will be left out of the next release.
+If one of these recordings is yours or holds your work and you would rather it were not included, [open an issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml) and it will come out of the release as soon as we can. You don't need a Freesound account.
 
-Every one of these recordings exists because someone took a microphone somewhere and gave the result away. If the skill is useful to you, please support them:
+Every one of these recordings exists because someone made it and gave it away. If the skill is useful to you, please support them:
 
 - Freesound, started and hosted by the Music Technology Group, takes [donations](https://freesound.org/donations/donate/).
 - If you use FSD50K in research, [cite the paper](THIRD_PARTY_NOTICES.md#recordings).
-- Each render lists the authors of the recordings it used. A credit costs nothing, even where none is required.
+- Each render credits the recordings it used. A credit costs nothing, even where none is required.
 
 **Why the project carries no one's sound packs.** Many independent sound designers publish excellent packs for free, often under CC0, and their own pages are how people find them and support them. A licence may allow repackaging their work; we would rather send you to them. Download what you like from its creator, thank them if you can, and hand it to the agent.
 

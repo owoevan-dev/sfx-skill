@@ -1,7 +1,9 @@
 # What `render` and `check` measure
 
 Every master file is measured as it is on disk. A flag is a question for whoever revises the sound; no measurement
-here says whether a sound is good, and the developer's listening decides that.
+here says whether a sound is good, and the developer's listening decides that. No flags does not mean clean either: a
+noise inside a recording or an instrument's sample can look like part of the sound, so look at the spectrogram of
+anything with a long tail.
 
 ## Per file (check.json, `files`)
 

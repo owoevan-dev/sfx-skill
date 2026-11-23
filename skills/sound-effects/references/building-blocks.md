@@ -60,7 +60,7 @@ the check and the listener say:
 
 | Builder | What it makes |
 |---|---|
-| `rec(pack, file, start, length, offset=0, cents=0, gain=0, env=None, filt=None, reverse=False, pan=None, denoise=None, stretch=None, tremolo=None)` | a layer playing a recording. `file` is a name or a list of takes, one per variant. Without `env`, full level between short fades |
+| `rec(pack, file, start, length, offset=0, cents=0, gain=0, env=None, filt=None, reverse=False, pan=None, denoise=None, stretch=None, tremolo=None)` | a layer playing a recording. `file` is a name or a list of takes, one per variant. Without `env`, full level between short fades. With `reverse`, `offset` counts from the recording's end |
 | `take(file, offset=0, gain=0, denoise=None, library=None)` | one take of that list. Recordings arrive at the level of their loudest moment, so give each take its own gain. `samples --events PACK/FILE` prints a list to paste |
 | `looped(pack, file, seconds, fade, offsets, cents=0, gain=0, filt=None, pan=None, stretch=None)` | the two layers of a seamless loop from one recording (sound-design.md, section 6). The sound needs `use='loop'` and `loop={'seconds': ...}` |
 | `lands(event, offset, cents, when)` | the `start` that makes the recording's moment `event` play at `when` |
