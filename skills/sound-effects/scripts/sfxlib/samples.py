@@ -118,7 +118,7 @@ def load_index(library):
 
 def offered(index):
     """The index as the skill offers it: without the recordings this project has withdrawn. An earlier import keeps their
-    files and their entries in the library's own index."""
+    files."""
     from . import fsd50k
     kept = [f for f in index['files'] if not fsd50k.withdrawn(f['library'], f['file'])]
     if len(kept) == len(index['files']):

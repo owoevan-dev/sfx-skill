@@ -21,7 +21,7 @@ work/                      scratch output of tools and tests (not committed, nev
   `SFX_SKILL_FFMPEG`, the one music-production's configuration names, or `ffmpeg` on the PATH). For instrument layers
   and their tests: an installed music-production skill, its FluidSynth and sample banks (see
   [MUSIC_PRODUCTION_CONTRACT.md](MUSIC_PRODUCTION_CONTRACT.md)). For sample layers on real recordings: a library
-  holding the release's packs (`sfx.py samples --library LIB --download-fsd50k DATA`, 3.0 GB), which the worked
+  holding the release's packs (`sfx.py samples --library LIB --download-fsd50k DATA`, 2.9 GB), which the worked
   example and its render test use. Without them those tests are skipped.
 
 `tools/local.json` (not committed) names the local paths:

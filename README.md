@@ -64,7 +64,7 @@ These sounds and their project files are CC0. They are on the release [examples-
 
 3. Open the audition page the agent gives you. Play each sound and its variants, mark it keep, change or drop, leave a note, and paste the feedback back to the agent.
 
-Synthesis works as soon as the skill is installed. For real recordings, the agent asks you once before it downloads the library: 3.0 GB to fetch, and about 7.4 GB on disk until you remove the downloaded archives.
+Synthesis works as soon as the skill is installed. For real recordings, the agent asks you once before it downloads the library: 2.9 GB to fetch, and about 7.2 GB on disk until you remove the downloaded archives.
 
 **Need music too?** [music-skill](https://github.com/owoevan-dev/music-skill) writes original instrumental music and game loops as editable notes. Each skill works without the other.
 
@@ -157,7 +157,7 @@ Ask your agent in plain words:
 
 Synthesis needs nothing else. For real attacks and textures the skill can layer recordings:
 
-- **FSD50K.** This project's release carries a selection from [FSD50K](https://doi.org/10.5281/zenodo.4060432), the open research dataset from the Music Technology Group of Universitat Pompeu Fabra: the 7,003 recordings whose authors dedicated them to the public domain (CC0) on [Freesound](https://freesound.org) and that pass this skill's quality screens, leaving out those whose source, terms of use or content left room for doubt when their descriptions were read. Sounds made with them need no credit. The release lists every recording's author, title and page.
+- **FSD50K.** This project's release carries a selection from [FSD50K](https://doi.org/10.5281/zenodo.4060432), the open research dataset from the Music Technology Group of Universitat Pompeu Fabra: the 6,720 screened recordings whose authors dedicated them to the public domain (CC0) on [Freesound](https://freesound.org), leaving out those whose source, terms of use or content left room for doubt when their descriptions were read. Sounds made with them need no credit. The release lists every recording's author, title and page.
 - **Sounds you already have.** Hand the agent a folder or a zip ("use these footsteps") and it imports them. The agent shows you the licence text that came with them and asks you to confirm it once, and what the licence asks for is carried into everything made with them.
 
 If you recorded one of these sounds and would rather it were not included, [open an issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml) and it will be left out of the next release.

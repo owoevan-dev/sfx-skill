@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 (2026-11-23)
+
+- The library now holds 6,720 recordings in the same 190 classes. 283 more whose source, terms of use or content left room for
+  doubt when their descriptions were read were taken out, to keep it clean. As in 0.1.1, the skill no longer offers them, and a
+  library that imported them earlier keeps the files. The download is now 2.9 GB, 4.3 GB once imported, about 7.2 GB until the
+  downloaded archives are removed.
+
 ## 0.1.1 (2026-11-23)
 
 - The library now holds 7,003 recordings. 402 whose source, terms of use or content left room for doubt when their descriptions
