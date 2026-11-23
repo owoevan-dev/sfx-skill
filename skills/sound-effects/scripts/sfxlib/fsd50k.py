@@ -5,7 +5,8 @@ Transactions on Audio, Speech, and Language Processing 30, 829-852, 2022) gather
 200 classes of Google's AudioSet ontology: uncompressed 16-bit PCM at 44.1 kHz, mono, 0.3 to 30 s each. The dataset as
 a compilation (its selection, labels and metadata) is under CC BY 4.0; each recording keeps the licence its author gave
 it on Freesound. Only the recordings their authors dedicated to the public domain (CC0 1.0) are imported, so a sound
-made with them needs no credit. The evaluation set holds 4,914 of them, the development set 14,959.
+made with them needs no credit. The evaluation set holds 4,914 of them, the development set 14,959. Those this project
+has withdrawn (WITHDRAWN) are neither imported nor offered.
 
 The files come from the dataset's Zenodo record (record 4060432): `download` fetches them through Zenodo's files API,
 which its robots.txt allows (it asks for 10 s between requests), one request at a time, and checks each file against
@@ -75,9 +76,37 @@ PACK_INDEX = 'fsd50k-cc0-index.json'
 PACK_STATUS = 'release pack'
 PACK_PART_RE = re.compile(r'fsd50k-cc0-[0-9]{2,3}\.zip')
 PACK_MEMBER_RE = re.compile(r'(fsd50k-(?:eval|dev))/([0-9]{1,12})\.wav')
-RELEASE_URL = 'https://github.com/owoevan-dev/sfx-skill/releases/download/v0.1.0'     # where the release keeps its packs
-RELEASE_INDEX_SHA256 = 'af1605c7506f9433b756789d310f34a233432190344214b8c69de4019f5e40d6'     # its index, whose sums pin every part
-RELEASE_RECORDINGS = 7405
+RELEASE_URL = 'https://github.com/owoevan-dev/sfx-skill/releases/download/v0.1.1'     # where the release keeps its packs
+RELEASE_INDEX_SHA256 = '1cea0aa02b21eb1bae56fb2ac5f40c1d547586b6f5a6e2ece247f46c896c6b56'     # its index, whose sums pin every part
+RELEASE_RECORDINGS = 7003
+# Recordings this project no longer offers: their source, terms of use or content left room for doubt when their
+# descriptions were read. A library that imported one earlier keeps the file; the skill neither lists nor plays it.
+WITHDRAWN = frozenset("""
+7979 9102 19437 30149 34374 36111 36131 37248 46702 46796 47459 47464 50709 50715 52219 55071 58362 66585 66586 69257
+76705 83707 83710 83721 83727 83730 87967 88590 89651 95337 96076 97769 100476 101894 101900 101901 101902 101903
+101904 101905 101906 101908 101909 101910 101913 101914 102004 102007 102008 102018 102020 102024 102026 104616 117511
+127845 127846 127909 130833 133456 140697 143919 148016 148933 149281 149282 149289 149291 149895 151081 151085 152605
+155145 157441 157446 157448 157449 157450 161760 162880 165142 171658 171765 172951 176929 177253 178176 178182 178419
+179671 180180 185838 186773 186933 186936 186939 186940 186945 186949 186952 186955 186956 186958 186960 186962 186965
+188209 191600 193046 193050 199820 199824 199825 199826 199869 202730 202898 203522 203528 207327 209904 216752 216753
+216757 216758 216763 219250 219252 219254 219257 219262 219265 219657 219658 232425 235410 238570 238571 238572 238573
+238574 238576 238577 238579 238580 238581 238582 238583 238695 238696 238697 238698 238699 238701 238703 238704 238705
+238724 238726 238727 238884 239044 239067 239068 239069 239070 239072 239073 239074 239075 239464 239465 239466 239467
+239468 239469 239471 239472 239473 239562 239564 239906 240081 240085 242590 242591 252210 255179 255223 257368 257483
+260471 260473 260476 260496 260505 260514 260774 264744 265180 265181 268254 268255 268256 268257 268258 268259 268260
+268261 268263 268265 268266 268268 268269 268270 271273 271404 271407 271409 271410 271412 271416 271417 271421 271422
+272008 272009 272010 274451 274511 315833 315919 315922 315923 315933 315934 315936 315939 315940 316631 316634 316642
+316643 317075 317098 317099 317100 317101 317102 319738 321310 328878 330136 332362 333632 335930 335931 335932 335935
+335936 335937 335939 335940 335941 335942 335943 335944 335946 335947 335948 335951 335954 335955 335956 335983 337772
+338777 345288 346663 346903 348577 349903 350419 350423 350426 350430 350431 351062 351882 353207 353252 353700 353853
+353928 360460 360717 361212 361227 361544 361823 362257 363150 364707 365632 366086 366088 366090 367125 367493 367533
+368176 369292 369427 369676 370664 371302 371303 371342 371360 371562 371897 389590 393769 395197 395199 396283 396285
+403063 404368 405459 405460 405468 405469 405481 405487 405492 405500 411299 412841 413355 413412 413480 413485 413657
+413861 413881 413892 413896 413898 414050 416300 416702 416908 418997 419201 419219 419220 419221 419222 420670 425971
+427417 427458 427465 427718 428504 430815 435242 435243 435244 435245 435246 435247 435248 435249 435250 435251 435252
+435253 435255 435256 435257 435258 435259 435260 435262 435263 435264 435267 435269 435270 435272 435274 435276 435278
+435279 435280 435282 435285 435286 435287 435288
+""".split())
 CHUNK = 1 << 20
 ATTEMPTS = 6                       # tries in a row without a byte of progress before a download stops
 
@@ -147,6 +176,11 @@ def sha256_of(path):
         for block in iter(lambda: f.read(CHUNK), b''):
             h.update(block)
     return h.hexdigest()
+
+
+def withdrawn(library, file):
+    """True for a recording of the dataset's two packs that this project no longer offers (WITHDRAWN)."""
+    return str(library) in ('fsd50k-eval', 'fsd50k-dev') and str(file) in WITHDRAWN
 
 
 # ---------------------------------------------------------------- download
@@ -537,7 +571,7 @@ def _add_locked(folder, library, which, check_md5, log):
                 'passing': there['passing'], 'folder': str(library / pack_id)}
     _check_md5(folder, names, check_md5)
     meta = metadata(folder, which)
-    cc0 = {f for f, v in meta.items() if CC0_URL in v['license']}
+    cc0 = {f for f, v in meta.items() if CC0_URL in v['license'] and f not in WITHDRAWN}
     out = samples.inside(library, library / pack_id)
     out.mkdir(parents=True, exist_ok=True)
     parts = Parts(Path(folder) / f"{SETS[which]['audio']}.zip")

@@ -473,7 +473,7 @@ def cmd_samples(args):
     if not args.map and not args.events and not args.spectrogram and not (lib / samples.INDEX).is_file():
         print('A sample library holds the recordings sample layers play. Fill it in either way:')
         print(f'  FSD50K ({fsd50k.PAGE}): {fsd50k.RELEASE_RECORDINGS:,} screened CC0 recordings in 190 labelled classes, from '
-              "this project's release. Fetch and import (ask the person first: a 3.1 GB download, 4.7 GB once imported, about 8 GB until the "
+              "this project's release. Fetch and import (ask the person first: a 3.0 GB download, 4.5 GB once imported, about 7.4 GB until the "
               "archives are removed): sfx.py samples "
               f'--download-fsd50k DATA_FOLDER. With --source zenodo, a whole set of the dataset instead: --set eval '
               f'({fsd50k.CC0_COUNTS["eval"]:,} CC0 recordings, 6.3 GB) or --set dev ({fsd50k.CC0_COUNTS["dev"]:,}, 18.4 GB).')
@@ -490,7 +490,7 @@ def cmd_samples(args):
     if args.spectrogram:
         return _samples_spectrograms(args)
     try:
-        index = samples.load_index(lib)
+        index = samples.offered(samples.load_index(lib))
     except samples.SampleError as error:
         print(f'samples: {error}')
         return 1
@@ -579,7 +579,7 @@ def _library_line():
     if not (folder / samples.INDEX).is_file():
         return f'sample library: none yet at {folder} (needed only for recorded layers; sfx.py samples tells how to fill it)'
     try:
-        index = samples.load_index(folder)
+        index = samples.offered(samples.load_index(folder))
     except samples.SampleError as error:
         return f'sample library: {error}'
     packs, files = len(index['packs']), len(index['files'])

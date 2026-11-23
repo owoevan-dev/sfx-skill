@@ -2,9 +2,8 @@
 
     python tools/make_fsd50k_packs.py LIBRARY OUT_FOLDER [--part-bytes N]
 
-Takes every recording of the packs fsd50k-eval and fsd50k-dev that is CC0 and passes all of the skill's screens (so
-none whose author's description asks for something), and those the project's examples play, and writes, into a new
-folder:
+Takes every recording of the packs fsd50k-eval and fsd50k-dev that is CC0, passes all of the skill's screens and has not
+been withdrawn (fsd50k.WITHDRAWN), and those the project's examples play, and writes, into a new folder:
 
 - fsd50k-cc0-NN.zip: the recordings as they came, unchanged, in parts small enough for a release asset (2 GiB);
 - fsd50k-cc0-index.json: their library entries and each part's size and SHA-256 (what `sfx.py samples` reads);
@@ -39,7 +38,8 @@ This is a selection from the FSD50K dataset, made by the sfx-skill project. The 
 project and do not endorse it.
 
 The recordings. Each audio file is a recording from FSD50K whose author dedicated it to the public domain under CC0 1.0
-on Freesound (https://creativecommons.org/publicdomain/zero/1.0/). No credit is required. CREDITS.csv names each
+on Freesound (https://creativecommons.org/publicdomain/zero/1.0/). No credit is required. That mark is each author's own
+statement and comes with no warranty. CREDITS.csv names each
 recording's author, title and Freesound page all the same: the people who recorded these sounds gave them away. If you
 recorded one of them and would rather it were not included, tell us and it will be left out of the next release:
 https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml
@@ -52,8 +52,9 @@ The dataset as a whole (its selection, labels and metadata) is licensed under CC
 (https://creativecommons.org/licenses/by/4.0/). No warranties are given.
 
 What was changed: a subset was selected (the CC0 recordings that pass this project's own quality screens, and a few more
-that its examples play; none whose author's description asks for something, and no adult content, speech or singing), and the dataset's metadata for them was
-reorganised into fsd50k-cc0-index.json with this project's measurements added. The audio files themselves are unchanged.
+that its examples play; no adult content, speech or singing, and leaving out those whose source, terms of use or content
+left room for doubt when their descriptions were read), and the dataset's metadata for them was reorganised into
+fsd50k-cc0-index.json with this project's measurements added. The audio files themselves are unchanged.
 """
 
 
@@ -80,10 +81,10 @@ def example_files(folder=REPO / 'skills' / 'sound-effects' / 'examples'):
 def chosen(index, also=()):
     """The library entries that go into the packs, in a fixed order: the CC0 recordings that pass every screen, and
     those the examples play (`also`) whatever else their screens say, unless their author's description asks for
-    something or they are adult content, speech or singing."""
+    something or they are adult content, speech or singing. Never one the project has withdrawn."""
     named = set(also)
     rows = [r for r in index['files'] if r['library'] in PACKS and r.get('licence') == 'CC0-1.0'
-            and isinstance(r.get('screen'), list)
+            and not fsd50k.withdrawn(r['library'], r['file']) and isinstance(r.get('screen'), list)
             and (not r['screen'] or ((r['library'], r['file']) in named and not NEVER & set(r['screen'])))]
     return sorted(rows, key=lambda r: (PACKS.index(r['library']), int(r['file'])))
 

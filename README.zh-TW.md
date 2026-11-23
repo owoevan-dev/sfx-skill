@@ -64,7 +64,7 @@ https://github.com/user-attachments/assets/b1f86b78-aa98-479a-9723-d7fdb83895d8
 
 3. 打開 agent 給你的試聽頁。播放每個音效和它的變體，標記保留、修改或不要，留下意見，再把回饋貼回給 agent。
 
-裝好 skill 就能用合成音色。需要真實錄音時，agent 會先問過你，才下載一次音效庫：下載 3.1 GB，匯入後連同壓縮檔約占 8 GB，壓縮檔之後可以自行移除。
+裝好 skill 就能用合成音色。需要真實錄音時，agent 會先問過你，才下載一次音效庫：下載 3.0 GB，匯入後連同壓縮檔約占 7.4 GB，壓縮檔之後可以自行移除。
 
 **也需要配樂？** [music-skill](https://github.com/owoevan-dev/music-skill) 能寫出可編輯的原創器樂和遊戲循環音樂。兩個 skill 都能單獨使用。
 
@@ -157,7 +157,7 @@ npx skills add owoevan-dev/sfx-skill
 
 只用合成不需要其他東西。想要真實的起音和質感時，skill 可以疊上錄音：
 
-- **FSD50K。** 本專案的 Release 收錄了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。這是西班牙龐培法布拉大學音樂科技研究組公開的研究資料集。收錄的 7,405 段錄音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 貢獻到公有領域、並通過本 skill 品質篩選的錄音；作者在說明裡有任何要求的一律不收。用它們做出來的音效不需要標示來源。Release 裡列出每段錄音的作者、標題和頁面。
+- **FSD50K。** 本專案的 Release 收錄了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。這是西班牙龐培法布拉大學音樂科技研究組公開的研究資料集。收錄的 7,003 段錄音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 貢獻到公有領域、並通過本 skill 品質篩選的錄音；讀過說明後，來源、使用條件或內容仍有疑慮的一律不收。用它們做出來的音效不需要標示來源。Release 裡列出每段錄音的作者、標題和頁面。
 - **你已經有的音效。** 把資料夾或 zip 交給 agent（「用這些腳步聲」），它就會匯入。agent 會把隨附的授權內容拿給你確認一次，並把授權的要求帶進所有用到它們的成品。
 
 如果這裡面有你錄的聲音，而你不希望被收錄，請[開一個 issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml)，下一版就會拿掉。
@@ -184,7 +184,7 @@ npx skills add owoevan-dev/sfx-skill
 <details>
 <summary><b>常見問題</b></summary>
 
-**音效可以用在商業遊戲嗎？** 可以。用合成、skill 允許的樂器音色庫、CC0 或公有領域錄音，或你自己的錄音做出來的音效，都不需要標示來源，也能用於任何用途。如果疊上你匯入的其他授權錄音，該音效就要遵守那份授權的條件，渲染結果、試聽頁和每次匯出都會寫明。
+**音效可以用在商業遊戲嗎？** 可以。用合成、skill 允許的樂器音色庫、CC0 或公有領域錄音，或你自己的錄音做出來的音效，都不需要標示來源，也能用於任何用途。錄音的 CC0 標示是各作者自己的聲明，不附任何保證，本專案也無法承諾每一段都正確。如果疊上你匯入的其他授權錄音，該音效就要遵守那份授權的條件，渲染結果、試聽頁和每次匯出都會寫明。
 
 **哪些 agent 能用？** 任何能載入 Agent Skills 並執行 Python 的 agent：Claude Code（外掛）、Codex，以及透過 `npx skills` 安裝的其他 agent。
 

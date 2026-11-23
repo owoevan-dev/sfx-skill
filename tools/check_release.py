@@ -3,7 +3,7 @@
 Usage: python tools/check_release.py                    every pack of the release answers with its size, the index is
                                                         the one this version names, the dataset's record answers
        python tools/check_release.py --full DATA LIB    also downloads the packs, imports them into a new library and
-                                                        renders the recorded example from it (about 8 GB of disk)
+                                                        renders the recorded example from it (about 7.4 GB of disk)
 
 A version that names no release yet has nothing to check."""
 import argparse

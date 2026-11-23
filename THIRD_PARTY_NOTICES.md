@@ -44,8 +44,8 @@ authors' paper:
 - The dataset as a whole is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), which gives no
   warranties. Its authors have no part in this project and do not endorse it.
 - What this project changed: it selected recordings (those under CC0 that pass its own quality screens and the few its
-  examples play, none whose author's description asks for something), reorganised the dataset's labels and metadata for them
-  and added its own measurements. The audio files are unchanged.
+  examples play, leaving out those whose source, terms of use or content left room for doubt when their descriptions were
+  read), reorganised the dataset's labels and metadata for them and added its own measurements. The audio files are unchanged.
 - Each recording keeps the licence its author gave it on [Freesound](https://freesound.org). The skill uses those dedicated
   to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), and records each one's author,
   title and page. The release lists them all in `CREDITS.csv`.

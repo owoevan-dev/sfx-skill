@@ -488,5 +488,93 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(len(samples.load_index(folder / 'library')['files']), 2)
 
 
+class Withdrawn(unittest.TestCase):
+    """A recording the project has withdrawn is offered nowhere, and what a library imported earlier stays on disk."""
+
+    def setUp(self):
+        self.folder = helpers.scratch(f'fsd50k_withdrawn_{self._testMethodName}')
+        self.library = self.folder / 'library'
+        stand_in_library(self.library)
+        patch = mock.patch.object(fsd50k, 'WITHDRAWN', frozenset({'100', '201'}))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_the_packs_leave_it_out_even_when_an_example_names_it(self):
+        index = samples.load_index(self.library)
+        files = [r['file'] for r in maker.chosen(index, also=[('fsd50k-eval', '100'), ('fsd50k-eval', '101')])]
+        self.assertNotIn('100', files)
+        self.assertIn('101', files)
+
+    def test_a_search_and_the_classes_do_not_offer_it(self):
+        code, out = command('samples', '--library', self.library, '--find', 'clip', '--json')
+        self.assertEqual(code, 0, out)
+        names = [f['file'] for f in json.loads(out)['files']]
+        self.assertNotIn('100', names)
+        self.assertNotIn('201', names)
+        self.assertIn('102', names)
+        code, out = command('samples', '--library', self.library, '--labels', '--json')
+        self.assertEqual(json.loads(out)['Door'], 10)
+
+    def test_the_counts_leave_it_out(self):
+        code, out = command('samples', '--library', self.library)
+        self.assertEqual(code, 0, out)
+        self.assertIn('10 recordings in all', out)
+        self.assertIn('5 files', out)
+        import sfx
+        with mock.patch.object(samples, 'default_library', return_value=self.library):
+            self.assertIn('10 recordings', sfx._library_line())
+
+    def test_a_project_that_names_it_is_told_to_choose_another(self):
+        library = samples.Library(self.library)
+        with self.assertRaisesRegex(samples.SampleError, 'withdrawn.*choose another'):
+            library.recording('fsd50k-eval', '100')
+        with self.assertRaisesRegex(samples.SampleError, 'withdrawn'):
+            library.provenance('fsd50k-dev', '201')
+        self.assertEqual(library.provenance('fsd50k-eval', '101')['file'], '101')
+
+    def test_a_library_without_the_file_says_the_same(self):
+        index = samples.load_index(self.library)
+        index['files'] = [f for f in index['files'] if f['file'] != '100']
+        samples._write_index(self.library, index)
+        with self.assertRaisesRegex(samples.SampleError, 'withdrawn'):
+            samples.Library(self.library).recording('fsd50k-eval', '100')
+
+    def test_what_was_imported_stays_on_disk_and_in_the_librarys_index(self):
+        before = (self.library / samples.INDEX).read_bytes()
+        samples.Library(self.library)
+        command('samples', '--library', self.library, '--find', 'clip')
+        self.assertEqual((self.library / samples.INDEX).read_bytes(), before)
+        self.assertTrue((self.library / 'fsd50k-eval' / '100.wav').is_file())
+
+    def test_updating_a_library_from_new_packs_keeps_its_files_and_hides_them(self):
+        maker.build(self.library, self.folder / 'packs', log=lambda m: None, also=())
+        fsd50k.add_packs(self.folder / 'packs', self.library, log=lambda m: None)
+        held = samples.load_index(self.library)
+        self.assertIn('100', [f['file'] for f in held['files']])
+        self.assertNotIn('100', [f['file'] for f in samples.offered(held)['files']])
+        self.assertTrue((self.library / 'fsd50k-eval' / '100.wav').is_file())
+
+    def test_the_dataset_import_leaves_it_out(self):
+        raw = helpers.scratch('fsd50k_withdrawn_raw')
+        data.dataset(raw, data.three_clips())
+        with mock.patch.object(fsd50k, 'WITHDRAWN', frozenset({'101'})):
+            r = fsd50k.add(raw, self.folder / 'new', 'eval', check_md5=False, log=lambda m: None)
+        self.assertEqual(r['files'], 1)
+        self.assertEqual([f['file'] for f in samples.load_index(self.folder / 'new')['files']], ['202'])
+        self.assertFalse((self.folder / 'new' / 'fsd50k-eval' / '101.wav').exists())
+
+    def test_a_recording_of_the_same_name_in_a_persons_own_pack_is_not_touched(self):
+        index = {'packs': {'my-sounds': {'files': 1, 'passing': 1}}, 'files': [{'library': 'my-sounds', 'file': '100'}]}
+        self.assertEqual(samples.offered(index), index)
+
+
+class TheWithdrawnList(unittest.TestCase):
+    def test_nothing_the_project_ships_plays_one(self):
+        self.assertFalse({file for _, file in maker.example_files()} & fsd50k.WITHDRAWN)
+
+    def test_it_is_what_the_release_leaves_out(self):
+        self.assertEqual((len(fsd50k.WITHDRAWN), fsd50k.RELEASE_RECORDINGS), (402, 7003))
+
+
 if __name__ == '__main__':
     unittest.main()
