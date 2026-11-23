@@ -10,7 +10,7 @@ Questions about using or setting up the skill go to [Q&A](https://github.com/owo
 
 - **A render that went wrong.** Paste the command, the error or the flags from `check.json`, and say what you expected. Attach the project file if you can share it.
 - **A sound that is wrong.** Say which sound and what you hear: a click, a thin hit, a loop you can hear join. Listening notes like these are the most useful feedback the project gets.
-- **A recording of yours.** If you made a recording in the release and would rather it were left out, use the [removal form](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml).
+- **A recording of yours.** If a recording in the release is yours or holds your work and you would rather it were left out, use the [removal form](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml). You don't need a Freesound account.
 
 Write in any language you like.
 

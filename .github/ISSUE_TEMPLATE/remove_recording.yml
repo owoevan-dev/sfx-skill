@@ -1,21 +1,28 @@
 name: Leave my recording out
-description: You recorded a sound in the release's FSD50K selection and would rather it were not included.
+description: A recording in the release's FSD50K selection is yours or holds your work, and you would rather it were not included.
 labels: [recording]
 body:
   - type: markdown
     attributes:
-      value: Thank you for sharing your recordings. Tell us which ones, and they will be left out of the next release. You don't need to give a reason.
+      value: Thank you for telling us. Say which recordings, and they will come out of the release as soon as we can. You don't need to give a reason or have a Freesound account. This page is public, so please leave out anything private.
   - type: textarea
     id: recordings
     attributes:
-      label: Your recordings
+      label: The recordings
       description: Their Freesound numbers or page links, one per line (they are listed in the release's CREDITS.csv).
     validations:
       required: true
   - type: input
     id: account
     attributes:
-      label: Your Freesound username
-      description: So that we can see the recordings are yours.
+      label: Your Freesound username, if you uploaded them
+      description: Leave this empty if someone else uploaded your work.
     validations:
-      required: true
+      required: false
+  - type: textarea
+    id: original
+    attributes:
+      label: If someone else uploaded your work, where is the original?
+      description: A link or a few words are enough, so that we can also take out anything else made from it.
+    validations:
+      required: false

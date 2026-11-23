@@ -580,6 +580,12 @@ def _words(text):
     return re.findall(r'[a-z0-9]+', re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', str(text)).lower())
 
 
+def searchable(text):
+    """True when `text` holds a word the search can match: names, titles, tags and labels are read by their Latin
+    letters and digits."""
+    return bool(_words(text))
+
+
 def _forms(word):
     """A word and its regular forms, so that 'slam' finds 'slamming' and 'crow' finds 'crows' but not 'crowd'."""
     forms = {word, word + 's', word + 'es', word + 'ed', word + 'ing', word + 'y'}
@@ -599,6 +605,8 @@ def find(index, text, passing=False, exclude=(), min_seconds=None, max_seconds=N
     body and noise floor), a match in both title and labels before one in the title, the labels or only the tags. `passing` keeps only files that passed the screens (files without screens always pass),
     `exclude` rules out files holding any of its words, and `min_seconds` and `max_seconds` bound the length."""
     wanted = [_forms(w) for w in _words(text)]
+    if not wanted:                                       # no word it can read: nothing matches, rather than everything
+        return []
     ruled_out = set().union(*[_forms(w) for e in exclude for w in _words(e)]) if exclude else set()
     found = []
     for f in index['files']:
@@ -720,7 +728,7 @@ class Library:
                               'to fill one')
         entry = self.files.get((library, file))
         if entry is None:
-            names = [f for lib, f in self.files if lib == library]
+            names = [f for lib, f in self.files if lib == library and not fsd50k.withdrawn(lib, f)]
             near = difflib.get_close_matches(file, names, n=1, cutoff=0.5)
             hint = f"; did you mean '{near[0]}'?" if near else '; sfx.py samples --find lists them'
             raise SampleError(f"no recording '{file}' in {library}{hint}")
@@ -758,10 +766,14 @@ class Library:
     def provenance(self, library, file):
         """Where a recording comes from: its pack, and its own author, page and title when the library records them
         (FSD50K's recordings each have their own author on Freesound)."""
+        from . import fsd50k
         pack, entry = self.entry(library, file)
         licence = entry.get('licence', pack['licence'])
         by_the_packs = entry.get('author', '') in ('', pack.get('author', ''))      # the pack's page is its creator's
-        out = {'library': library, 'title': pack['title'], 'author': entry.get('author') or pack.get('author', ''),
+        author = entry.get('author') or pack.get('author', '')
+        if library in ('fsd50k-eval', 'fsd50k-dev'):       # a library imported earlier or from the dataset holds the name as it was
+            author = fsd50k.credited_author(author)
+        out = {'library': library, 'title': pack['title'], 'author': author,
                'licence': licence, 'conditions': licences.conditions(licence),
                'page': entry.get('page') or (pack.get('page', '') if by_the_packs else ''), 'file': file,
                'sha256': entry['sha256']}

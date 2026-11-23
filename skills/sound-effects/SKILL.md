@@ -4,7 +4,7 @@ description: "Designs and makes original sound effects for games and apps. The a
 license: MIT
 compatibility: "Python 3.10+ with NumPy. FFmpeg, if present, adds FLAC, Ogg and MP3 and reads recordings that are not WAV. An installed music-production skill adds layers on sampled instruments. CC0 field recordings are an optional download from the FSD50K dataset, with the user's agreement. No audio model."
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
 ---
 
 # Sound effects
@@ -39,7 +39,10 @@ Run the commands from the game's project folder, by the full path of this skill'
    materials, its style, which events need sounds, how often each is heard, which are loops (weather, rooms,
    machines), mono or stereo (mono for sounds the engine positions, stereo for ambience). Ask only for what blocks
    the work. Turn it into a palette: the project's `style` (a shared `space` and a `tilt_db`), a shared key or
-   material vocabulary, and which sounds stay dry (sound-design.md, section 1).
+   material vocabulary, and which sounds stay dry (sound-design.md, section 1). If `doctor` showed no sample library and
+   the list holds what is hard to synthesize (doors, footsteps, metal, engines, water, animals), say so once, with the
+   list: recommend the library (what it takes is under **Recordings** below) and mention that the user can hand you a
+   folder or zip of sounds they already have. A game of only interface or chip sounds needs neither, so do not ask.
 3. **Design the sounds** in the project file ([project-format.md](references/project-format.md)), one per event:
    - **A recipe**, when one is close. `python scripts/sfx.py recipes --category impact` lists them and `--name
      impact.punch` prints a recipe's parameters and rules ([ui-sounds.md](references/ui-sounds.md),
@@ -51,7 +54,7 @@ Run the commands from the game's project folder, by the full path of this skill'
      (recordings and takes, thumps, rumbles, whooshes, loops from a recording, envelopes) and checks the project as it
      saves it.
    - **Recordings**, for what is hard to synthesize convincingly: doors, footsteps, metal, engines, water, animals.
-     `sample` layers play FSD50K's CC0 field recordings (6,720 screened ones in 190 labelled classes) or packs the user
+     `sample` layers play FSD50K's CC0 field recordings (6,718 screened ones in 190 labelled classes) or packs the user
      imported. If `doctor` shows no library, `python scripts/sfx.py samples --download-fsd50k DATA` fetches and imports
      them once the user agrees. Tell them what it takes: a 2.9 GB download into DATA, which stays until they remove it,
      and 4.3 GB once imported, in the home folder unless `--library` or `$SFX_SKILL_LIBRARY` names another (about 7.2 GB
@@ -76,7 +79,7 @@ Run the commands from the game's project folder, by the full path of this skill'
    layers, `--samples LIB` for a library elsewhere) writes the masters, `resolved.json` (every value each file was made
    from, and each layer's peak), `check.json` and `audition.html`. Read the flags and each sound's traits in
    `check.json` (`check render_1 --traits` prints them as a table): how dense, bright, long and heavy it is, set against
-   the brief ([checks.md](references/checks.md)). Change what they point at in a new render folder (`render_2`, ...). While you work on one sound, `--sound ID` renders
+   the brief ([checks.md](references/checks.md)). No flags does not mean clean: a noise inside a recording or a sample can look like part of the sound, so look at the spectrogram (`spectrogram render_1`) of anything with a long tail. Change what they point at in a new render folder (`render_2`, ...). While you work on one sound, `--sound ID` renders
    it alone and `--no-page` skips the page; render the whole project before you send it.
 5. **Listen.** Send the user `audition.html`. It plays each variant, random variants without repeats, rapid repeats
    and the flows; loops play looping, with a button that starts two seconds before the join. The user sets a level,

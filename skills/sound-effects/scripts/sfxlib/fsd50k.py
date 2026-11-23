@@ -37,6 +37,7 @@ import json
 import re
 import struct
 import time
+import urllib.error
 import urllib.request
 import zipfile
 import zlib
@@ -76,9 +77,9 @@ PACK_INDEX = 'fsd50k-cc0-index.json'
 PACK_STATUS = 'release pack'
 PACK_PART_RE = re.compile(r'fsd50k-cc0-[0-9]{2,3}\.zip')
 PACK_MEMBER_RE = re.compile(r'(fsd50k-(?:eval|dev))/([0-9]{1,12})\.wav')
-RELEASE_URL = 'https://github.com/owoevan-dev/sfx-skill/releases/download/v0.1.2'     # where the release keeps its packs
-RELEASE_INDEX_SHA256 = '8987391777ad8bb72813ac105648c13a20673439264d921c46ce42f3092c35d6'     # its index, whose sums pin every part
-RELEASE_RECORDINGS = 6720
+RELEASE_URL = 'https://github.com/owoevan-dev/sfx-skill/releases/download/v0.1.3'     # where the release keeps its packs
+RELEASE_INDEX_SHA256 = '3911bb1cd0c39305afc721ab028dea018d0cd18fa3edd7da33ebbe6f010c3b6e'     # its index, whose sums pin every part
+RELEASE_RECORDINGS = 6718
 # Recordings this project no longer offers: their source, terms of use or content left room for doubt when their
 # descriptions were read. A library that imported one earlier keeps the file; the skill neither lists nor plays it.
 WITHDRAWN = frozenset("""
@@ -88,7 +89,7 @@ WITHDRAWN = frozenset("""
 91610 91614 91617 91621 91622 91623 91629 91635 91640 91645 91646 91652 91655 91661 91667 91672 91690 95337 96076
 97769 100476 101894 101900 101901 101902 101903 101904 101905 101906 101908 101909 101910 101913 101914 102004 102007
 102008 102018 102020 102024 102026 102696 104616 110139 110140 110570 112068 113746 113748 113749 114046 114047 114048
-114049 114050 117511 118487 120468 121941 123306 123307 123308 127824 127845 127846 127909 128307 130105 130833 131009
+114049 114050 117511 118487 120468 121941 123306 123307 123308 127265 127824 127845 127846 127909 128307 130105 130833 131009
 131709 133456 133833 135584 135691 135698 140697 143919 144823 146933 147597 148016 148933 149281 149282 149289 149291
 149453 149895 151081 151085 151810 151820 152605 155145 156311 156321 156325 156327 156331 156333 156334 157436 157441
 157446 157448 157449 157450 159197 161347 161760 162880 164089 164090 165142 165391 165599 166192 166225 166227 166229
@@ -105,7 +106,7 @@ WITHDRAWN = frozenset("""
 242590 242591 242856 243661 250741 252210 253713 253772 255009 255179 255223 255902 257368 257483 260388 260395 260397
 260404 260405 260410 260471 260473 260476 260496 260505 260514 260774 262648 262696 262812 263786 264346 264599 264744
 265180 265181 267889 268100 268254 268255 268256 268257 268258 268259 268260 268261 268263 268265 268266 268268 268269
-268270 269488 270271 271273 271404 271407 271409 271410 271412 271416 271417 271421 271422 272008 272009 272010 274451
+268270 269488 270271 270383 271273 271404 271407 271409 271410 271412 271416 271417 271421 271422 272008 272009 272010 274451
 274510 274511 278108 315833 315919 315922 315923 315933 315934 315936 315939 315940 316631 316634 316642 316643 317075
 317098 317099 317100 317101 317102 319738 320512 320733 320734 321310 323607 324464 324546 324584 325349 325350 325351
 325352 325462 328009 328814 328878 330035 330136 330601 332362 333632 333692 334070 335930 335931 335932 335935 335936
@@ -125,6 +126,9 @@ WITHDRAWN = frozenset("""
 """.split())
 CHUNK = 1 << 20
 ATTEMPTS = 6                       # tries in a row without a byte of progress before a download stops
+RELEASE_GONE = (404, 410)          # what a release answers for a file it no longer holds (RFC 9110)
+EMAIL_NAME = re.compile(r'[^@\s]+@[^@\s]+\.[^@\s]+')     # a Freesound name can be someone's email address
+NO_ADDRESS = 'a Freesound user (see the page)'
 
 # Screening thresholds: this skill's own choices from measuring the 4,914 CC0 evaluation clips (research notes).
 CLIP_LEVEL = 0.999                 # a sample at or above this fraction of full scale ...
@@ -184,6 +188,12 @@ def md5_of(path):
         for block in iter(lambda: f.read(CHUNK), b''):
             h.update(block)
     return h.hexdigest()
+
+
+def credited_author(name):
+    """The name a recording of the dataset is credited by: one that is an email address is not repeated, and the
+    recording's page credits them."""
+    return NO_ADDRESS if EMAIL_NAME.search(str(name)) else name
 
 
 def sha256_of(path):
@@ -659,6 +669,21 @@ def read_pack_index(folder, expected=None):
     return index
 
 
+def _from_release(opener):
+    """The opener for a release's own files: a file the release no longer holds (RELEASE_GONE) stops the download and
+    says what to do; every other failure is handled as before (a part is retried and resumed)."""
+    def opened(url, headers):
+        try:
+            return opener(url, headers)
+        except urllib.error.HTTPError as error:
+            if error.code in RELEASE_GONE:
+                raise FSD50KError(f"{url.rsplit('/', 1)[-1]} is unavailable on this release: update the skill to its latest "
+                                  'version, which names the current packs, or fetch the original dataset with --source '
+                                  'zenodo') from None
+            raise
+    return opened
+
+
 def download_packs(folder, url=None, index_sha256=None, opener=None, sleep=time.sleep, log=print):
     """Fetch a release's packs into `folder`: the index (checked against the sum this version knows) and every part
     (checked against the index, resumed like the dataset's files). Returns the index."""
@@ -666,7 +691,7 @@ def download_packs(folder, url=None, index_sha256=None, opener=None, sleep=time.
     if not url:
         raise FSD50KError('this copy of the skill names no release with packs: use --source zenodo')
     expected = RELEASE_INDEX_SHA256 if index_sha256 is None else index_sha256
-    opener = opener or _urlopen
+    opener = _from_release(opener or _urlopen)
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / PACK_INDEX

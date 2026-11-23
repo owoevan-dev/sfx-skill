@@ -502,7 +502,12 @@ def cmd_samples(args):
             print(f'{len(held)} classes (how many recordings carry each); search them with --find:')
             print(textwrap.fill(', '.join(f'{name} {count}' for name, count in held.items()), 118))
         return 0
-    if args.find:
+    if args.find is not None:
+        for text in (args.find, *(args.exclude or ())):
+            if not samples.searchable(text):
+                print(f"samples: '{text}' holds no letters A-Z or digits to search by. Names, titles, tags and labels are "
+                      'matched by those, so search in English, for example --find "wood door"')
+                return 1
         files = samples.find(index, args.find, passing=args.passing, exclude=args.exclude or (),
                              min_seconds=args.min_seconds, max_seconds=args.max_seconds)
     else:

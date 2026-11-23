@@ -147,7 +147,7 @@ the sound made with them; a pack someone imports may (see below).
 labelled with 200 classes of everyday sound (doors, engines, footsteps, water, wind, tools, animals, impacts, crowds,
 machines and more), of which only those their authors dedicated to the public domain (CC0) are used. With the user's
 agreement to a 2.9 GB download (4.3 GB once imported, about 7.2 GB until the downloaded archives are removed), `sfx.py samples --library LIB --download-fsd50k DATA` fetches this
-project's release packs: 6,720 screened CC0 recordings in 190 of the classes, each checked against its SHA-256. With
+project's release packs: 6,718 screened CC0 recordings in 190 of the classes, each checked against its SHA-256. With
 `--source zenodo` it fetches a whole set from the dataset's Zenodo record instead (its robots.txt allows this; MD5-checked,
 resumable): the evaluation set's 4,914 CC0 recordings (6.3 GB) or, with `--set dev`, 14,959 more (18.4 GB). Each recording
 is measured and screened by this skill's own
@@ -158,8 +158,8 @@ credit, permission or notice, or speaks of commercial use, is flagged as well ('
 it, but read the note (`--find` prints it) and respect the author's wish; many such notes only say that no credit is
 needed. `samples --labels` lists the classes they are labelled with, and `--find "metal door" --passing` lists the recordings that pass every screen, the cleanest first, with their titles,
 labels, peak and range; it matches whole words, `--not WORD`, `--min-seconds` and `--max-seconds` narrow it, and without
-`--passing` a recording that fails is listed with its reasons. Adult content, speech, singing and voices that may hold
-words are screened out; people's sounds without words stay (laughter, screams, breathing, coughs), so a bed that must hold
+`--passing` a recording that fails is listed with its reasons. Recordings that FSD50K labels as speech, singing or a voice that may hold words, and those whose title or
+tags name adult content, are screened out; people's sounds without words stay (laughter, screams, breathing, coughs), so a bed that must hold
 nobody takes `--not voice`. Sounds the person already has (their own recordings, a library they downloaded or bought, the game's existing
 sounds) go in with `sfx.py samples --add FOLDER_OR_ZIP`. Which licence holds is the person's to say: without `--licence`
 (own, CC0-1.0, CC-BY-4.0, ...) the command imports nothing and prints the licence text that came with the sounds, to show
@@ -224,12 +224,13 @@ like every other game that used it, so:
   recording of someone walking gives several steps: `"file": [{"file": "118985", "offset": 3.30}, {"file": "118985",
   "offset": 4.49}]`; `vary` adds small pitch and level moves on top (keep `pitch_cents` small when synthesized layers
   sit on the recording's events: pitch moves a recording's events in time too).
-- Shape it: `offset` starts later in the recording (past a click, into the body), `reverse` turns a decay into a swell,
+- Shape it: `offset` starts later in the recording (past a click, into the body), `reverse` turns a decay into a swell (it comes
+  first, so `offset` then counts from the recording's end),
   `cents` moves it in pitch (higher is also shorter), the filter and envelope cut what the game does not need.
 - The project's `style.space` puts recordings and synthesis in the same room.
 
 The render records every recording it played (pack, file, licence, page, SHA-256, and for FSD50K its author, title
-and Freesound page) in `resolved.json`, on the audition page and in each export's manifest. CC0, public-domain and
+and Freesound page, the page standing in for an author name that is an email address) in `resolved.json`, on the audition page and in each export's manifest. CC0, public-domain and
 the person's own recordings need no credit, and the record is there if the user wants to give one; a recording under
 another licence passes its conditions to the sound, and the record gives the credit it asks for.
 

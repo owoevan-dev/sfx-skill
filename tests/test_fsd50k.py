@@ -5,6 +5,7 @@ import io
 import json
 import struct
 import unittest
+import urllib.error
 import zipfile
 import zlib
 from pathlib import Path
@@ -499,6 +500,22 @@ class DownloadSurvives(unittest.TestCase):
             self.fetch(folder, server)
         first = fsd50k.files_for('eval')[0]
         self.assertGreater((folder / f'{first}.part').stat().st_size, 0)
+
+    def test_a_file_the_dataset_does_not_answer_for_is_retried_as_before(self):
+        folder = helpers.scratch('fsd50k-download-404')
+        first = fsd50k.files_for('eval')[0]
+
+        class Missing(self.Server):
+            def __call__(inner, url, headers):
+                if url != fsd50k.FILES_API and first in url:
+                    inner.calls.append((url, dict(headers)))
+                    raise urllib.error.HTTPError(url, 404, 'not found', {}, io.BytesIO(b''))
+                return super().__call__(url, headers)
+
+        server = Missing(self.files)
+        with self.assertRaisesRegex(fsd50k.FSD50KError, 'run the download again'):
+            self.fetch(folder, server)
+        self.assertEqual(len([u for u, _ in server.calls if u != fsd50k.FILES_API and first in u]), fsd50k.ATTEMPTS)
 
     def test_a_damaged_part_is_set_aside_and_fetched_again(self):
         folder = helpers.scratch('fsd50k-download-damaged')

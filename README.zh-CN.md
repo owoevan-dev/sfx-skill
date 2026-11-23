@@ -157,16 +157,16 @@ npx skills add owoevan-dev/sfx-skill
 
 只用合成不需要其他东西。想要真实的起音和质感时，skill 可以叠上录音：
 
-- **FSD50K。** 本项目的 Release 收录了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。这是西班牙庞培法布拉大学音乐技术研究组公开的研究数据集。收录的 6,720 段录音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 贡献到公有领域、并经过本 skill 质量筛选的录音；读过说明后，来源、使用条件或内容仍有疑虑的一律不收。用它们做出来的音效不需要标注来源。Release 里列出每段录音的作者、标题和页面。
+- **FSD50K。** 本项目的 Release 收录了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。这是西班牙庞培法布拉大学音乐技术研究组公开的研究数据集。收录的 6,718 段录音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 贡献到公有领域、并经过本 skill 质量筛选的录音；读过说明后，来源、使用条件或内容仍有疑虑的一律不收。用它们做出来的音效不需要标注来源。Release 里列出每段录音的标题和页面，以及作者名称（名称是 email 的除外）。
 - **你已经有的音效。** 把文件夹或 zip 交给 agent（“用这些脚步声”），它就会导入。agent 会把随附的许可内容拿给你确认一次，并把许可的要求带进所有用到它们的成品。
 
-如果这里面有你录的声音，而你不希望被收录，请[开一个 issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml)，下一版就会去掉。
+如果这里面有你的录音，或用到了你的作品，而你不希望被收录，请[开一个 issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml)，我们会尽快从发布版中去掉。不需要 Freesound 账号。
 
-这些录音之所以存在，是因为有人带着麦克风到某个地方，录下来后无偿分享。如果这个 skill 对你有帮助，请支持他们：
+这些录音之所以存在，是因为有人把它们做出来并无偿分享。如果这个 skill 对你有帮助，请支持他们：
 
 - Freesound 由音乐技术研究组创立并维护，接受[捐款](https://freesound.org/donations/donate/)。
 - 如果你在研究中使用 FSD50K，请[引用论文](THIRD_PARTY_NOTICES.md#recordings)。
-- 每次渲染都会列出用到的录音作者。就算不需要标注，给个感谢也不花成本。
+- 每次渲染都会列出用到的录音。就算不需要标注，给个感谢也不花成本。
 
 **为什么本项目不收录任何人的音效包。** 许多独立音效设计师免费公开了很棒的素材包，其中不少是 CC0，而他们自己的页面正是大家认识和支持他们的地方。许可也许允许重新打包，但我们宁可把你带到他们那里。喜欢什么就向创作者下载，有余力就谢谢他们，再交给 agent 使用。
 
