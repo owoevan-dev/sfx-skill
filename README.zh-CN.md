@@ -64,7 +64,7 @@ https://github.com/user-attachments/assets/b1f86b78-aa98-479a-9723-d7fdb83895d8
 
 3. 打开 agent 给你的试听页。播放每个音效和它的变体，标记保留、修改或不要，留下意见，再把反馈贴回给 agent。
 
-装好 skill 就能用合成音色。需要真实录音时，agent 会先问过你，才下载一次音效库：下载 3.0 GB，导入后连同压缩包约占 7.4 GB，压缩包之后可以自行删除。
+装好 skill 就能用合成音色。需要真实录音时，agent 会先问过你，才下载一次音效库：下载 2.9 GB，导入后连同压缩包约占 7.2 GB，压缩包之后可以自行删除。
 
 **也需要配乐？** [music-skill](https://github.com/owoevan-dev/music-skill) 能写出可编辑的原创器乐和游戏循环音乐。两个 skill 都能单独使用。
 
@@ -157,7 +157,7 @@ npx skills add owoevan-dev/sfx-skill
 
 只用合成不需要其他东西。想要真实的起音和质感时，skill 可以叠上录音：
 
-- **FSD50K。** 本项目的 Release 收录了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。这是西班牙庞培法布拉大学音乐技术研究组公开的研究数据集。收录的 7,003 段录音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 贡献到公有领域、并通过本 skill 质量筛选的录音；读过说明后，来源、使用条件或内容仍有疑虑的一律不收。用它们做出来的音效不需要标注来源。Release 里列出每段录音的作者、标题和页面。
+- **FSD50K。** 本项目的 Release 收录了 [FSD50K](https://doi.org/10.5281/zenodo.4060432) 的一部分。这是西班牙庞培法布拉大学音乐技术研究组公开的研究数据集。收录的 6,720 段录音，都是作者在 [Freesound](https://freesound.org) 上以 CC0 贡献到公有领域、并通过本 skill 质量筛选的录音；读过说明后，来源、使用条件或内容仍有疑虑的一律不收。用它们做出来的音效不需要标注来源。Release 里列出每段录音的作者、标题和页面。
 - **你已经有的音效。** 把文件夹或 zip 交给 agent（“用这些脚步声”），它就会导入。agent 会把随附的许可内容拿给你确认一次，并把许可的要求带进所有用到它们的成品。
 
 如果这里面有你录的声音，而你不希望被收录，请[开一个 issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml)，下一版就会去掉。

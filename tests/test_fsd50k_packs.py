@@ -573,7 +573,7 @@ class TheWithdrawnList(unittest.TestCase):
         self.assertFalse({file for _, file in maker.example_files()} & fsd50k.WITHDRAWN)
 
     def test_it_is_what_the_release_leaves_out(self):
-        self.assertEqual((len(fsd50k.WITHDRAWN), fsd50k.RELEASE_RECORDINGS), (402, 7003))
+        self.assertEqual((len(fsd50k.WITHDRAWN), fsd50k.RELEASE_RECORDINGS), (685, 6720))
 
 
 if __name__ == '__main__':
