@@ -31,7 +31,7 @@ sfx-skill は、サウンドデザイナーのやり方でゲームの効果音�
 
 **音声をオンにしてください。** 『雨の社』0:40：雨の中で鉄の門をくぐると、闇にひそむ怪物。封印と一閃のあと、遺物を手に、また雨の中へ。[MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
 
-https://github.com/user-attachments/assets/b1f86b78-aa98-479a-9723-d7fdb83895d8
+https://github.com/user-attachments/assets/23ff56ba-839f-43e6-ab21-d8557511ab95
 
 <table>
 <tr>

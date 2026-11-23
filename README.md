@@ -31,7 +31,7 @@ A short scene from an original game and six sounds. An agent built each sound wi
 
 **Turn the sound on.** *The Rain Shrine*, 0:40: through the rain and an iron gate, something in the dark, a seal and a blade, a relic, and back out into the rain. [MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
 
-https://github.com/user-attachments/assets/b1f86b78-aa98-479a-9723-d7fdb83895d8
+https://github.com/user-attachments/assets/23ff56ba-839f-43e6-ab21-d8557511ab95
 
 <table>
 <tr>
