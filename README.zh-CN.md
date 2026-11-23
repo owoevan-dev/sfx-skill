@@ -31,7 +31,7 @@ sfx-skill 是一个 [Agent Skill](https://agentskills.io)，让 AI agent 像音�
 
 **记得打开声音。** 《雨夜神社》，0:40：冒雨穿过铁门，黑暗里的怪物、封印和刀光，找到遗物，再走回雨中。[MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
 
-https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
+https://github.com/user-attachments/assets/b1f86b78-aa98-479a-9723-d7fdb83895d8
 
 <table>
 <tr>

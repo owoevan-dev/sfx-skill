@@ -31,7 +31,7 @@ sfx-skill은 사운드 디자이너가 일하는 방식으로 게임 효과음�
 
 **소리를 켜 주세요.** 《비 내리는 신사》, 0:40: 빗속에서 철문을 지나면 어둠 속의 괴물. 봉인과 일격 끝에 유물을 손에 넣고 다시 빗속으로. [MP3](https://github.com/owoevan-dev/sfx-skill/releases/download/examples-1/the-rain-shrine.mp3)
 
-https://github.com/user-attachments/assets/0f08b86d-b744-4c4c-82b7-ad6162b852ea
+https://github.com/user-attachments/assets/b1f86b78-aa98-479a-9723-d7fdb83895d8
 
 <table>
 <tr>
