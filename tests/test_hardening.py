@@ -195,6 +195,18 @@ class TheReleaseCheck(unittest.TestCase):
             with self.subTest(argv=argv):
                 self.assertEqual(called, wanted)        # the download checks the index and every part by their sums
 
+    def test_a_dataset_record_that_refuses_the_runner_is_not_a_missing_one(self):
+        import urllib.error
+        import check_release
+        refused = lambda code: urllib.error.HTTPError(check_release.DATASET, code, 'refused', {}, None)
+        for code in (403, 429):                         # a site refusing a shared cloud runner: said, and the check goes on
+            with self.subTest(code=code), mock.patch.object(check_release, 'size_of', side_effect=refused(code)):
+                check_release.dataset_answers()
+        for code in (404, 410, 500):                    # a record that is gone, or a site that fails
+            with self.subTest(code=code), mock.patch.object(check_release, 'size_of', side_effect=refused(code)), \
+                    self.assertRaises(urllib.error.HTTPError):
+                check_release.dataset_answers()
+
 
 class TheDocumentsSayWhatHappens(unittest.TestCase):
     SKILL = helpers.REPO / 'skills' / 'sound-effects'
