@@ -5,10 +5,13 @@ sound-effects needs music-production only for instrument layers (its FluidSynth 
 `SFX_SKILL_FFMPEG`, the PATH: sfxlib/ffmpeg.py), and everything else works without it, also a project whose Surge takes
 are already recorded. `sfx.py music` reads a music-production project file and needs nothing else of it. It uses
 music-production only through its configuration file, its command line and the data files named below, and never imports
-its modules. This list is the whole contract: each item is exercised by
-`tests/test_music_production_contract.py` against the installed copy, so a change on music-production's side shows as
-a failing test. Written against music-production 0.8.0; checked again against 0.9.1 on 2026-11-22, and the Surge part
-written against 0.9.2.
+its modules. This list is the whole contract. `tests/test_music_production_contract.py` checks it against the installed
+copy where it can: its configuration (FFmpeg with the codecs used, FluidSynth, the banks and their presets), its doctor, a
+project's bars, parts, notes and length against `studio.py validate`, quoted notes played on an instrument layer, and a
+Surge take recorded through its host and played again.
+How a quote names what the performance adds (rubato, swing, legato, controllers) follows music-production's guide and code
+as written down here, and no test renders those against it. Written against music-production 0.8.0; checked again
+against 0.9.1 on 2026-11-22, and the Surge part written against 0.9.2.
 
 ## Finding music-production
 

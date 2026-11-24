@@ -11,6 +11,8 @@ from sfxlib import music, project
 
 SFX = helpers.SCRIPTS / 'sfx.py'
 _FOLDERS = itertools.count()
+LEGATO = "this part's legato, by which a note that closely follows another can glide on from it with no attack of its own"
+CROSSFADE = "this part's crossfade legato, by which a note that closely follows another can enter from the bank's legato recording"
 
 
 def folder():
@@ -463,35 +465,33 @@ class Quoting(unittest.TestCase):
         song['tracks'][0]['performance']['bend'] = [[2, 1]]                 # jumps there and stays
         self.assertEqual(music.quote(song, 'lead', 3, 3)['leaves_out'], ["this part's pitch bend"])
 
-    def test_a_slur_that_joins_quoted_notes_is_named_and_the_written_notes_stay(self):
+    def test_legato_is_named_where_a_quoted_note_could_join_the_one_before_and_the_written_notes_stay(self):
         song = piece(tracks=[part('lead', [(0, 1, 60), (1, 1, 62), (3, 1, 70)])])
         song['tracks'][0]['performance'].update(legato={'max_interval': 5, 'glide_ms': 25, 'gap_ms': 40, 'max_notes': 4}, bend_range=5)
         q = music.quote(song, 'lead', 1, 1)
         self.assertEqual([n[1] for n in q['notes']], [60, 62, 70])
-        self.assertEqual(q['leaves_out'], ["this part's slurs (1 of these notes glides on from the note before it, with no attack of its own)"])
+        self.assertEqual(q['leaves_out'], [LEGATO])
         song['tracks'][0]['performance']['legato']['mode'] = 'crossfade'
-        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ["this part's crossfade legato"])
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [CROSSFADE])
         del song['tracks'][0]['performance']['legato']['mode']
-        song['tracks'][0]['performance']['notes']['lead_0']['gate'] = 0.5          # played short, the two no longer meet
-        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ['per-note gate'])
+        song['tracks'][0]['performance']['notes']['lead_0']['gate'] = 0.5          # whatever the timing: the played times decide
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ['per-note gate', LEGATO])
         song['tracks'][0]['engine'] = 'synth'                                       # legato is a SoundFont part's
         del song['tracks'][0]['performance']['notes']['lead_0']['gate']
         self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
 
-    def test_a_slur_is_grouped_as_the_part_is_played(self):
+    def test_legato_is_named_only_where_the_keys_played_could_join(self):
         song = piece(tracks=[part('lead', [(0, 1, 60), (1, 1, 62), (2, 1, 67)])])
         perf = song['tracks'][0]['performance']
         perf.update(legato={}, bend_range=5)                                        # an empty legato is no legato
         self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
         perf['legato'] = {'max_interval': 5}
-        self.assertTrue(any('slurs (1 of' in item for item in music.quote(song, 'lead', 1, 1)['leaves_out']))
-        song['tracks'][0]['key_map'] = {'62': 74}                                   # played on 74: too far to join 60
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [LEGATO])
+        song['tracks'][0]['key_map'] = {'62': 74}                                   # played on 74: too far from 60 and 67 to join
         self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ["this part's key map"])
-        swung = piece(tracks=[part('lead', [(0.5, 0.4, 60), (1, 0.5, 62)])])        # 50 ms apart as written
-        swung['tracks'][0]['performance'].update(legato={'max_interval': 5}, bend_range=5)
-        self.assertEqual(music.quote(swung, 'lead', 1, 1)['leaves_out'], [])
-        swung['tracks'][0]['performance']['swing'] = {'ratio': 0.66}                 # swung, 34 ms: joined
-        self.assertEqual(music.quote(swung, 'lead', 1, 1)['leaves_out'][-1], "this part's slurs (1 of these notes glides on from the note before it, with no attack of its own)")
+        later = piece(tracks=[part('lead', [(3, 1, 60), (4, 1, 62)])])               # the note before the bars counts
+        later['tracks'][0]['performance'].update(legato={'max_interval': 5}, bend_range=5)
+        self.assertEqual(music.quote(later, 'lead', 2, 2)['leaves_out'], [LEGATO])
 
     def test_a_drum_machine_or_noise_part_names_no_bend_and_a_drum_machine_no_gate(self):
         for engine, gate_named in (('drum_synth', False), ('noise', True)):
@@ -511,20 +511,44 @@ class Quoting(unittest.TestCase):
         self.assertIn("the piece's rubato", music.quote(slowed(10), 'lead', 2, 2)['leaves_out'])      # the last 10 beats reach bar 2
         self.assertNotIn("the piece's rubato", music.quote(slowed(4), 'lead', 2, 2)['leaves_out'])    # the last 4 do not
 
-    def test_a_slur_under_the_piece_s_rubato_is_said_to_be_as_written(self):
-        song = piece(tracks=[part('lead', [(14.5, 0.4375, 60), (15, 0.5, 62)])])                      # 31 ms apart as written
-        song['tracks'][0]['performance'].update(legato={'max_interval': 5}, bend_range=5)
-        self.assertEqual(music.quote(song, 'lead', 4, 4)['leaves_out'],
-                         ["this part's slurs (1 of these notes glides on from the note before it, with no attack of its own)"])
-        song['clock']['rubato'] = {'final_ratio': 0.6, 'final_beats': 4}                                  # slowed, they part
-        said = music.quote(song, 'lead', 4, 4)['leaves_out']
-        self.assertEqual(said[0], "the piece's rubato")
-        self.assertEqual(said[-1], "this part's slurs (as written, 1 of these notes glides on from the note before it, with no attack of its "
-                                   "own; the piece's rubato can change that)")
+    def test_rubato_that_a_later_span_undoes_is_not_named(self):
+        two = [{'id': 'a', 'start_bar': 0, 'bars': 1}, {'id': 'b', 'start_bar': 1, 'bars': 1}]
+        cue = lambda rubato: piece(sections=two, tracks=[part('lead', [(0, 1, 60), (4, 1, 62)])],
+                                   clock={'bars': 2, 'meter': [4, 4], 'tempo': [[0, 120]], 'tail_seconds': 3, 'rubato': rubato})
+        undone = cue({'phrase_ratio': 0.8, 'phrase_beats': 1, 'final_ratio': 1, 'final_beats': 8})   # the final span, at 1, lies over it
+        self.assertNotIn('rubato', '\n'.join(music.overview(music.describe(undone))))
+        self.assertEqual(music.describe(undone)['render_seconds'], 7.0)
+        self.assertNotIn("the piece's rubato", music.quote(undone, 'lead', 1, 1)['leaves_out'])
+        slower = cue({'phrase_ratio': 0.8, 'phrase_beats': 1, 'final_ratio': 0.7, 'final_beats': 8})  # one that slows does not undo it
+        self.assertIn('rubato', '\n'.join(music.overview(music.describe(slower))))
+        self.assertIn("the piece's rubato", music.quote(slower, 'lead', 1, 1)['leaves_out'])
+
+    def test_a_quote_s_times_are_said_to_be_the_written_score_s(self):
+        song = piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'rubato': {'phrase_ratio': 0.7, 'phrase_beats': 4}})
+        first = music.quote_lines(music.quote(song, 'lead', 3, 3))[0]
+        self.assertIn('4 s into the written score', first)
+
+    def test_a_drum_machine_part_names_swing_only_where_it_moves_a_hit(self):
+        song = piece(tracks=[part('kit', [(4, 0.5, 36), (5, 0.5, 38)], engine='drum_synth')])
+        song['tracks'][0]['performance']['swing'] = {'ratio': 0.65}                  # the hits stay on their beats; only their ends move
+        self.assertEqual(music.quote(song, 'kit', 2, 2)['leaves_out'], [])
+        song['tracks'][0]['notes'][1]['on'] = 5.5                                     # an off-beat hit moves
+        self.assertEqual(music.quote(song, 'kit', 2, 2)['leaves_out'], ["this part's swing"])
+
+    def test_a_drum_flag_with_a_pitched_patch_is_a_pitched_part(self):
+        song = piece(tracks=[part('keys', [(0, 0.5, 60), (1, 0.5, 64)], drums=True, patch={'bank': 0, 'program': 0})])
+        q = music.quote(song, 'keys', 1, 1)
+        self.assertFalse(q['drums'])
+        self.assertNotIn('kit', '\n'.join(music.quote_lines(q)))
+        self.assertEqual(music.describe(song)['tracks'][0]['pitch_classes'], ['C', 'E'])
+        del song['tracks'][0]['patch']                                                 # on the drum channel, its notes are a kit's keys
+        self.assertTrue(music.quote(song, 'keys', 1, 1)['drums'])
+        self.assertNotIn('pitch_classes', music.describe(song)['tracks'][0])
 
     def test_a_noise_part_says_its_articulations_choose_its_sounds(self):
         line = '\n'.join(music.quote_lines(music.quote(piece(tracks=[part('fx', [(0, 0.5, 48)], engine='noise')]), 'fx', 1, 1)))
         self.assertIn("articulation", line)
+        self.assertIn('on a pitched patch', line)
         self.assertNotIn('keys of its kit', line)
         kit = '\n'.join(music.quote_lines(music.quote(piece(tracks=[part('kit', [(0, 0.5, 36)], engine='drum_synth')]), 'kit', 1, 1)))
         self.assertIn('keys of its kit', kit)
@@ -536,7 +560,7 @@ class Quoting(unittest.TestCase):
         song['tracks'][0]['performance']['notes']['lead_2'].update({'timing_ms': 0, 'gate': 1})
         q = music.quote(song, 'lead', 2, 2)
         self.assertEqual(q['leaves_out'], [])
-        self.assertNotIn('written score', '\n'.join(music.quote_lines(q)))
+        self.assertNotIn('The render also plays', '\n'.join(music.quote_lines(q)))
 
     def test_per_note_expression_outside_the_bars_is_not_named(self):
         song = piece()
@@ -602,6 +626,17 @@ class Quoting(unittest.TestCase):
 
 
 class Command(unittest.TestCase):
+    def test_json_is_valid_whatever_the_console_can_show(self):
+        path = saved(piece(title='Café'))
+        env = dict(helpers.child_env(), PYTHONIOENCODING='cp950')         # a Windows console that has no é
+        said = []
+        for args in ([str(path), '--json'], [str(path), '--track', 'lead', '--bars', '2', '--json']):
+            done = subprocess.run([sys.executable, str(SFX), 'music', *args], capture_output=True, env=env, timeout=120)
+            with self.subTest(args=args):
+                self.assertEqual(done.returncode, 0, done.stderr)
+                said.append(json.loads(done.stdout.decode('ascii')))
+        self.assertEqual(said[0]['title'], 'Café')
+
     def test_the_overview(self):
         proc = run(saved(piece()))
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)

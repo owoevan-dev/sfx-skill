@@ -113,13 +113,24 @@ const buffers = Object.create(null);
 const last = Object.create(null);
 const views = Object.create(null);      // each card's way to show the feedback as it is now
 let showGeneral = () => {};
-// a text box shows the feedback as saved, the cursor of someone who left it there staying where it was, so that what they type
-// next goes into the saved text and not into what the box showed before
+// a text box shows the feedback as saved. The cursor of someone who left it there moves with the text around it; a selection
+// whose words changed becomes a cursor after what replaced them, so that what they type next goes into the saved text and
+// overwrites none of it
 function showText(box, text) {
-  if (box.value === text) return;
+  const old = box.value;
+  if (old === text) return;
   const here = document.activeElement === box && typeof box.selectionStart === 'number' ? [box.selectionStart, box.selectionEnd] : null;
   box.value = text;
-  if (here) { try { box.setSelectionRange(Math.min(here[0], text.length), Math.min(here[1], text.length)); } catch (e) { /* not every box keeps one */ } }
+  if (!here) return;
+  let a = 0;                                // old[a, old.length - b) became text[a, text.length - b)
+  while (a < old.length && a < text.length && old[a] === text[a]) a++;
+  let b = 0;
+  while (b < old.length - a && b < text.length - a && old[old.length - 1 - b] === text[text.length - 1 - b]) b++;
+  const moved = p => (p <= a ? p : p >= old.length - b ? p + text.length - old.length : text.length - b);
+  const [s, e] = here;
+  const touched = s < e && (a < old.length - b ? s < old.length - b && e > a : s < a && e > a);
+  const at = touched ? [moved(e), moved(e)] : [moved(s), moved(e)];
+  try { box.setSelectionRange(at[0], at[1]); } catch (err) { /* not every box keeps one */ }
 }
 let ctx = null;
 let master = null;

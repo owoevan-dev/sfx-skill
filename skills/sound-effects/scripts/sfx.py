@@ -534,7 +534,7 @@ def cmd_samples(args):
     files = [] if summary else files[:limit] if limit else files
     if args.json:                        # files and matched hold every word, as before; those holding some of them come apart
         print(json.dumps({'packs': index['packs'], 'files': [f for f in files if 'matched_words' not in f], 'matched': total - some,
-                          'some_words': [f for f in files if 'matched_words' in f]}, indent=1, ensure_ascii=False))
+                          'some_words': [f for f in files if 'matched_words' in f]}, indent=1))
         return 0
     shown = {f['library'] for f in files} if args.find else set(index['packs'])
     for pack_id, pack in sorted(index['packs'].items()):        # a search names only the packs whose licence asks for something
@@ -623,7 +623,7 @@ def cmd_surge(args):
         if why:
             print(f"surge: patch '{args.id}' cannot be used: {why}")
             return 1
-        print(json.dumps(dict(entry, id=args.id), indent=1, ensure_ascii=False) if args.json else '\n'.join(surge.describe(args.id, entry)))
+        print(json.dumps(dict(entry, id=args.id), indent=1) if args.json else '\n'.join(surge.describe(args.id, entry)))
         return 0
     if args.find is not None and not samples.searchable(args.find):
         print(f"surge: '{args.find}' holds no letters A-Z or digits to search by. Patch names, categories and designers are in English, for example --find bell")
@@ -631,7 +631,7 @@ def cmd_surge(args):
     found = surge.find(presets, args.find or '', args.role, args.character, project=Path.cwd().name)
     shown = found if args.limit == 0 else found[:args.limit]
     if args.json:
-        print(json.dumps([dict(presets[key], id=key) for key in shown], indent=1, ensure_ascii=False))
+        print(json.dumps([dict(presets[key], id=key) for key in shown], indent=1))
         return 0
     print(f'{len(found)} patches match, {len(shown)} shown' + (' (--limit 0 lists all)' if len(shown) < len(found) else '') + ", in this project's own order:")
     for key in shown:
@@ -646,7 +646,7 @@ def cmd_music(args):
         song = music.load(args.song)
         if args.track is None and args.bars is None:
             info = music.describe(song)
-            print(json.dumps(info, indent=1, ensure_ascii=False) if args.json else '\n'.join(music.overview(info)))
+            print(json.dumps(info, indent=1) if args.json else '\n'.join(music.overview(info)))
             return 0
         if args.track is None or args.bars is None:
             raise music.MusicError('--track and --bars go together, such as --track lead --bars 5-6')
@@ -654,7 +654,7 @@ def cmd_music(args):
     except music.MusicError as error:
         print(f'music: {error}')
         return 1
-    print(json.dumps(quoted, indent=1, ensure_ascii=False) if args.json else '\n'.join(music.quote_lines(quoted)))
+    print(json.dumps(quoted, indent=1) if args.json else '\n'.join(music.quote_lines(quoted)))
     return 0
 
 
@@ -807,7 +807,7 @@ def _clean_downloads(args):
         print(f'clean: {error}')
         return 1
     if args.json:
-        print(json.dumps(result, indent=1, ensure_ascii=False))
+        print(json.dumps(result, indent=1))
         return 0
     for item in result['held']:
         print(f"fully imported: {item['name']} ({item['bytes'] / 1e6:.1f} MB)")
@@ -830,7 +830,7 @@ def cmd_clean(args):
         print(f'clean: {error}')
         return 1
     if args.json:
-        print(json.dumps(result, indent=1, ensure_ascii=False))
+        print(json.dumps(result, indent=1))
         return 0
     shown, verb = (result['moved'], 'moved') if args.trash else (result['move'], 'would move')
     for item in shown:

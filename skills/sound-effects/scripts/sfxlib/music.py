@@ -31,6 +31,8 @@ EXPRESSION = 11
 BRIGHTNESS = 74
 PEDALS = range(64, 70)                  # switch controllers, which step whatever a part's cc_mode says
 SWING_UNITS = (0.25, 0.5, 1)            # music-production's: sixteenths, eighths or quarters, in quarter notes
+LEGATO_SAID = "this part's legato, by which a note that closely follows another can glide on from it with no attack of its own"
+CROSSFADE_SAID = "this part's crossfade legato, by which a note that closely follows another can enter from the bank's legato recording"
 # The controllers each engine plays, each with the value it rests at until the part sets it, as music-production renders a part:
 # Surge XT is sent the mod wheel and the sustain pedal; the additive synth reads expression, brightness and the mod wheel (its
 # vibrato); the built-in synthesizer, the drum machine and the noise engine read none. A SoundFont preset may answer any.
@@ -232,7 +234,13 @@ def _kit(track):
 
 
 def _pitched(track):
-    return track.get('drums') is not True and track.get('engine') not in UNPITCHED and not _kit(track)
+    """Whether a part's numbers are pitches, as music-production routes it: a drum machine or noise has none; a SoundFont part is a
+    kit's keys on a kit's bank, or with `drums` on the drum channel, where it goes unless it names a patch off the kit's bank."""
+    if track.get('engine') in UNPITCHED:
+        return False
+    if track.get('engine') != 'soundfont':
+        return True
+    return not (_kit(track) or (track.get('drums') is True and track.get('patch') is None))
 
 
 def _track_row(track, clock):
@@ -267,27 +275,35 @@ def _section_row(section, clock):
 
 
 def _rubato_spans(song, clock):
-    """The stretches of the score `clock.rubato` slows, as (from beat, to beat), as music-production's rubato_spans lays them: the
-    last `phrase_beats` before each section's start but the first, the last `final_beats` of the piece and any written `spans`,
-    each to a ratio under 1; none where nothing slows (one section and phrase settings only, or no final beats)."""
+    """The stretches of the score `clock.rubato` slows, as (from beat, to beat). music-production lays its spans in order (the last
+    `phrase_beats` before each section's start but the first, the last `final_beats` of the piece, then any written `spans`), a
+    later one over an earlier where they meet, so a later span at a ratio of 1 undoes a slowing under it; what is left at a ratio
+    under 1 slows. None where nothing slows (one section and phrase settings only, no final beats, or only ratios of 1)."""
     r = song['clock'].get('rubato')
     if not isinstance(r, dict):
         return []
     total, bar = clock.quarters_per_bar * clock.bars, clock.quarters_per_bar
-    spans = []
+    laid = []                                                # (from, to, ratio), in music-production's order
     phrase = _real(r.get('phrase_beats'), 0.0)
-    if phrase > 0 and _real(r.get('phrase_ratio'), 0.94) < 1:
+    if phrase > 0:
         for section in (song.get('sections') if isinstance(song.get('sections'), list) else [])[1:]:
             first = section.get('start_bar') if isinstance(section, dict) else None
-            if isinstance(first, int) and not isinstance(first, bool) and 0 < first * bar < total:
-                spans.append((max(0.0, first * bar - phrase), first * bar))
+            if isinstance(first, int) and not isinstance(first, bool) and 0 < first < clock.bars:
+                laid.append((first * bar - phrase, first * bar, _real(r.get('phrase_ratio'), 0.94)))
     final = _real(r.get('final_beats'), 0.0)
-    if final > 0 and _real(r.get('final_ratio'), 0.6) < 1:
-        spans.append((max(0.0, total - final), total))
+    if final > 0:
+        laid.append((total - final, total, _real(r.get('final_ratio'), 0.6)))
     for s in r.get('spans') if isinstance(r.get('spans'), list) else []:
-        if isinstance(s, list) and len(s) == 3 and all(_real(x, None) is not None for x in s) and float(s[2]) < 1:
-            spans.append((max(0.0, float(s[0])), min(total, float(s[1]))))
-    return [(a, b) for a, b in spans if b > a]
+        if isinstance(s, list) and len(s) == 3 and all(_real(x, None) is not None for x in s):
+            laid.append(tuple(float(x) for x in s))
+    held = []                                                # what each beat of the score is under, the latest span winning
+    for a, b, ratio in laid:
+        a, b = max(0.0, a), min(total, b)
+        if b <= a:
+            continue
+        held = [piece for x, y, w in held for piece in ((x, min(y, a), w), (max(x, b), y, w)) if piece[1] > piece[0]]
+        held.append((a, b, ratio))
+    return sorted((a, b) for a, b, ratio in held if ratio < 1)
 
 
 def describe(song):
@@ -482,52 +498,31 @@ def _controls(track, performance, start, stop):
     return out
 
 
-def _slurs(track, performance, every, picked, clock, unsure=()):
-    """What a SoundFont part's legato (music-production's performance.legato) does to the selected notes, grouping the part's notes
-    as it does: by their played times (swing, per-note timing and gate) and on the keys its key map plays. An empty legato is none.
-    The times are the written tempo's: where `unsure` names what moves them (the piece's rubato), or the part's offset pushes a
-    note before the score's start, the count is said to be as written."""
+def _legato(track, performance, every, picked):
+    """A SoundFont part's legato (music-production's performance.legato), named where a quoted note follows another of the part on a
+    key its rules could join to it: another key, within `max_interval` (5, or 12 for crossfade legato) of it, and for crossfade
+    legato not struck with others. Whether a note joins is the played timing's, which the piece's rubato, swing, the part's
+    offset and each note's timing and gate all move, so the quote says it can and counts nothing. An empty legato is none."""
     legato = performance.get('legato')
     if track.get('engine') != 'soundfont' or not isinstance(legato, dict) or not legato:
         return []
-    played = performance.get('notes') if isinstance(performance.get('notes'), dict) else {}
+    crossfade = legato.get('mode') == 'crossfade'
+    span = _real(legato.get('max_interval'), 12.0 if crossfade else 5.0)
     key_map = track.get('key_map') if isinstance(track.get('key_map'), dict) else {}
-    swing = performance.get('swing') if isinstance(performance.get('swing'), dict) else None
-    notes = []
-    for on, duration, pitch, note_id in every:
-        entry = played.get(note_id) if isinstance(played.get(note_id), dict) else {}
-        a, b = _swung(on, swing, clock.quarters_per_bar), _swung(on + duration, swing, clock.quarters_per_bar)
-        begin = clock.seconds(a) + _real(entry.get('timing_ms'), 0.0) / 1000
-        key = key_map.get(str(pitch), pitch)
-        key = key if isinstance(key, int) and not isinstance(key, bool) else pitch
-        notes.append((begin, begin + (clock.seconds(b) - clock.seconds(a)) * _real(entry.get('gate'), 1.0), key, note_id))
-    notes.sort(key=lambda n: (n[0], n[2]))
+
+    def key(pitch):                         # the key the render plays
+        played = key_map.get(str(pitch), pitch)
+        return played if isinstance(played, int) and not isinstance(played, bool) else pitch
+
+    notes = sorted((on, key(pitch), note_id) for on, _, pitch, note_id in every)
+    onsets = {}
+    for on, _, _ in notes:
+        onsets[on] = onsets.get(on, 0) + 1
     chosen = {note[3] for note in picked}
-    gap = _real(legato.get('gap_ms'), 40.0) / 1000
-    if legato.get('mode') == 'crossfade':   # a note that follows its neighbour, not struck with others, enters from the bank's legato recording
-        span = _real(legato.get('max_interval'), 12.0)
-        onsets = {}
-        for n in notes:
-            onsets[n[0]] = onsets.get(n[0], 0) + 1
-        enters = any(b[3] in chosen and b[0] - a[1] <= gap and b[2] != a[2] and abs(b[2] - a[2]) <= span and onsets[b[0]] == 1
-                     for a, b in zip(notes, notes[1:]))
-        return ["this part's crossfade legato"] if enters else []
-    span, most = _real(legato.get('max_interval'), 5.0), _real(legato.get('max_notes'), 4.0)
-    group, joined = [], 0
-    for note in notes:
-        if group and note[0] - group[-1][1] <= gap and note[2] != group[-1][2] and abs(note[2] - group[0][2]) <= span and len(group) < most:
-            group.append(note)
-            joined += note[3] in chosen
-        else:
-            group = [note]
-    if not joined:
+    if not any(b[2] in chosen and b[1] != a[1] and abs(b[1] - a[1]) <= span and (not crossfade or onsets[b[0]] == 1)
+               for a, b in zip(notes, notes[1:])):
         return []
-    unsure = list(unsure)
-    if any(n[0] + _real(performance.get('offset_ms'), 0.0) / 1000 < 0 for n in notes):
-        unsure.append("the part's offset at the score's start")
-    one = joined == 1
-    return [f"this part's slurs ({'as written, ' if unsure else ''}{joined} of these notes {'glides' if one else 'glide'} on from the note before "
-            f"{'it' if one else 'them'}, with no attack of {'its' if one else 'their'} own" + (f'; {_and(unsure)} can change that)' if unsure else ')')]
+    return [CROSSFADE_SAID if crossfade else LEGATO_SAID]
 
 
 def _left_out(song, track, picked, every, clock, start, stop):
@@ -545,8 +540,9 @@ def _left_out(song, track, picked, every, clock, start, stop):
     if track.get('reverse') is True:              # each note renders on its own: no swing, timing, gate, offset, bend or controller applies
         return out + ['each note played backwards'] + (["this part's key map"] if mapped else [])
     swing = performance.get('swing')
+    whole = track.get('engine') == 'drum_synth'   # a drum machine plays each hit whole: only where it starts can move
     if isinstance(swing, dict) and any(abs(_swung(x, swing, clock.quarters_per_bar) - x) > ON_THE_LINE     # a quoted note it moves
-                                       for on, duration, _, _ in picked for x in (on, on + duration)):
+                                       for on, duration, _, _ in picked for x in ((on,) if whole else (on, on + duration))):
         out.append("this part's swing")
     if performance.get('offset_ms'):
         out.append("this part's time offset")
@@ -554,7 +550,7 @@ def _left_out(song, track, picked, every, clock, start, stop):
         out.append('per-note timing')
     if track.get('engine') != 'drum_synth' and any(entry.get('gate', 1) != 1 for entry in entries):     # a drum machine plays each hit whole
         out.append('per-note gate')
-    out += _slurs(track, performance, every, picked, clock, ["the piece's rubato"] if slowed else [])
+    out += _legato(track, performance, every, picked)
     if track.get('engine') == 'soundfont' and isinstance(performance.get('dynamics'), list) and performance['dynamics']:
         out.append("this part's dynamics curve, which sets its loudness in place of velocity")
     out += _controls(track, performance, start, stop)
@@ -609,8 +605,8 @@ def quote_lines(q):
     first, last = q['bars']
     span = f'bar {first}' if first == last else f'bars {first}-{last}'
     count = len(q['notes'])
-    lines = [f"{_text(q['track'])}, {span}: {count} note{'s' if count != 1 else ''} over {q['length_s']:g} s. Time 0 is the start of bar {first}, "
-             f"{q['start_s']:g} s into the piece. For an instrument or surge layer:", '"notes": ' + json.dumps(q['notes'])]
+    lines = [f"{_text(q['track'])}, {span}: {count} note{'s' if count != 1 else ''} over {q['length_s']:g} s as written. Time 0 is the start of bar "
+             f"{first}, {q['start_s']:g} s into the written score. For an instrument or surge layer:", '"notes": ' + json.dumps(q['notes'])]
     if q['cut']:
         lines.append(f"{q['cut']} note{' ran' if q['cut'] == 1 else 's ran'} past the end of bar {last} and {'is' if q['cut'] == 1 else 'are'} cut there.")
     if q['rang_in']:
@@ -620,7 +616,8 @@ def quote_lines(q):
         lines.append('This is the written score. The render also plays ' + _and(q['leaves_out']) + ', which these notes leave out.')
     if q.get('noise'):                          # music-production's noise engine: the articulation chooses the event, the number is no pitch
         lines.append("This is a noise part: each note's articulation chooses its noise event (a rise, an impact, vinyl or a fading transition) "
-                     'and its number is no pitch there; an instrument or surge layer plays these numbers as plain pitches.')
+                     'and its number is no pitch there; an instrument layer on a pitched patch, or a surge layer, plays these numbers as plain '
+                     'pitches.')
     elif q['drums']:
         lines.append('This is a drum part: its notes are the keys of its kit, which a pitched instrument plays as plain pitches.')
     return lines

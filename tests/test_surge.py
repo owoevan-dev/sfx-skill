@@ -832,6 +832,19 @@ class Finding(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertIn('music-production', done.stdout)
 
+    def test_surge_json_is_valid_whatever_the_console_can_show(self):
+        catalog = self.fake.skill / 'references' / 'surge-catalog.json'
+        data = json.loads(catalog.read_text(encoding='utf-8'))
+        data['presets']['designer/atmospheres/glow']['name'] = 'Glow café'
+        catalog.write_text(json.dumps(data), encoding='utf-8')
+        env = dict(helpers.child_env(), PYTHONIOENCODING='cp950')         # a Windows console that has no é
+        for args in (['--find', 'glow'], ['--id', 'designer/atmospheres/glow']):
+            done = subprocess.run([sys.executable, str(helpers.SCRIPTS / 'sfx.py'), 'surge', *args, '--music-skill', str(self.fake.skill), '--json'],
+                                  capture_output=True, env=env, cwd=self.base, timeout=120)
+            with self.subTest(args=args):
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertIn('Glow café', json.dumps(json.loads(done.stdout.decode('ascii')), ensure_ascii=False))
+
     def test_doctor_says_whether_surge_can_play(self):
         config = self.base / 'config.json'
         config.write_text(json.dumps(self.fake.config), encoding='utf-8')

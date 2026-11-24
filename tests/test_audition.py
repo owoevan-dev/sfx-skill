@@ -135,12 +135,30 @@ const DATA = JSON.parse(dataText);
 const KEY = 'sound-effects-audition:' + DATA.title + ':' + DATA.render;
 const firstId = DATA.sounds[0].id;
 const noteOf = w => find(w.ids['cards'].children[0], n => n.tag === 'textarea');
-if (scenario === 'stale' || scenario === 'full') {
+if (scenario === 'stale' || scenario === 'full' || scenario === 'select') {
   // stale: both windows open on a saved note; A changes it, then B adds to it. full: one window, storage at quota, a note then
-  // the general feedback typed in it.
-  store.set(KEY, JSON.stringify({ sounds: { [firstId]: { verdict: '', note: scenario === 'stale' ? 'tail' : 'older', gain_db: 0 } }, general: '' }));
+  // the general feedback typed in it. select: B has a word of its note and of its general feedback selected when A changes both,
+  // then types over the selection.
+  store.set(KEY, JSON.stringify({ sounds: { [firstId]: { verdict: '', note: scenario === 'full' ? 'older' : 'tail', gain_db: 0 } },
+                                  general: scenario === 'select' ? 'loud' : '' }));
   const one = open();
-  if (scenario === 'full') {
+  if (scenario === 'select') {
+    const other = open();
+    const typeOver = (box, text) => { box.value = box.value.slice(0, box.selectionStart) + text + box.value.slice(box.selectionEnd); fire(box, 'input'); };
+    one.doc.activeElement = noteOf(one);
+    noteOf(one).setSelectionRange(0, 4);                       // 'tail' selected
+    noteOf(other).value = 'trim the tail';
+    fire(noteOf(other), 'input');
+    const noteSelection = [noteOf(one).selectionStart, noteOf(one).selectionEnd];
+    typeOver(noteOf(one), ' ring');
+    one.doc.activeElement = one.ids['general'];
+    one.ids['general'].setSelectionRange(0, 4);                // 'loud' selected
+    other.ids['general'].value = 'too loud overall';
+    fire(other.ids['general'], 'input');
+    const generalSelection = [one.ids['general'].selectionStart, one.ids['general'].selectionEnd];
+    typeOver(one.ids['general'], ' here');
+    console.log(JSON.stringify({ saved: JSON.parse(store.get(KEY)), note_selection: noteSelection, general_selection: generalSelection }));
+  } else if (scenario === 'full') {
     noteOf(one).value = 'lower the bell';
     fire(noteOf(one), 'input');
     one.ids['general'].value = 'balance the set';
@@ -317,7 +335,16 @@ class Page(unittest.TestCase):
         self.assertEqual(result['other_shows'], 'trim the tail; soften attack')          # and the first window, whose edit was kept, follows
         self.assertEqual(result['general_shows'], 'quieter overall')                    # both edited where the cursor was left
         self.assertEqual(result['saved']['general'], 'quieter overall')
-        self.assertEqual(result['cursor'], [2, 2])                                       # which stays where it was
+        self.assertEqual(result['cursor'], [11, 11])                                     # after the same letters: 'trim the ta|il'
+
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_a_selection_whose_words_another_window_changed_selects_nothing_new(self):
+        result = self.windows('select')
+        first = next(iter(result['saved']['sounds']))
+        self.assertEqual(result['note_selection'], [13, 13])                              # collapsed after what replaced it
+        self.assertEqual(result['general_selection'], [16, 16])
+        self.assertEqual(result['saved']['sounds'][first]['note'], 'trim the tail ring')  # typing adds; nothing saved is overwritten
+        self.assertEqual(result['saved']['general'], 'too loud overall here')
 
     @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
     def test_an_edit_storage_could_not_keep_stays_in_the_feedback(self):
