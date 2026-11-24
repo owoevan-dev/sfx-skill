@@ -66,7 +66,7 @@ https://github.com/user-attachments/assets/23ff56ba-839f-43e6-ab21-d8557511ab95
 
 裝好 skill 就能用合成音色。需要真實錄音時，agent 會先問過你，才下載一次音效庫：下載 2.9 GB，匯入後連同壓縮檔約占 7.2 GB，壓縮檔之後可以自行移除。
 
-**也需要配樂？** [music-skill](https://github.com/owoevan-dev/music-skill) 能寫出可編輯的原創器樂和遊戲循環音樂。兩個 skill 都能單獨使用。
+**也需要配樂？** [music-skill](https://github.com/owoevan-dev/music-skill) 能寫出可編輯的原創器樂和遊戲循環音樂。兩個都裝好後，agent 能讀出配樂的速度、段落和和弦，把主題旋律引用進音效，你也能在試聽頁上把音效疊在配樂上聽。music-skill 的安裝也會帶來 [Surge XT](https://surge-synthesizer.github.io)，它的音色很適合會自己流動、鳴響的魔法和科幻音效。兩個 skill 都能單獨使用。
 
 ## 為什麼不直接生成？
 
@@ -84,10 +84,10 @@ https://github.com/user-attachments/assets/23ff56ba-839f-43e6-ab21-d8557511ab95
 ## 運作方式
 
 1. **需求與調色盤。** agent 先釐清遊戲的世界、材質和風格，哪些事件需要聲音、哪些要循環，整理成整組音效共用的調色盤。
-2. **設計。** 每個音效都寫成多層：振盪器、FM、晶片音色、噪音、敲擊模態、雨、風和錄音，各有自己的包絡、音高和濾波。43 個涵蓋介面、復古、科幻、魔法、打擊和環境音的配方，是可以改造的起點。
+2. **設計。** 每個音效都寫成多層：振盪器、FM、晶片音色、噪音、敲擊模態、雨、風、錄音，裝了 music-skill 還有 Surge XT 音色，各有自己的包絡、音高和濾波。43 個涵蓋介面、復古、科幻、魔法、打擊和環境音的配方，是可以改造的起點。
 3. **渲染。** 每個音效連同變體一起輸出，整組在真實峰值上限內調到同一響度，格式為 48 kHz 24-bit WAV。
 4. **量測。** agent 聽不到聲音，所以 skill 替它讀每個檔案：爆音、被截斷的結尾、直流偏移、最響的時間點是否符合設計、聲音有多亮、多密、多長，還有一張頻譜圖。
-5. **試聽。** 你在單一檔案的試聽頁上聽：每個變體、不重複的隨機變體、快速連發、循環接縫，以及游標移動、選擇、確認這類連續動作。你的意見會回到 agent 手上。
+5. **試聽。** 你在單一檔案的試聽頁上聽：每個變體、不重複的隨機變體、快速連發、循環接縫，以及游標移動、選擇、確認這類連續動作，也能疊在遊戲配樂上聽。試聽頁會用你的語言顯示。你的意見會回到 agent 手上。
 6. **匯出。** 替 Godot、Unity、Unreal、Roblox 和網頁輸出檔案，附上建議設定的清單。
 
 ## 更多內容
@@ -125,7 +125,7 @@ npx skills add owoevan-dev/sfx-skill
 
 或把 `skills/sound-effects` 複製到你的 agent 的 skills 資料夾。
 
-**選用。** PATH 上有 [FFmpeg](https://ffmpeg.org)，才能匯出 Ogg、MP3、FLAC，以及匯入非 WAV 的音效。裝了 [music-production](https://github.com/owoevan-dev/music-skill) skill，才能用取樣樂器做音層。
+**選用。** PATH 上有 [FFmpeg](https://ffmpeg.org)，才能匯出 Ogg、MP3、FLAC，以及匯入非 WAV 的音效。裝了 [music-production](https://github.com/owoevan-dev/music-skill) skill（來自 music-skill），才能用取樣樂器和 Surge XT 做音層。
 
 **它會執行、下載和傳送什麼。** skill 在你的電腦上執行自己的 Python 腳本，以及你已安裝的 FFmpeg，全程離線渲染。只有在你同意下載錄音時才會連網，來源是本專案的 Release 或資料集在 Zenodo 的頁面，每個檔案都會比對公開的校驗碼。它不會把任何東西傳出去。詳見 [PRIVACY.md](PRIVACY.md) 和 [SECURITY.md](SECURITY.md)。
 
@@ -184,7 +184,7 @@ npx skills add owoevan-dev/sfx-skill
 <details>
 <summary><b>常見問題</b></summary>
 
-**音效可以用在商業遊戲嗎？** 可以。用合成、skill 允許的樂器音色庫、CC0 或公有領域錄音，或你自己的錄音做出來的音效，都不需要標示來源，也能用於任何用途。錄音的 CC0 標示是各作者自己的聲明，不附任何保證，本專案也無法承諾每一段都正確。如果疊上你匯入的其他授權錄音，該音效就要遵守那份授權的條件，渲染結果、試聽頁和每次匯出都會寫明。
+**音效可以用在商業遊戲嗎？** 可以。用合成、Surge XT、skill 允許的樂器音色庫、CC0 或公有領域錄音，或你自己的錄音做出來的音效，都不需要標示來源，也能用於任何用途。引用旋律的音效仍保有那段旋律原本的權利，所以請只引用你自己的音樂或你有權使用的音樂。錄音的 CC0 標示是各作者自己的聲明，不附任何保證，本專案也無法承諾每一段都正確。如果疊上你匯入的其他授權錄音，該音效就要遵守那份授權的條件，渲染結果、試聽頁和每次匯出都會寫明。
 
 **哪些 agent 能用？** 任何能載入 Agent Skills 並執行 Python 的 agent：Claude Code（外掛）、Codex，以及透過 `npx skills` 安裝的其他 agent。
 

@@ -11,7 +11,7 @@ import numpy as np
 
 import helpers
 import test_project  # registers test.beep
-from sfxlib import audition, project, render, wav
+from sfxlib import audition, page_text, project, render, wav
 
 
 HARNESS = r"""
@@ -44,11 +44,12 @@ for (const m of html.split('<script')[0].matchAll(/\sid="([^"]+)"/g)) {
 }
 ids['data'] = { textContent: dataText };
 global.document = { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {},
-                    execCommand: () => true };
+                    execCommand: () => true, querySelectorAll: () => [] };
 global.window = { localStorage: { getItem: () => null, setItem: () => {} }, devicePixelRatio: 1 };
 global.getComputedStyle = () => ({ getPropertyValue: () => '#000' });
 global.atob = s => Buffer.from(s, 'base64').toString('binary');
-global.navigator = {};
+// Node has a navigator of its own, which an assignment does not replace
+Object.defineProperty(globalThis, 'navigator', { value: { languages: (process.argv[3] || '').split(',').filter(Boolean) }, configurable: true, writable: true });
 (0, eval)(script);
 function find(node, pred) {
   if (pred(node)) return node;
@@ -56,12 +57,13 @@ function find(node, pred) {
   return null;
 }
 const firstCard = ids['cards'].children[0];
-const keep = find(firstCard, n => n.tag === 'button' && n.textContent === 'keep');
+const keep = find(firstCard, n => n.tag === 'button' && n.textContent.startsWith('keep'));
 keep.listeners['click'].forEach(f => f());
 const feedback = JSON.parse(ids['feedback'].value);
 console.log(JSON.stringify({ cards: ids['cards'].children.length, flows: ids['flows'].children.length,
                              feedback_sounds: Object.keys(feedback.sounds),
-                             verdict_after_click: feedback.sounds[Object.keys(feedback.sounds)[0]].verdict }));
+                             verdict_after_click: feedback.sounds[Object.keys(feedback.sounds)[0]].verdict,
+                             keep_label: keep.textContent, about: ids['about'].textContent }));
 """
 
 
@@ -82,7 +84,7 @@ class Page(unittest.TestCase):
     def test_every_variant_is_embedded_and_matches_its_master(self):
         for sound in self.data['sounds']:
             for v in sound['variants']:
-                raw = base64.b64decode(v['wav'])
+                raw = base64.b64decode(v['audio'])
                 path = self.base / f"{sound['id']}_{v['n']}.wav"
                 path.write_bytes(raw)
                 page, info = wav.read(path)
@@ -118,13 +120,60 @@ class Page(unittest.TestCase):
         harness = self.base / 'harness.js'
         harness.write_text(HARNESS, encoding='utf-8')
         page = self.out / 'audition.html'
-        proc = subprocess.run(['node', str(harness), str(page)], capture_output=True, text=True, timeout=60)
+        proc = subprocess.run(['node', str(harness), str(page)], capture_output=True, text=True, encoding='utf-8', timeout=60)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         result = json.loads(proc.stdout.strip().splitlines()[-1])
         self.assertEqual(result['cards'], 2)
         self.assertEqual(result['flows'], 1)
         self.assertEqual(result['feedback_sounds'], ['beep', 'hand_made'])
         self.assertEqual(result['verdict_after_click'], 'keep')
+
+    def stub(self, languages=''):
+        harness = self.base / 'harness.js'
+        harness.write_text(HARNESS, encoding='utf-8')
+        proc = subprocess.run(['node', str(harness), str(self.out / 'audition.html'), languages], capture_output=True, text=True, encoding='utf-8', timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_the_page_speaks_the_browsers_language_and_the_feedback_does_not_change(self):
+        for languages, word, keep in (('', 'sounds', 'keep'), ('fr-FR,de', 'sounds', 'keep'), ('zh-TW', '個音效', 'keep · 保留'), ('zh-Hant-TW', '個音效', 'keep · 保留'),
+                                      ('zh-HK', '個音效', 'keep · 保留'), ('zh-CN', '个音效', 'keep · 保留'), ('ja-JP', '効果音', 'keep · 採用'), ('ko', '효과음', 'keep · 유지'),
+                                      ('fr,ja', '効果音', 'keep · 採用')):
+            with self.subTest(languages=languages):
+                result = self.stub(languages)
+                self.assertIn(word, result['about'])
+                self.assertEqual(result['keep_label'], keep)
+                self.assertEqual(result['verdict_after_click'], 'keep')
+
+    def test_every_language_has_every_label_with_the_same_blanks(self):
+        blanks = lambda text: sorted(re.findall('[{]([a-z_]+)[}]', text))
+        english = page_text.TEXT['en']
+        self.assertEqual(list(page_text.TEXT), list(page_text.LANGUAGES))
+        for code, table in page_text.TEXT.items():
+            with self.subTest(language=code):
+                self.assertEqual(sorted(table), sorted(english))
+                for key, text in table.items():
+                    self.assertEqual(blanks(text), blanks(english[key]), key)
+        script = re.search('<script>(.*?)</script>', self.html, re.S).group(1)
+        used = set(re.findall("[^a-zA-Z_]t[(]'([a-z_]+)'", script)) | set(re.findall('data-t(?:-placeholder)?="([a-z_]+)"', self.html))
+        used |= {'keep', 'change', 'drop', 'music_stop', 'music_play', 'music_note', 'copied', 'copy_by_hand'}
+        self.assertEqual(sorted(used - set(english)), [])
+
+    def test_a_page_without_ffmpeg_holds_wav(self):
+        for sound in self.data['sounds']:
+            for v in sound['variants']:
+                self.assertEqual(base64.b64decode(v['audio'])[:4], b'RIFF')
+
+    def test_an_ffmpeg_that_cannot_make_flac_leaves_the_page_as_wav(self):
+        import sys
+        for bad in (self.base / 'no-ffmpeg-here', sys.executable):
+            with self.subTest(ffmpeg=str(bad)):
+                audition.build(self.out, ffmpeg=bad)
+                page = (self.out / 'audition.html').read_text(encoding='utf-8')
+                data = json.loads(re.search('<script type="application/json" id="data">(.*?)</script>', page, re.S).group(1))
+                self.assertEqual({base64.b64decode(v['audio'])[:4] for s in data['sounds'] for v in s['variants']}, {b'RIFF'})
+        audition.build(self.out)
 
     @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
     def test_the_script_parses(self):

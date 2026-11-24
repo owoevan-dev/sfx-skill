@@ -120,6 +120,11 @@ jobs:
         with:
           node-version: "22"
       - run: python -m pip install -r skills/sound-effects/requirements.txt
+      - name: Install FFmpeg, which makes the page hold FLAC
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - run: python tools/ci_render.py "$RUNNER_TEMP/render"
       - name: Install the browsers
         working-directory: tests/browser
@@ -128,4 +133,6 @@ jobs:
           npx playwright install --with-deps chromium firefox webkit
       - name: Open the page in each
         working-directory: tests/browser
+        env:
+          SFX_PAGE_FLAC: "1"
         run: node audition.mjs "$RUNNER_TEMP/render/audition.html"

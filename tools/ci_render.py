@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'skills' / 'sound-effects' / 'scripts'))
-from sfxlib import project, render  # noqa: E402
+from sfxlib import ffmpeg, project, render  # noqa: E402
 
 PROJECT = {
     'schema': 'sound-effects/1', 'title': 'CI 音效 café', 'seed': 7, 'variants': 2,
@@ -25,7 +25,7 @@ PROJECT = {
 def main():
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
-    report = render.render(project.validate(PROJECT), sys.argv[1])
+    report = render.render(project.validate(PROJECT), sys.argv[1], ffmpeg=ffmpeg.find())      # with FFmpeg the page holds FLAC
     print(f"{report['files']} files in {sys.argv[1]}, {report['flags']} flags")
     return 1 if report['flags'] else 0
 

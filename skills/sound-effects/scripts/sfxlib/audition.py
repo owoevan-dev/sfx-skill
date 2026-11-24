@@ -1,5 +1,8 @@
-"""The audition page: one HTML file with every variant embedded as 16-bit WAV, for the game's developer to listen to and
-leave feedback on. No server and no network: it opens from disk in any current browser and can be sent as one file.
+"""The audition page: one HTML file with every variant embedded, for the game's developer to listen to and leave feedback
+on. No server and no network: it opens from disk in any current browser and can be sent as one file.
+
+Each variant is embedded as its master's samples at 16 bits, dithered: as FLAC when the render was given an FFmpeg that
+makes it (the same samples in about half the bytes), and as WAV without one or whenever FFmpeg fails.
 
 On the page: each variant on its own; "random" plays the variants in random order without repeating the last one (the
 default mode of Godot's AudioStreamRandomizer); "rapid" fires eight random variants at an adjustable interval, to hear
@@ -11,7 +14,11 @@ A loop's variants play looping (the Web Audio buffer source's own loop, which jo
 until "stop"; "hear the join" starts two seconds before the end, so the join comes at once.
 
 "Music" takes a file from the listener's own computer and plays it, looping if asked, under the sounds at a level of its
-own. The file is decoded in the page and goes nowhere: it is not embedded, kept or sent, and no master holds any of it."""
+own. The file is decoded in the page and goes nowhere: it is not embedded, kept or sent, and no master holds any of it.
+
+The page speaks English, Traditional or Simplified Chinese, Japanese or Korean (page_text.py), as the browser's languages
+ask, and its language menu changes it. Only labels change: the feedback keeps its keys and its verdicts keep, change and
+drop."""
 import base64
 import html
 import json
@@ -19,7 +26,9 @@ from pathlib import Path
 
 import numpy as np
 
-from . import dsp, licences, record, wav
+from . import dsp, licences, page_text, record, wav
+
+FLAC_LEVEL = '8'                         # FFmpeg's highest FLAC compression: smaller, and decoded as fast
 
 TEMPLATE = r"""<!doctype html>
 <html lang="en">
@@ -39,9 +48,10 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 syst
        sans-serif; }
 header, main, footer { max-width: 1100px; margin: 0 auto; padding: 16px; }
 h1 { font-size: 1.4rem; margin: 0 0 4px; }
+.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; }
 .muted { color: var(--muted); }
 .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
-button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px;
+button, select { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px;
          padding: 4px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
 button.on { background: var(--on); border-color: var(--accent); }
@@ -61,31 +71,34 @@ input[type=range] { width: 140px; }
 </head>
 <body>
 <header>
-  <h1 id="title"></h1>
+  <div class="top">
+    <h1 id="title"></h1>
+    <label class="small"><span data-t="language">Language</span> <select id="lang"></select></label>
+  </div>
   <div class="muted small" id="about"></div>
-  <p class="small">Press any play button to start sound. Listen at a comfortable, fixed volume; every sound is already
+  <p class="small" data-t="intro">Press any play button to start sound. Listen at a comfortable, fixed volume; every sound is already
   levelled to the set. For each sound choose keep, change or drop, add a note if you like, then copy the feedback at
   the bottom of the page.</p>
   <div class="bar">
-    <label>Volume <input type="range" id="master" min="-30" max="0" step="1" value="-6"> <span id="masterval"></span></label>
-    <label><input type="checkbox" id="phone"> As on a phone speaker (cuts below 400 Hz)</label>
-    <label>Rapid interval <input type="number" id="interval" min="40" max="1000" step="10" value="150"> ms</label>
-    <button id="all">Play every sound once</button>
+    <label><span data-t="volume">Volume</span> <input type="range" id="master" min="-30" max="0" step="1" value="-6"> <span id="masterval"></span></label>
+    <label><input type="checkbox" id="phone"> <span data-t="phone">As on a phone speaker (cuts below 400 Hz)</span></label>
+    <label><span data-t="interval">Rapid interval</span> <input type="number" id="interval" min="40" max="1000" step="10" value="150"> <span data-t="ms">ms</span></label>
+    <button id="all" data-t="all">Play every sound once</button>
   </div>
   <div class="bar">
-    <label>Music <input type="file" id="musicfile" accept="audio/*,.mp3,.ogg,.oga,.opus,.flac,.wav,.m4a,.aac"></label>
+    <label><span data-t="music">Music</span> <input type="file" id="musicfile" accept="audio/*,.mp3,.ogg,.oga,.opus,.flac,.wav,.m4a,.aac"></label>
     <button id="musicplay" disabled>play music</button>
-    <label><input type="checkbox" id="musicloop" checked> loop</label>
-    <label>Music level <input type="range" id="musiclevel" min="-40" max="0" step="1" value="-12"> <span id="musicval"></span></label>
-    <span class="muted small" id="musicnote">To hear the sounds over the game's music, pick a track on this computer. It stays in this page: it is not saved or sent anywhere.</span>
+    <label><input type="checkbox" id="musicloop" checked> <span data-t="loop">loop</span></label>
+    <label><span data-t="music_level">Music level</span> <input type="range" id="musiclevel" min="-40" max="0" step="1" value="-12"> <span id="musicval"></span></label>
+    <span class="muted small" id="musicnote"></span>
   </div>
   <div class="bar" id="flows"></div>
 </header>
 <main><div class="grid" id="cards"></div></main>
 <footer>
-  <h2>Feedback</h2>
-  <textarea id="general" rows="3" placeholder="Anything about the set as a whole"></textarea>
-  <div class="bar"><button id="copy">Copy feedback</button><span class="muted small" id="copied"></span></div>
+  <h2 data-t="feedback">Feedback</h2>
+  <textarea id="general" rows="3" data-t-placeholder="general" placeholder="Anything about the set as a whole"></textarea>
+  <div class="bar"><button id="copy" data-t="copy">Copy feedback</button><span class="muted small" id="copied"></span></div>
   <textarea id="feedback" rows="10" readonly></textarea>
   <p class="muted small" id="recordings"></p>
 </footer>
@@ -98,6 +111,7 @@ const last = {};
 let ctx = null;
 let master = null;
 let state = loadState();
+let LANG = pickLanguage();
 
 function loadState() {
   try {
@@ -109,6 +123,26 @@ function loadState() {
 function saveState() {
   try { window.localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* not kept */ }
   showFeedback();
+}
+// the language chosen before on this page, else the first of the browser's languages the page speaks, else English
+function pickLanguage() {
+  if (state.lang && DATA.text[state.lang]) return state.lang;
+  const asked = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || 'en'];
+  for (const tag of asked) {
+    const code = String(tag).toLowerCase();
+    if (/^zh-(tw|hk|mo|hant)/.test(code)) return 'zh-Hant';
+    if (code.startsWith('zh')) return 'zh-Hans';
+    if (code.startsWith('ja')) return 'ja';
+    if (code.startsWith('ko')) return 'ko';
+    if (code.startsWith('en')) return 'en';
+  }
+  return 'en';
+}
+function t(key, values) {
+  const table = DATA.text[LANG] || {};
+  let text = key in table ? table[key] : DATA.text.en[key];
+  for (const name in (values || {})) text = text.split('{' + name + '}').join(String(values[name]));
+  return text;
 }
 function entry(id) {
   if (!state.sounds[id]) state.sounds[id] = { verdict: '', note: '', gain_db: 0 };
@@ -146,7 +180,7 @@ async function ensureAudio() {
   const jobs = [];
   for (const s of DATA.sounds) {
     for (const v of s.variants) {
-      jobs.push(ctx.decodeAudioData(bytesOf(v.wav)).then(buf => { buffers[s.id + '/' + v.n] = buf; }));
+      jobs.push(ctx.decodeAudioData(bytesOf(v.audio)).then(buf => { buffers[s.id + '/' + v.n] = buf; }));
     }
   }
   const all = Promise.all(jobs);
@@ -231,23 +265,21 @@ function el(tag, attrs, text) {
   return e;
 }
 function fmt(v, digits) { return (v === null || v === undefined) ? '-' : Number(v).toFixed(digits); }
+function signed(v) { return (v > 0 ? '+' : '') + fmt(v, 1); }
 function buildCard(s) {
   const card = el('div', { class: 'card' });
   card.appendChild(el('h2', {}, s.id));
-  card.appendChild(el('div', { class: 'muted small' }, [s.recipe || 'layers', s.notes].filter(Boolean).join(' - ')));
+  card.appendChild(el('div', { class: 'muted small' }, [s.recipe || t('layers'), s.notes].filter(Boolean).join(' - ')));
   const m = s.variants[0];
   if (s.use === 'loop') {
-    card.appendChild(el('div', { class: 'muted small' }, 'loop of ' + fmt(m.duration_ms / 1000, 1) + ' s, trim ' +
-      fmt(s.trim_db, 1) + ' dB. It keeps playing while you try other sounds, so you can hear them over it.'));
+    card.appendChild(el('div', { class: 'muted small' }, t('loop_info', { seconds: fmt(m.duration_ms / 1000, 1), trim: fmt(s.trim_db, 1) })));
     for (const v of s.variants) {
-      const halves = (v.halves_db > 0 ? '+' : '') + fmt(v.halves_db, 1);
-      card.appendChild(el('div', { class: 'muted small' }, 'variant ' + v.n + ': ' + fmt(v.true_peak_db, 1) + ' dBTP, ' +
-        fmt(v.integrated_lufs, 1) + ' LUFS integrated, loudness range ' + fmt(v.loudness_range_lu, 1) +
-        ' LU, second half ' + halves + ' dB against the first'));
+      card.appendChild(el('div', { class: 'muted small' }, t('loop_variant', { n: v.n, peak: fmt(v.true_peak_db, 1), lufs: fmt(v.integrated_lufs, 1),
+        range: fmt(v.loudness_range_lu, 1), halves: signed(v.halves_db) })));
     }
   } else {
-    card.appendChild(el('div', { class: 'muted small' }, fmt(m.duration_ms, 0) + ' ms, ' + fmt(m.true_peak_db, 1) +
-      ' dBTP, ' + fmt(m.brief_lufs, 1) + ' LUFS (loudest 200 ms), trim ' + fmt(s.trim_db, 1) + ' dB'));
+    card.appendChild(el('div', { class: 'muted small' }, t('shot_info', { ms: fmt(m.duration_ms, 0), peak: fmt(m.true_peak_db, 1),
+      lufs: fmt(m.brief_lufs, 1), trim: fmt(s.trim_db, 1) })));
   }
   const row = el('div', { class: 'row' });
   for (const v of s.variants) {
@@ -260,20 +292,20 @@ function buildCard(s) {
     row.appendChild(b);
   }
   if (s.use === 'loop') {
-    const j = el('button', {}, 'hear the join');
+    const j = el('button', {}, t('join'));
     j.addEventListener('click', async () => {
       await ensureAudio();
       playLoop(s, loops[s.id] ? loops[s.id].n : 1, 2.0);
     });
     row.appendChild(j);
-    const stop = el('button', {}, 'stop');
+    const stop = el('button', {}, t('stop'));
     stop.addEventListener('click', () => stopLoop(s.id));
     row.appendChild(stop);
   } else {
-    const r = el('button', {}, 'random');
+    const r = el('button', {}, t('random'));
     r.addEventListener('click', async () => { await ensureAudio(); play(s, pickRandom(s)); });
     row.appendChild(r);
-    const f = el('button', {}, 'rapid x8');
+    const f = el('button', {}, t('rapid'));
     f.addEventListener('click', async () => {
       await ensureAudio();
       const ms = Number(document.getElementById('interval').value) || 150;
@@ -288,7 +320,7 @@ function buildCard(s) {
   const gainRow = el('div', { class: 'row small' });
   const label = el('span', {}, '');
   const slider = el('input', { type: 'range', min: '-12', max: '6', step: '0.5', value: String(st.gain_db || 0) });
-  const showGain = () => { label.textContent = 'level ' + (st.gain_db > 0 ? '+' : '') + fmt(st.gain_db || 0, 1) + ' dB'; };
+  const showGain = () => { label.textContent = t('level', { db: signed(st.gain_db || 0) }); };
   slider.addEventListener('input', () => {
     st.gain_db = Number(slider.value);
     if (loops[s.id]) loops[s.id].gain.gain.value = dbToGain(st.gain_db);
@@ -302,7 +334,8 @@ function buildCard(s) {
   const verdicts = el('div', { class: 'row' });
   const buttons = {};
   for (const name of ['keep', 'change', 'drop']) {
-    const b = el('button', {}, name);
+    // the verdict stays the word in the feedback; another language shows its translation beside it
+    const b = el('button', {}, LANG === 'en' ? name : name + ' · ' + t(name));
     buttons[name] = b;
     b.addEventListener('click', () => {
       st.verdict = st.verdict === name ? '' : name;
@@ -313,7 +346,7 @@ function buildCard(s) {
     verdicts.appendChild(b);
   }
   card.appendChild(verdicts);
-  const note = el('textarea', { rows: '2', placeholder: 'What to change, if anything' });
+  const note = el('textarea', { rows: '2', placeholder: t('note') });
   note.value = st.note || '';
   note.addEventListener('input', () => { st.note = note.value; saveState(); });
   card.appendChild(note);
@@ -331,9 +364,10 @@ function showFeedback() {
 }
 // Music to hear the sounds over: a file from this computer, decoded here. It is not kept or sent, and reaches no master.
 const MUSIC_LIMIT_BYTES = 256 * 1024 * 1024;
-const music = { buffer: null, src: null, gain: null, turn: 0 };
+const music = { buffer: null, src: null, gain: null, turn: 0, note: ['music_note', {}] };
 function musicLevel() { return dbToGain(Number(document.getElementById('musiclevel').value)); }
-function showMusic() { document.getElementById('musicplay').textContent = music.src ? 'stop music' : 'play music'; }
+function showMusic() { document.getElementById('musicplay').textContent = t(music.src ? 'music_stop' : 'music_play'); }
+function musicNote(key, values) { music.note = [key, values || {}]; document.getElementById('musicnote').textContent = t(key, values); }
 function stopMusic() {
   const src = music.src;
   music.src = null;
@@ -359,25 +393,24 @@ function startMusic() {
 }
 async function loadMusic(file) {
   const turn = ++music.turn;
-  const note = document.getElementById('musicnote');
   const button = document.getElementById('musicplay');
   stopMusic();
   music.buffer = null;
   button.disabled = true;
   if (file.size > MUSIC_LIMIT_BYTES) {
-    note.textContent = file.name + ' is over ' + (MUSIC_LIMIT_BYTES / 1048576) + ' MB, too large to hold in this page. The sounds still play.';
+    musicNote('music_big', { name: file.name, mb: MUSIC_LIMIT_BYTES / 1048576 });
     return;
   }
-  note.textContent = 'reading ' + file.name + '...';
+  musicNote('music_reading', { name: file.name });
   try {
     ensureAudio().catch(() => {});                  // the sounds' own decoding goes on beside this
     const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
     if (turn !== music.turn) return;                // another file was chosen meanwhile
     music.buffer = buffer;
     button.disabled = false;
-    note.textContent = file.name + ', ' + fmt(buffer.duration, 1) + ' s. It stays in this page: it is not saved or sent anywhere.';
+    musicNote('music_ready', { name: file.name, seconds: fmt(buffer.duration, 1) });
   } catch (e) {
-    if (turn === music.turn) note.textContent = 'This browser could not read ' + file.name + ' as audio. The sounds still play.';
+    if (turn === music.turn) musicNote('music_bad', { name: file.name });
   }
 }
 function setupMusic() {
@@ -400,31 +433,51 @@ function setupMusic() {
   level.addEventListener('input', showLevel);
   showLevel();
 }
+// everything the page says, in LANG: the marked labels, then the cards and flows, built again with their state
+function showLanguage() {
+  document.documentElement.lang = LANG;
+  for (const node of document.querySelectorAll('[data-t]')) node.textContent = t(node.getAttribute('data-t'));
+  for (const node of document.querySelectorAll('[data-t-placeholder]')) node.setAttribute('placeholder', t(node.getAttribute('data-t-placeholder')));
+  document.getElementById('about').textContent = t('about', { count: DATA.sounds.length, render: DATA.render, made_by: DATA.made_by }) +
+    (DATA.level.target_lufs === null ? '' : t('about_level', { lufs: fmt(DATA.level.target_lufs, 1) }));
+  showMusic();
+  musicNote(music.note[0], music.note[1]);
+  const cards = document.getElementById('cards');
+  const built = DATA.sounds.map(buildCard);
+  if (cards.replaceChildren) cards.replaceChildren(...built); else built.forEach(c => cards.appendChild(c));
+  const flows = document.getElementById('flows');
+  const buttons = DATA.flows.map(flow => {
+    const b = el('button', {}, t('flow', { name: flow.name }));
+    b.addEventListener('click', async () => {
+      await ensureAudio();
+      let at = ctx.currentTime + 0.05;
+      for (const id of flow.sounds) { const s = byId(id); at += play(s, pickRandom(s), at) + flow.gap; }
+    });
+    return b;
+  });
+  if (flows.replaceChildren) flows.replaceChildren(...buttons); else buttons.forEach(b => flows.appendChild(b));
+}
 function setup() {
   document.getElementById('title').textContent = DATA.title;
-  document.getElementById('about').textContent = DATA.sounds.length + ' sounds, render ' + DATA.render + ', made by ' +
-    DATA.made_by + (DATA.level.target_lufs === null ? '' : ', set level ' + fmt(DATA.level.target_lufs, 1) + ' LUFS');
   const packs = {};
   for (const r of DATA.recordings) (packs[r.title + ' by ' + r.author] = packs[r.title + ' by ' + r.author] || []).push(r.file);
   document.getElementById('recordings').textContent = DATA.recordings.length ? DATA.recordings_note +
     ' Recordings layered in these sounds: ' + Object.entries(packs).map(([pack, files]) => pack + ' (' + files.join(', ') +
     ')').join('; ') + '.' : '';
-  const cards = document.getElementById('cards');
-  for (const s of DATA.sounds) cards.appendChild(buildCard(s));
-  const flows = document.getElementById('flows');
-  DATA.flows.forEach((flow, i) => {
-    const b = el('button', {}, 'flow: ' + flow.name);
-    b.addEventListener('click', async () => {
-      await ensureAudio();
-      let t = ctx.currentTime + 0.05;
-      for (const id of flow.sounds) { const s = byId(id); t += play(s, pickRandom(s), t) + flow.gap; }
-    });
-    flows.appendChild(b);
+  const select = document.getElementById('lang');
+  for (const code of DATA.languages) select.appendChild(el('option', { value: code }, DATA.text[code].name));
+  select.value = LANG;
+  select.addEventListener('change', () => {
+    LANG = DATA.text[select.value] ? select.value : 'en';
+    state.lang = LANG;
+    saveState();
+    showLanguage();
   });
+  showLanguage();
   document.getElementById('all').addEventListener('click', async () => {
     await ensureAudio();
-    let t = ctx.currentTime + 0.05;
-    for (const s of DATA.sounds) if (s.use !== 'loop') t += play(s, 1, t) + 0.4;
+    let at = ctx.currentTime + 0.05;
+    for (const s of DATA.sounds) if (s.use !== 'loop') at += play(s, 1, at) + 0.4;
   });
   const masterInput = document.getElementById('master');
   const masterVal = document.getElementById('masterval');
@@ -439,7 +492,7 @@ function setup() {
     let done = false;
     try { await navigator.clipboard.writeText(text.value); done = true; } catch (e) { /* fall back */ }
     if (!done) { text.select(); try { done = document.execCommand('copy'); } catch (e) { done = false; } }
-    document.getElementById('copied').textContent = done ? 'copied' : 'select the text below and copy it';
+    document.getElementById('copied').textContent = t(done ? 'copied' : 'copy_by_hand');
   });
   setupMusic();
   showFeedback();
@@ -451,13 +504,37 @@ setup();
 """
 
 
-def _page_wav(folder, rel, seed):
-    data = record.master(folder, rel)
-    return wav.encode(data.astype(np.float64), bits=16, dither=True, seed=seed)
+def flac(ffmpeg, blob, frames):
+    """The 16-bit WAV `blob` as FLAC, by FFmpeg through pipes. Writing to a pipe, FFmpeg cannot go back to put the stream's
+    length into its header, so it is written here (the MD5 stays zero, which the format reads as not given)."""
+    from . import export                 # imported here: export imports render, which imports this module
+    data = bytearray(export._run(ffmpeg, ['-f', 'wav', '-i', 'pipe:0', '-c:a', 'flac', '-compression_level', FLAC_LEVEL, '-f', 'flac', 'pipe:1'],
+                                 data=blob))
+    if data[:4] != b'fLaC' or data[4] & 0x7F != 0 or len(data) < 42:
+        raise export.ExportError('FFmpeg did not write a FLAC stream that begins with its STREAMINFO')
+    # STREAMINFO from byte 8: block and frame sizes (10 bytes), then 20 bits of rate, 3 of channels, 5 of bits a sample
+    # and 36 of the length in frames
+    packed = int.from_bytes(data[18:26], 'big')
+    data[18:26] = ((packed >> 36 << 36) | (frames & (2 ** 36 - 1))).to_bytes(8, 'big')
+    return bytes(data)
 
 
-def build(render_dir):
-    """Write audition.html into the render folder (replacing an earlier page there) and return its path."""
+def _page_audio(folder, rel, seed, ffmpeg):
+    """A variant for the page and its length in frames: its master at 16 bits, dithered, as FLAC if `ffmpeg` makes it, else WAV."""
+    x = record.master(folder, rel).astype(np.float64)
+    blob = wav.encode(x, bits=16, dither=True, seed=seed)
+    if ffmpeg:
+        from . import export
+        try:
+            return flac(ffmpeg, blob, len(x)), len(x)
+        except (OSError, export.ExportError):
+            pass                         # the page is the same with WAV, only larger
+    return blob, len(x)
+
+
+def build(render_dir, ffmpeg=None):
+    """Write audition.html into the render folder (replacing an earlier page there) and return its path. With `ffmpeg`,
+    the variants are embedded as FLAC where it can make them."""
     folder = Path(render_dir)
     resolved = record.load(folder)
     check = json.loads((folder / 'check.json').read_text(encoding='utf-8'))
@@ -470,8 +547,8 @@ def build(render_dir):
         variants = []
         for v in s['variants']:
             m = measured.get(v['file'], {})
-            blob = _page_wav(folder, v['file'], dsp.seed_for(resolved['seed'], v['file'], 'page'))
-            variants.append({'n': v['n'], 'file': v['file'], 'wav': base64.b64encode(blob).decode('ascii'),
+            blob, frames = _page_audio(folder, v['file'], dsp.seed_for(resolved['seed'], v['file'], 'page'), ffmpeg)
+            variants.append({'n': v['n'], 'file': v['file'], 'audio': base64.b64encode(blob).decode('ascii'), 'frames': frames,
                              'duration_ms': 1000 * m.get('duration_s', 0.0), 'true_peak_db': m.get('true_peak_db'),
                              'brief_lufs': m.get('brief_lufs'), 'onset_ms': m.get('onset_ms'),
                              'integrated_lufs': m.get('integrated_lufs'),
@@ -482,7 +559,8 @@ def build(render_dir):
     data = {'title': resolved['title'], 'render': folder.name, 'made_by': resolved['made_by'],
             'level': resolved['level'], 'flows': resolved['flows'], 'sounds': sounds,
             'recordings': resolved.get('recordings', []),
-            'recordings_note': licences.note(resolved.get('recordings', []), resolved['sounds'])}
+            'recordings_note': licences.note(resolved.get('recordings', []), resolved['sounds']),
+            'languages': list(page_text.LANGUAGES), 'text': page_text.TEXT}
     # "<" is written as its JSON escape so that no text inside the data can close the script element
     text = json.dumps(data, ensure_ascii=False).replace('<', chr(92) + 'u003c')
     page = TEMPLATE.replace('__TITLE__', html.escape(f"{resolved['title']}: audition")).replace('__DATA__', text)

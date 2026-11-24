@@ -178,10 +178,10 @@ class Import(unittest.TestCase):
     def test_find_matches_names_titles_and_packs(self):
         samples.add(as_folder(self.folder / 'Wood Pack', pack_members()), self.library, licence='CC0-1.0')
         index = samples.load_index(self.library)
-        self.assertEqual([f['file'] for f in samples.find(index, 'WOOD_knock light')],
-                         ['woodKnock_light_000', 'woodKnock_light_001'])
-        self.assertEqual(len(samples.find(index, 'wood pack')), 3)
-        self.assertEqual([f['file'] for f in samples.find(index, 'footstep wood (1)')], ['footstep_wood_1'])
+        every_word = lambda text: [f['file'] for f in samples.find(index, text) if 'matched_words' not in f]
+        self.assertEqual(sorted(every_word('WOOD_knock light')), ['woodKnock_light_000', 'woodKnock_light_001'])
+        self.assertEqual(len(every_word('wood pack')), 3)
+        self.assertEqual(every_word('footstep wood (1)'), ['footstep_wood_1'])
 
     def test_a_text_with_no_latin_word_finds_nothing(self):
         samples.add(as_folder(self.folder / 'Wood Pack', pack_members()), self.library, licence='CC0-1.0')
@@ -189,7 +189,7 @@ class Import(unittest.TestCase):
         for text in ('揮劍', '剣', '검', '!!!', ''):
             self.assertEqual(samples.find(index, text), [], text)
             self.assertFalse(samples.searchable(text), text)
-        self.assertEqual(len(samples.find(index, '木 wood knock')), 2)           # the words it can read still count
+        self.assertEqual(len([f for f in samples.find(index, '木 wood knock') if 'matched_words' not in f]), 2)    # the words it can read still count
         self.assertTrue(samples.searchable('木 wood'))
         self.assertTrue(samples.searchable('12345'))
 
@@ -373,7 +373,9 @@ class CommandLine(unittest.TestCase):
         self.assertTrue((folder / 'default_library' / samples.INDEX).is_file())
         proc = self.run_sfx('samples', '--find', 'wood knock', env=env)
         self.assertIn('wood-pack/woodKnock_light_000', proc.stdout)
-        self.assertNotIn('footstep', proc.stdout)
+        footsteps = [line for line in proc.stdout.splitlines() if 'footstep' in line]          # two hold both words: those holding one follow, marked
+        self.assertTrue(footsteps and all('(holds only: wood)' in line for line in footsteps), proc.stdout)
+        self.assertLess(proc.stdout.index('woodKnock_light_000'), proc.stdout.index('footstep'))
         unsure = as_folder(folder / 'unsure', pack_members(licence_text=None))
         proc = self.run_sfx('samples', '--add', unsure, env=env)
         self.assertEqual(proc.returncode, 1)

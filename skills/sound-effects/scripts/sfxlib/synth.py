@@ -20,7 +20,7 @@ import math
 
 import numpy as np
 
-from . import chip, curves, dsp, drops, dynamics, filters, fx, modal, noise, osc, wind
+from . import artifacts, chip, curves, dsp, drops, dynamics, filters, fx, modal, noise, osc, wind
 from . import instruments as recorded
 from . import stretch as timestretch
 
@@ -33,6 +33,7 @@ EVENT_MAX_S = 3.0        # a layer of a loop up to this long is an event that sh
 OVER_REST_S = 0.05       # ... judged over its loudest 50 ms
 RUN_OUT_MIN_S = 0.01     # a layer that outlasts its recording by less than this is only rounding
 RUN_OUT_LEVEL = 0.1      # ... and a layer under -20 dB there, by its envelope and how far the recording has died away
+STRAY_ENVELOPE = 0.1     # a tick the layer's envelope holds under -20 dB is not in the sound
 RUN_OUT_TAIL_S = 0.01    #     (the recording's last 10 ms against its level over the part played), has let it go
 SPREAD_SOURCES = ('noise', 'drops', 'wind')
 BED_SOURCES = ('noise', 'drops', 'wind', 'osc', 'fm')
@@ -58,7 +59,11 @@ def _source(layer, freq, n, seed, index, channels=1, loop=False, ratio=None, ins
             raise ValueError("an instrument layer plays on music-production's sample banks: render with its "
                              'configuration (--config)' if kind == 'instrument' else
                              "a Surge layer plays a take kept beside the project: render it with sfx.py render")
-        x = recorded.placed(recorded.detune(instruments.render(src), src.get('cents', 0.0)), channels)
+        played = instruments.render(src)
+        if kind == 'instrument' and info is not None:      # read on the notes as the bank plays them, before anything is done to them
+            speed = 2 ** (float(src.get('cents', 0.0)) / 1200)
+            info['stray'] = [int(round(t * RATE / speed)) for t in artifacts.stray_attacks(played, [note[0] for note in src['notes']])]
+        x = recorded.placed(recorded.detune(played, src.get('cents', 0.0)), channels)
         out = np.zeros((n,) + x.shape[1:])
         out[:min(n, len(x))] = x[:n]
         return out
@@ -226,6 +231,8 @@ def layer_signal(layer, seed, index, channels=1, loop=False, instruments=None, s
         env = _envelope(layer, n, loop)
     if info is not None and 'ends' in info:
         info['level_there'] = float(env[min(info['ends'], n - 1)]) * info['end_level']
+    if info is not None and info.get('stray'):           # a tick the layer ends or fades before is not in the sound
+        info['stray'] = [k for k in info['stray'] if k < n and float(env[k]) >= STRAY_ENVELOPE]
     sig = sig * (env if sig.ndim == 1 else env[:, None])
     return sig * 10 ** (float(layer.get('gain_db', 0.0)) / 20)
 
@@ -309,6 +316,8 @@ def _layer_report(layer, frames, start, info=None):
     if info and info.get('level_there', 0.0) >= RUN_OUT_LEVEL and len(frames) - info['ends'] >= RUN_OUT_MIN_S * RATE:
         out['runs_out_s'] = round(info['ends'] / RATE, 3)
         out['length_s'] = round(len(frames) / RATE, 3)
+    if info and info.get('stray'):
+        out['stray_attacks_s'] = [round((start + k) / RATE, 3) for k in info['stray']]
     return out
 
 

@@ -84,6 +84,8 @@ def _print_flags(report):
     print(f'{len(flags)} flags' + (':' if flags else ''))
     for f in flags:
         print(f"  [{f['kind']}] {Path(f['file']).stem}: {f['message']}")
+    for note in report.get('notes', ()):
+        print(f"note: {note['sound']} {note['message']}")
 
 
 def _print_level(folder):
@@ -192,7 +194,10 @@ def cmd_audition(args):
     if not (folder / 'check.json').is_file():
         print(f'audition: {folder} is not a checked render folder (no check.json)')
         return 1
-    path = audition.build(folder)
+    ok, ff = _ffmpeg(args, 'audition')
+    if not ok:
+        return 1
+    path = audition.build(folder, ffmpeg=ff)
     render.refresh_listing(folder, ['audition.html'])
     print(f'audition page: {path}')
     return 0
@@ -517,15 +522,16 @@ def cmd_samples(args):
                       'matched by those, so search in English, for example --find "wood door"')
                 return 1
         files = samples.find(index, args.find, passing=args.passing, exclude=args.exclude or (),
-                             min_seconds=args.min_seconds, max_seconds=args.max_seconds)
+                             min_seconds=args.min_seconds, max_seconds=args.max_seconds, project=Path.cwd().name)
     else:
         files = [f for f in index['files'] if not (args.passing and f.get('screen'))]
     total = len(files)
+    some = sum(1 for f in files if 'matched_words' in f)        # listed after those holding every word
     summary = not args.find and not args.json and args.limit is None
     limit = args.limit if args.limit is not None else (FIND_SHOWN if args.find and not args.json else 0)
     files = [] if summary else files[:limit] if limit else files
     if args.json:
-        print(json.dumps({'packs': index['packs'], 'files': files, 'matched': total}, indent=1, ensure_ascii=False))
+        print(json.dumps({'packs': index['packs'], 'files': files, 'matched': total, 'matched_some_words': some}, indent=1, ensure_ascii=False))
         return 0
     shown = {f['library'] for f in files} if args.find else set(index['packs'])
     for pack_id, pack in sorted(index['packs'].items()):        # a search names only the packs whose licence asks for something
@@ -543,6 +549,8 @@ def cmd_samples(args):
             via = samples.matched_tags(f, args.find) if args.find else []
             if via:
                 line += f" (by its tag{'s' if len(via) > 1 else ''} {', '.join(via[:3])})"
+        if 'matched_words' in f:
+            line += f" (holds only: {', '.join(f['matched_words'])})"
         print(line)
         if f.get('author_note'):
             print(f"      author's note (read and respect it before use): {f['author_note']}")
@@ -550,7 +558,9 @@ def cmd_samples(args):
         print(f"{total} recording{'s' if total != 1 else ''} in all. Search them with --find WORDS, see the classes they are "
               'labelled with by --labels, or list them with --limit N (0 for all)')
     if args.find:
-        print(f"{total} recording{'s' if total != 1 else ''} match '{args.find}'"
+        every = total - some
+        print((f"{every} recording{'s' if every != 1 else ''} match '{args.find}', and {some} more hold some of its words (marked)" if some else
+               f"{total} recording{'s' if total != 1 else ''} match '{args.find}'")
               + (f' (the best {len(files)} shown; --limit 0 lists all)' if len(files) < total else ''))
     print('A layer plays one: {"type": "sample", "library": PACK, "file": NAME} (or "file": [NAME, ...], a take per '
           'variant)')
@@ -894,6 +904,8 @@ def build_parser():
                          'audition.html in a render folder from its masters and check.json (render writes it '
                          'already; use this after check).')
     aud.add_argument('render', help='a render folder')
+    aud.add_argument('--ffmpeg', help='the FFmpeg that makes the page smaller (FLAC); without one the page holds WAV')
+    aud.add_argument('--config', help="music-production's configuration file, another place to find FFmpeg")
     aud.set_defaults(func=cmd_audition)
 
     xp = sub.add_parser('export', help="write a render's files for an engine", description='Write the masters of '

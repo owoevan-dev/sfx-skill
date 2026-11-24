@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0
+
+- **Surge XT layers.** With [music-skill](https://github.com/owoevan-dev/music-skill) installed, a `surge` layer plays one of the
+  2,915 Surge XT patches that take a plain note, with its macros, pitch bend and mod wheel, then the filter, envelope and chain every
+  layer has. Two plays of a note differ, so each take is recorded once (`render --record-takes`) into `surge_takes` beside the
+  project, and every later render plays that file: a project with its takes renders the same without Surge. `sfx.py surge` finds
+  patches by word, role and measured character, `doctor` says whether Surge XT is ready, and the guide shows how to build casts,
+  charges, heals, shimmers and portals with them.
+- **The game's music.** `sfx.py music song.json` reads a music-skill project: tempo, meter, sections by bar and second, the harmony
+  and plan it declares, and what each part holds. `--track ID --bars 5-6` prints those bars' written notes, ready for an instrument
+  or Surge layer, so a pickup can quote the game's theme. It works out no key and changes no music.
+- **Music on the audition page.** A track picked on your computer loops under the sounds at its own level. It stays in the page.
+- **The page in your language.** English, Traditional and Simplified Chinese, Japanese and Korean, from the browser's language, with a
+  menu. The feedback is the same in every language.
+- **A smaller page.** With FFmpeg, the page holds FLAC instead of WAV: the same samples in less than half the size on a typical set.
+- **Search.** Recordings about as clean as each other come in an order of the project's own, so two games start from different
+  recordings. When fewer than five recordings hold every word, the list goes on with those holding some of them, marked. Recordings
+  labelled only as music come last unless you ask for music.
+- A sound still at its recipe's default parameters gets a note (not a flag) asking to set them for the game.
+- `check` flags an attack inside an instrument layer's sample that none of its notes explains (`stray_attack`): a tick left in a
+  sample, which the click test let through.
+
 ## 0.1.3 (2026-11-23)
 
 - The library now holds 6,718 recordings. Two more whose source or author's wishes left room for doubt were taken out. As before, the

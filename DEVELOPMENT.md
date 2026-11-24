@@ -61,7 +61,7 @@ python tools/check_all.py --quick    # without the tests that call FFmpeg or mus
 
 `.github/workflows/tests.yml` runs on every push to main and every pull request: the tests on Ubuntu (Python 3.10, 3.13
 and 3.14), macOS and Windows with FFmpeg and, on one job, Godot; one fixed project rendered on each system and compared
-sample by sample; the audition page opened in Chromium, Firefox and WebKit. `release-check.yml` runs when a release is
+sample by sample; the audition page, holding FLAC, opened in Chromium, Firefox and WebKit, in English and in another language. `release-check.yml` runs when a release is
 published, every week and by hand: the release's packs and the dataset's record answer, the packs download, import and
 render on each system, and instrument layers work on the latest music-production release.
 

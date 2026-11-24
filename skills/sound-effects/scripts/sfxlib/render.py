@@ -319,7 +319,7 @@ def render(proj, out_dir, config=None, samples=None, ffmpeg=None, page=True, tak
     _write_json(out / 'resolved.json', resolved)
     report_check = check.run(out)
     if page:
-        audition.build(out)
+        audition.build(out, ffmpeg=ffmpeg)
     report = {'status': 'RENDERED', 'title': proj['title'], 'files': len(items),
               'target_lufs': plan['target_lufs'], 'limited_by': plan['limited_by'],
               'flags': len(report_check['flags']), 'seconds': round(time.time() - started, 2)}
