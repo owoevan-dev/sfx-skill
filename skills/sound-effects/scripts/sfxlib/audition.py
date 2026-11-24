@@ -107,6 +107,7 @@ input[type=range] { width: 140px; }
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
 const STORE = 'sound-effects-audition:' + DATA.title + ':' + DATA.render;
+const LANGUAGE_STORE = STORE + ':language';      // apart from the feedback, so a language change in one window writes over no notes
 // keyed by sound ids, which may be any name ("constructor" too): no prototype to find them in
 const buffers = Object.create(null);
 const last = Object.create(null);
@@ -122,7 +123,7 @@ function loadState() {
     const saved = JSON.parse(window.localStorage.getItem(STORE));
     if (saved && saved.sounds && typeof saved.sounds === 'object') {
       for (const id of Object.keys(saved.sounds)) sounds[id] = saved.sounds[id];
-      return { sounds: sounds, general: typeof saved.general === 'string' ? saved.general : '', lang: saved.lang };
+      return { sounds: sounds, general: typeof saved.general === 'string' ? saved.general : '' };
     }
   } catch (e) { /* storage may be unavailable */ }
   return { sounds: sounds, general: '' };
@@ -133,7 +134,9 @@ function saveState() {
 }
 // the language chosen before on this page, else the first of the browser's languages the page speaks, else English
 function pickLanguage() {
-  if (typeof state.lang === 'string' && own(DATA.text, state.lang)) return state.lang;
+  let chosen = null;
+  try { chosen = window.localStorage.getItem(LANGUAGE_STORE); } catch (e) { /* storage may be unavailable */ }
+  if (typeof chosen === 'string' && own(DATA.text, chosen)) return chosen;
   const asked = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || 'en'];
   for (const tag of asked) {
     const code = String(tag).toLowerCase();
@@ -476,8 +479,7 @@ function setup() {
   select.value = LANG;
   select.addEventListener('change', () => {
     LANG = own(DATA.text, select.value) ? select.value : 'en';
-    state.lang = LANG;
-    saveState();
+    try { window.localStorage.setItem(LANGUAGE_STORE, LANG); } catch (e) { /* not kept */ }
     showLanguage();
   });
   showLanguage();
@@ -522,9 +524,11 @@ def flac(ffmpeg, blob, frames):
     # STREAMINFO from byte 8: block and frame sizes (10 bytes), then 20 bits of rate, 3 of channels, 5 of bits a sample
     # and 36 of the length in frames
     packed = int.from_bytes(data[18:26], 'big')
+    i = wav._info_of(blob, 'page')
+    if (packed >> 44, ((packed >> 41) & 7) + 1, ((packed >> 36) & 31) + 1) != (i['rate'], i['channels'], 16):
+        raise export.ExportError('the FLAC is not at the rate, channels and bits of the WAV')
     data[18:26] = ((packed >> 36 << 36) | (frames & (2 ** 36 - 1))).to_bytes(8, 'big')
     # it is kept only if it decodes to the very samples of the WAV it replaces
-    i = wav._info_of(blob, 'page')
     back = export._run(ffmpeg, ['-f', 'flac', '-i', 'pipe:0', '-f', 's16le', '-c:a', 'pcm_s16le', 'pipe:1'], data=bytes(data), timeout=FFMPEG_TIMEOUT_S)
     if back != blob[i['offset']:i['offset'] + i['frames'] * i['channels'] * 2]:
         raise export.ExportError('the FLAC does not decode to the samples of the WAV')
@@ -538,7 +542,9 @@ def _page_audio(folder, rel, seed, ffmpeg):
     if ffmpeg:
         from . import export
         try:
-            return flac(ffmpeg, blob, len(x)), len(x)
+            smaller = flac(ffmpeg, blob, len(x))
+            if len(smaller) < len(blob):     # a click of a few milliseconds can come out larger as FLAC
+                return smaller, len(x)
         except (OSError, ValueError, export.ExportError):
             pass                         # the page is the same with WAV, only larger
     return blob, len(x)

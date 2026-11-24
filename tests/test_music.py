@@ -253,6 +253,32 @@ class HostileFiles(unittest.TestCase):
                 music.describe(song)
             self.assertEqual(len(music.quote(song, 'lead', 2, 2)['notes']), 2)      # the part asked for still reads
 
+    def test_a_tiny_file_is_read_without_a_large_buffer(self):
+        import tracemalloc
+        path = saved(piece())
+        tracemalloc.start()
+        music.load(path)
+        peak = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        self.assertLess(peak, 8 * 2 ** 20)
+
+    def test_more_tracks_or_notes_than_a_project_holds_are_refused(self):
+        many = piece(tracks=[part(f't{i}', [(0, 1, 60)]) for i in range(65)])
+        with self.assertRaisesRegex(music.MusicError, '64'):
+            music.load(saved(many))
+        with mock.patch.object(music, 'MAX_NOTES_IN_PROJECT', 4), self.assertRaisesRegex(music.MusicError, 'notes'):
+            music.load(saved(piece()))
+
+    def test_positions_outside_the_score_are_refused_not_a_crash(self):
+        song = piece(harmony=[{'bar': 1, 'beat': 10 ** 400, 'symbol': 'C'}])
+        self.assertEqual(music.describe(song)['harmony'], {'as_written': song['harmony']})
+        song = piece(clock={'bars': 4, 'meter': [1, 16], 'tempo': [[0, 120]]}, sections=[{'id': 'all', 'start_bar': 0, 'bars': 4}])
+        song['tracks'][0]['notes'] = [{'id': 'lead_0', 'on': 1.7e308, 'duration': 1, 'pitch': 60}]
+        with self.assertRaisesRegex(music.MusicError, 'lead'):
+            music.describe(song)
+        with self.assertRaisesRegex(music.MusicError, 'tempo'):
+            music.Clock({'bars': 1, 'meter': [4, 4], 'tempo': [[0, 120], [9, 60]]})
+
     def test_a_note_id_too_long_for_the_schema_is_refused(self):
         song = piece()
         song['tracks'][0]['notes'][0]['id'] = 'n' * 121
@@ -323,7 +349,7 @@ class Quoting(unittest.TestCase):
         song = piece()
         song['tracks'][0]['performance']['cc'] = [[0, 64, 127], [7.9, 64, 0]]
         self.assertTrue(any('sustain' in item for item in music.quote(song, 'lead', 2, 2)['leaves_out']))
-        song['tracks'][0]['performance']['cc'] = [[0, 1, 90], [1, 64, 0]]
+        song['tracks'][0]['performance']['cc'] = [[1, 64, 0]]                    # a pedal never pressed
         self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], [])
 
     def test_a_reversed_part_names_only_what_its_render_does(self):
@@ -335,6 +361,15 @@ class Quoting(unittest.TestCase):
         self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ['each note played backwards'])
         song['clock']['rubato'] = {'final_ratio': 0.6, 'final_beats': 4}
         self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["the piece's rubato", 'each note played backwards'])
+        track['key_map'] = {'67': 79}
+        self.assertIn("this part's key map", music.quote(song, 'lead', 2, 2)['leaves_out'])
+
+    def test_a_mod_wheel_and_other_controllers_are_named(self):
+        song = piece()
+        song['tracks'][0]['performance']['cc'] = [[0, 1, 90]]
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's mod wheel"])
+        song['tracks'][0]['performance']['cc'] = [[0, 11, 90]]
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's controllers"])
 
     def test_the_piece_s_rubato_is_named(self):
         q = music.quote(piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'rubato': {'final_ratio': 0.6, 'final_beats': 4}}), 'lead', 2, 2)

@@ -218,6 +218,8 @@ def render(proj, out_dir, config=None, samples=None, ffmpeg=None, page=True, tak
     out = Path(out_dir)
     if out.exists() and any(out.iterdir()):
         raise RenderError(f'{out} already holds files; a render goes into a new folder')
+    if takes is not None and (out.absolute() == Path(takes).absolute() or Path(takes).absolute() in out.absolute().parents):
+        raise RenderError(f"{out} is in the project's {surge.FOLDER}, which holds only takes: render into another folder")
     surge_takes = _surge_takes(proj, takes, config, record_takes, music_skill)
     try:
         (out / 'master').mkdir(parents=True, exist_ok=False)      # the render's claim on the folder: a second one at once stops here

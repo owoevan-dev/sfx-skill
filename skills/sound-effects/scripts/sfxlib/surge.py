@@ -89,8 +89,32 @@ def key_of(perf):
     return _sha(json.dumps(perf, sort_keys=True, separators=(',', ':')).encode('utf-8'))
 
 
+def _played(perf):
+    """(start, stop, written pitch, velocity) of each note as it sounds: a key struck again ends its earlier note, and a note of
+    no length is not played."""
+    keys = {}
+    for t, pitch, length, velocity in sorted(perf['notes']):
+        keys.setdefault(pitch, []).append([t, t + length, velocity])
+    out = []
+    for pitch, notes in keys.items():
+        for note, following in zip(notes, notes[1:]):
+            note[1] = min(note[1], following[0])
+        out += [(start, stop, pitch, velocity) for start, stop, velocity in notes if stop > start]
+    return out
+
+
 def _note_end(perf):
-    return max(t + length for t, _, length, _ in perf['notes'])
+    """When the last note that sounds is let go."""
+    return max(stop for _, stop, _, _ in _played(perf))
+
+
+def length_s(perf):
+    """How long the take of this performance is: its last note let go and its tail."""
+    return _note_end(perf) + perf['tail']
+
+
+def expected_frames(perf):
+    return int(round((LEAD_S + length_s(perf)) * RATE)) - int(round(LEAD_S * RATE))
 
 
 def _curve(points, end):
@@ -106,20 +130,15 @@ def _curve(points, end):
 
 def midi_events(perf, transpose):
     """The performance as the host takes it: [hex MIDI, seconds], LEAD_S late. Each key is played at its written pitch plus the
-    patch's `transpose`, kept within MIDI's range; a key struck again ends its earlier note; at one time controls come first, then
-    note-offs, then note-ons."""
+    patch's `transpose`; a key struck again ends its earlier note; at one time controls come first, then note-offs, then note-ons."""
     rows = []
-    keys = {}
-    for t, pitch, length, velocity in sorted(perf['notes']):
-        keys.setdefault(max(0, min(127, pitch + transpose)), []).append([t, t + length, velocity])
-    for key, notes in keys.items():
-        for note, following in zip(notes, notes[1:]):
-            note[1] = min(note[1], following[0])
-        for start, stop, velocity in notes:
-            if stop > start:
-                rows.append((round(start + LEAD_S, 6), 2, bytes([0x90, key, velocity])))
-                rows.append((round(stop + LEAD_S, 6), 1, bytes([0x80, key, 64])))
-    end = _note_end(perf) + perf['tail']
+    for start, stop, pitch, velocity in _played(perf):
+        key = pitch + transpose
+        if not 0 <= key <= 127:
+            raise SurgeError(f'written key {pitch} is played as {key}, outside MIDI')     # out_of_range refuses these first
+        rows.append((round(start + LEAD_S, 6), 2, bytes([0x90, key, velocity])))
+        rows.append((round(stop + LEAD_S, 6), 1, bytes([0x80, key, 64])))
+    end = length_s(perf)
     if perf['bend']:
         last = None
         for t, semitones in _curve(perf['bend'], end):
@@ -352,7 +371,10 @@ class Provider:
             raise missing
         if receipt.get('performance') != perf:
             raise SurgeError(f"the receipt {receipt['key']}.json in {FOLDER} is not of the performance its name says: move it out of the folder")
-        data = (self.folder / receipt['wav']).read_bytes()          # the bytes checked are the bytes decoded
+        expected, path = expected_frames(perf), self.folder / receipt['wav']
+        if abs(receipt.get('frames', -1) - expected) > FRAMES_SLACK or path.stat().st_size > 1024 + (expected + FRAMES_SLACK) * 6:
+            raise SurgeError(f"the take {receipt['wav']} in {FOLDER} is not the {expected} frames its performance plays: move it and its receipt out of the folder")
+        data = path.read_bytes()          # the bytes checked are the bytes decoded
         if _sha(data) != receipt['wav_sha256']:
             raise SurgeError(f"the recording of take {receipt['key'][:12]} ({receipt['patch']['id']}) has changed since it was recorded: put the "
                              f"original back, or move {receipt['wav']} and its receipt out of the folder and record the take again")
@@ -391,7 +413,8 @@ class Provider:
             raise SurgeError(f"the Surge XT plugin is missing or changed ({binary.name}): run music-production's bootstrap.py again")
         if not (pylib / 'pedalboard').is_dir() or not board_intact(pylib, board.get('record_sha256')):
             raise SurgeError("pedalboard is not the package music-production installed: run its bootstrap.py again")
-        built = sorted({(int(m.group(1)), int(m.group(2))) for f in (pylib / 'pedalboard').rglob('*') if f.suffix in ('.pyd', '.so')
+        native = [f for f in pylib.iterdir() if f.name.startswith('pedalboard')] + list((pylib / 'pedalboard').rglob('*'))   # its wheel puts the
+        built = sorted({(int(m.group(1)), int(m.group(2))) for f in native if f.suffix in ('.pyd', '.so')     # compiled part beside the package
                         for m in [NATIVE_TAG.search(f.name)] if m})
         if built and tuple(sys.version_info[:2]) not in built:
             wanted = ' or '.join(f'{a}.{b}' for a, b in built)
@@ -399,6 +422,16 @@ class Provider:
                              f'run sfx.py with that Python')
         self._set_up = plugin.resolve(), pylib.resolve(), host, skill
         return self._set_up
+
+    def _playable(self, perf):
+        """The catalog entry of the performance's patch, once every written key, moved by the patch's transposition, is a MIDI key."""
+        entry = self._entry(perf['patch'])
+        shift = int(entry.get('transpose', 0))
+        outside = sorted({n[1] for n in perf['notes'] if not 0 <= n[1] + shift <= 127})
+        if outside:
+            raise SurgeError(f"patch '{perf['patch']}' plays each key {shift:+d} semitones, so written keys {', '.join(map(str, outside))} fall outside "
+                             f"MIDI's 0 to 127: write them an octave {'lower' if shift > 0 else 'higher'}, or choose another patch")
+        return entry
 
     def _entry(self, patch):
         if self._presets is None:
@@ -423,7 +456,7 @@ class Provider:
             raise self._no_take(perf)
         else:
             self._locate()
-            self._entry(perf['patch'])
+            self._playable(perf)
 
     @staticmethod
     def _no_take(perf):
@@ -448,7 +481,7 @@ class Provider:
 
     def _record(self, perf, key):
         plugin, pylib, host, skill = self._locate()
-        entry = self._entry(perf['patch'])
+        entry = self._playable(perf)
         if self.work is None:
             raise SurgeError('a Surge take is recorded by a render (sfx.py render --record-takes), which gives it a folder to work in')
         patch = Path(self.config['surge']['catalog']) / entry['path']
@@ -474,10 +507,9 @@ class Provider:
             with open(hidden, 'xb'):
                 pass
         job_file, out, private = (work / n for n in ('job.json', 'take.wav', 'patch.fxp'))
-        staged_wav, staged_receipt = self.folder / '.take.part', self.folder / '.receipt.part'     # beside the takes: a rename within one folder
-        for path in (job_file, out, private, staged_wav, staged_receipt):
+        for path in (job_file, out, private):
             self._no_link(path)
-        duration, trim = LEAD_S + _note_end(perf) + perf['tail'], int(round(LEAD_S * RATE))
+        duration, trim = LEAD_S + length_s(perf), int(round(LEAD_S * RATE))
         try:
             _write(private, at_tempo(blob, perf['bpm'])[0])     # the bytes checked, tempo-synced parts set free: the host reads this copy
             _write(job_file, json.dumps({'plugin': str(plugin), 'pylib': str(pylib), 'patch': str(private), 'out': str(out), 'rate': RATE,
@@ -506,7 +538,7 @@ class Provider:
         x = np.asarray(data, dtype=np.float64)
         if info['rate'] != RATE or x.ndim != 2 or x.shape[1] != 2 or not len(x):
             raise SurgeError(f"Surge XT gave no 48 kHz stereo audio for '{perf['patch']}'")
-        expected = int(round(duration * RATE)) - trim
+        expected = expected_frames(perf)
         if abs(len(x) - expected) > FRAMES_SLACK:
             raise SurgeError(f"Surge XT gave {len(x)} frames for '{perf['patch']}' where {expected} were asked: the take is not kept")
         peak = float(np.max(np.abs(x)))
@@ -517,8 +549,7 @@ class Provider:
         final = self.folder / f'{digest}.wav'
         self._no_link(final)
         if not os.path.lexists(final):
-            _write(staged_wav, encoded)
-            os.replace(staged_wav, final)
+            self._publish(encoded, final)
         elif final.read_bytes() != encoded:
             raise SurgeError(f'{final.name} in {FOLDER} is named like this take but holds other audio: move it out of the folder and record again')
         receipt = {'schema': SCHEMA, 'key': key, 'performance': perf, 'wav': final.name, 'wav_sha256': digest, 'frames': int(len(x)),
@@ -526,10 +557,25 @@ class Provider:
                    'made_with': {'surge': self.config['surge'].get('version'), 'plugin_sha256': self.config['surge'].get('sha256'),
                                  'pedalboard': self.config['pedalboard'].get('version'), 'host_sha256': _sha(host.read_bytes()),
                                  'music_production': _version(skill)}}
-        _write(staged_receipt, (json.dumps(receipt, indent=1) + '\n').encode('utf-8'))
-        os.replace(staged_receipt, self.folder / f'{key}.json')
+        self._publish((json.dumps(receipt, indent=1) + '\n').encode('utf-8'), self.folder / f'{key}.json')
         self.recorded += 1
         return receipt
+
+    def _publish(self, data, final):
+        """`data` written under a name this call alone creates beside `final`, then renamed to it: nothing already there is
+        written over, and a reader sees the whole file or none."""
+        for n in range(100):
+            staged = final.with_name(f'.{final.name}.{n}.part')
+            try:
+                with open(staged, 'xb') as f:
+                    f.write(data)
+                    f.flush()
+                    os.fsync(f.fileno())
+            except FileExistsError:
+                continue
+            os.replace(staged, final)
+            return
+        raise SurgeError(f'{FOLDER} holds a hundred unfinished files named like {final.name}: move them out')
 
     def listing(self):
         """What the render played, for its record."""

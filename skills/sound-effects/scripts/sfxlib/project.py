@@ -362,6 +362,10 @@ def _check_layer(c, layer, path, limit=MAX_LENGTH_S):
         c.curve(layer, 'pitch', path, 400.0, 450000.0, required=True)
     elif kind == 'modal':
         c.curve(layer, 'pitch', path, 20.0, 10000.0, required=True)
+    if kind == 'surge':                      # a take is played back as recorded, at its written notes
+        for key in ('pitch', 'vibrato'):
+            if key in layer:
+                c.err(_join(path, key), "does not move a surge layer, whose take plays its written notes: move it with the source's cents or bend")
     if 'vibrato' in layer and c.fields(layer['vibrato'], _join(path, 'vibrato'), {'rate_hz', 'depth_cents'}):
         c.number(layer['vibrato'], 'rate_hz', _join(path, 'vibrato'), 0.1, 40.0)
         c.number(layer['vibrato'], 'depth_cents', _join(path, 'vibrato'), 0.0, 1200.0)

@@ -26,6 +26,10 @@ ON_THE_LINE = 1e-6                      # quarter notes: a note this close to a 
 TRACK_ID = re.compile('[a-z][a-z0-9_]{0,47}')     # music-production's track ids
 NOTE_ID_CHARS = 120                     # and its longest note id
 SUSTAIN = 64                            # the controller of the sustain pedal, which holds notes past their written ends
+MOD_WHEEL = 1
+MAX_TRACKS = 64                         # music-production's limits on a project
+MAX_NOTES_IN_PROJECT = 500_000
+CHUNK = 2 ** 20                         # a file is read this much at a time, so a small one takes a small buffer
 TEMPO_SHOWN = 16                        # how many tempo points the overview names (--json gives them all)
 WIDTH = 110                             # of a line of the chord list
 PLAN_CHARS = 400                        # of a line of the plan (--json gives it whole)
@@ -84,7 +88,7 @@ class Clock:
         tempo = clock.get('tempo')
         if not (isinstance(tempo, list) and 1 <= len(tempo) <= 2048 and all(isinstance(p, list) and len(p) == 2 for p in tempo)):
             raise MusicError('clock.tempo is not a list of 1 to 2048 points [quarter note, quarters a minute]')
-        self.beats = [float(_number(p[0], 'a position in clock.tempo', 0)) for p in tempo]
+        self.beats = [float(_number(p[0], 'a position in clock.tempo', 0, self.quarters_per_bar * self.bars)) for p in tempo]
         self.bpm = [float(_number(p[1], 'a tempo in clock.tempo', 30, 300)) for p in tempo]
         if self.beats[0] != 0 or any(b <= a for a, b in zip(self.beats, self.beats[1:])):
             raise MusicError('clock.tempo starts at quarter note 0 and moves forward')
@@ -119,8 +123,15 @@ def load(path):
     if not path.is_file():
         raise MusicError(f'{path} is not a file')
     try:
+        chunks, size = [], 0
         with open(path, 'rb') as f:
-            data = f.read(MAX_FILE_BYTES + 1)           # never more, whatever the file says of its size
+            while size <= MAX_FILE_BYTES:                # never more, whatever the file says of its size
+                chunk = f.read(CHUNK)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
+        data = b''.join(chunks)
     except OSError as error:
         raise MusicError(f'cannot read {path}: {error}') from error
     if len(data) > MAX_FILE_BYTES:
@@ -135,6 +146,11 @@ def load(path):
     for key, kind in (('sections', list), ('tracks', list)):
         if not isinstance(song.get(key), kind):
             raise MusicError(f"{path}: the project's {key} is not a list")
+    if not 1 <= len(song['tracks']) <= MAX_TRACKS:
+        raise MusicError(f"{path}: a music-production project has 1 to {MAX_TRACKS} tracks, and this one has {len(song['tracks'])}")
+    notes = sum(len(t['notes']) for t in song['tracks'] if isinstance(t, dict) and isinstance(t.get('notes'), list))
+    if notes > MAX_NOTES_IN_PROJECT:
+        raise MusicError(f'{path}: a music-production project holds at most {MAX_NOTES_IN_PROJECT:,} notes, and this one {notes:,}')
     return song
 
 
@@ -161,7 +177,7 @@ def _chord(entry):
             and not isinstance(entry['bar'], bool)):
         return None
     offset, shift = entry.get('beat', 0), entry.get('transpose_semitones', 0)
-    if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset) \
+    if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not _finite(offset) \
             or isinstance(shift, bool) or not isinstance(shift, int):
         return None
     row = {'bar': entry['bar'], 'beat': offset + 1, 'symbol': entry['symbol']}
@@ -181,8 +197,8 @@ def _harmony(written):
     return sorted(rows, key=lambda row: (row['bar'], row['beat']))
 
 
-def _notes(track):
-    """A part's written notes in order: (on, duration, pitch, id), in quarter notes."""
+def _notes(track, total):
+    """A part's written notes in order: (on, duration, pitch, id), in quarter notes, each within the score's `total`."""
     tid = track.get('id')
     written = track.get('notes')
     if not isinstance(written, list):
@@ -192,7 +208,7 @@ def _notes(track):
         if not (isinstance(note, dict) and isinstance(note.get('id'), str) and 1 <= len(note['id']) <= NOTE_ID_CHARS):
             raise MusicError(f'track {_text(tid)}: a note has no id of 1 to {NOTE_ID_CHARS} characters')
         where = f'track {_text(tid)}, note {_text(note["id"])}'
-        out.append((float(_number(note.get('on'), f'{where}: on', 0)), float(_number(note.get('duration'), f'{where}: duration', 1e-9)),
+        out.append((float(_number(note.get('on'), f'{where}: on', 0, total)), float(_number(note.get('duration'), f'{where}: duration', 1e-9, total)),
                     _count(note.get('pitch'), f'{where}: pitch', 0, 127), note['id']))
     return sorted(out, key=lambda n: n[:3])
 
@@ -211,7 +227,7 @@ def _pitched(track):
 def _track_row(track, clock):
     if not isinstance(track, dict) or not isinstance(track.get('id'), str) or not TRACK_ID.fullmatch(track['id']):
         raise MusicError(f"a track of this project has no track id (lower-case letters, digits and underscores): {_text(track.get('id') if isinstance(track, dict) else track, 60)}")
-    notes = _notes(track)
+    notes = _notes(track, clock.quarters_per_bar * clock.bars)
     row = {'id': track['id'], 'role': track.get('role'), 'engine': track.get('engine'), 'notes': len(notes)}
     for key in ('name', 'range'):
         if key in track:
@@ -359,8 +375,10 @@ def _left_out(song, track, picked):
     out = []
     if song['clock'].get('rubato'):
         out.append("the piece's rubato")
+    key_map = track.get('key_map')
+    mapped = isinstance(key_map, dict) and any(key_map.get(str(note[2]), note[2]) != note[2] for note in picked)
     if track.get('reverse') is True:              # each note renders on its own: no swing, timing, gate, offset, bend or controller applies
-        return out + ['each note played backwards']
+        return out + ['each note played backwards'] + (["this part's key map"] if mapped else [])
     swing = performance.get('swing')
     if isinstance(swing, dict) and swing.get('ratio', 0.5) != 0.5:
         out.append("this part's swing")
@@ -372,11 +390,15 @@ def _left_out(song, track, picked):
         out.append('per-note gate')
     if performance.get('bend'):
         out.append("this part's pitch bend")
-    cc = performance.get('cc') if isinstance(performance.get('cc'), list) else []
-    if any(isinstance(c, list) and len(c) == 3 and c[1] == SUSTAIN and isinstance(c[2], (int, float)) and c[2] >= 64 for c in cc):
+    cc = [c for c in (performance.get('cc') if isinstance(performance.get('cc'), list) else [])
+          if isinstance(c, list) and len(c) == 3 and isinstance(c[2], (int, float)) and not isinstance(c[2], bool)]
+    if any(c[1] == SUSTAIN and c[2] >= 64 for c in cc):
         out.append("this part's sustain pedal")
-    key_map = track.get('key_map')
-    if isinstance(key_map, dict) and any(key_map.get(str(note[2]), note[2]) != note[2] for note in picked):
+    if any(c[1] == MOD_WHEEL and c[2] > 0 for c in cc):
+        out.append("this part's mod wheel")
+    if any(c[1] not in (SUSTAIN, MOD_WHEEL) for c in cc):
+        out.append("this part's controllers")
+    if mapped:
         out.append("this part's key map")
     return out
 
@@ -396,7 +418,7 @@ def quote(song, track_id, first, last):
     span = f'bar {first}' if first == last else f'bars {first}-{last}'
     if length > MAX_LENGTH_S + 1e-9:
         raise MusicError(f'{span} last {length:.1f} s and a layer holds {MAX_LENGTH_S:g} s: ask for fewer bars')
-    every = _notes(track)
+    every = _notes(track, clock.quarters_per_bar * clock.bars)
     picked = [note for note in every if start - ON_THE_LINE <= note[0] < stop - ON_THE_LINE]
     if not picked:
         where = f'it plays in bars {clock.bar_of(every[0][0])} to {max(clock.bar_of(n[0]) for n in every)}' if every else 'it holds no notes at all'

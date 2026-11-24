@@ -312,7 +312,8 @@ order of its own, so that two games do not start from the same ones. `sfx.py sur
 wheel move.
 
 **Notes and controls.** Write the pitch you want to hear: a patch built to sound an octave off is played on the key that
-gives it. `macros` set its knobs before it plays. `wheel` moves the mod wheel, which many patches route to vibrato,
+gives it, and a written key that would then fall outside MIDI is refused. A layer's `pitch` and `vibrato` do not move a take:
+use the source's `cents` and `bend`. `macros` set its knobs before it plays. `wheel` moves the mod wheel, which many patches route to vibrato,
 brightness or depth. `bend` slides the pitch, for a rise or a fall, but a patch of noise or of fixed pitch may not follow it,
 so check a bent note's spectrogram. A patch often holds its own delay and reverb: give `tail` the time to ring out, and go
 easy with the chain's `room`.

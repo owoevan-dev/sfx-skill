@@ -1,7 +1,7 @@
 # What sound-effects uses from music-production
 
-sound-effects needs music-production only for instrument layers (its FluidSynth and sample banks) and for recording the
-takes of Surge layers (its Surge XT); FFmpeg can come from its configuration or from elsewhere (`--ffmpeg`,
+sound-effects needs music-production only for instrument layers (its FluidSynth and sample banks), for finding Surge patches
+(`sfx.py surge` reads its catalog) and for recording the takes of Surge layers (its Surge XT); FFmpeg can come from its configuration or from elsewhere (`--ffmpeg`,
 `SFX_SKILL_FFMPEG`, the PATH: sfxlib/ffmpeg.py), and everything else works without it, also a project whose Surge takes
 are already recorded. `sfx.py music` reads a music-production project file and needs nothing else of it. It uses
 music-production only through its configuration file, its command line and the data files named below, and never imports

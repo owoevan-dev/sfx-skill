@@ -45,7 +45,8 @@ for (const m of html.split('<script')[0].matchAll(/\sid="([^"]+)"/g)) {
 ids['data'] = { textContent: dataText };
 global.document = { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {},
                     execCommand: () => true, querySelectorAll: () => [] };
-global.window = { localStorage: { getItem: () => null, setItem: (k, v) => { global.saved = v; } }, devicePixelRatio: 1 };
+global.writes = [];
+global.window = { localStorage: { getItem: () => null, setItem: (k, v) => { global.writes.push(k); if (!k.endsWith(':language')) global.saved = v; } }, devicePixelRatio: 1 };
 global.getComputedStyle = () => ({ getPropertyValue: () => '#000' });
 global.atob = s => Buffer.from(s, 'base64').toString('binary');
 // Node has a navigator of its own, which an assignment does not replace
@@ -60,11 +61,16 @@ const firstCard = ids['cards'].children[0];
 const keep = find(firstCard, n => n.tag === 'button' && n.textContent.startsWith('keep'));
 keep.listeners['click'].forEach(f => f());
 const feedback = JSON.parse(ids['feedback'].value);
-console.log(JSON.stringify({ cards: ids['cards'].children.length, flows: ids['flows'].children.length,
-                             feedback_sounds: Object.keys(feedback.sounds),
-                             verdict_after_click: feedback.sounds[Object.keys(feedback.sounds)[0]].verdict,
-                             keep_label: keep.textContent, about: ids['about'].textContent,
-                             saved_sounds: Object.keys((JSON.parse(global.saved || '{}').sounds) || {}) }));
+const result = { cards: ids['cards'].children.length, flows: ids['flows'].children.length,
+                 feedback_sounds: Object.keys(feedback.sounds),
+                 verdict_after_click: feedback.sounds[Object.keys(feedback.sounds)[0]].verdict,
+                 keep_label: keep.textContent, about: ids['about'].textContent,
+                 saved_sounds: Object.keys((JSON.parse(global.saved || '{}').sounds) || {}) };
+const before = global.writes.length;          // then the language changes: what does that write?
+ids['lang'].value = 'ja';
+ids['lang'].listeners['change'].forEach(f => f());
+result.language_writes = global.writes.slice(before);
+console.log(JSON.stringify(result));
 """
 
 
@@ -105,7 +111,7 @@ class Page(unittest.TestCase):
         self.assertRegex(self.html, r'<input type="file" id="musicfile"')
         script = re.search(r'<script>(.*?)</script>', self.html, re.S).group(1)
         self.assertNotRegex(script, r'fetch\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource|createObjectURL|FileReader')
-        self.assertEqual(len(re.findall(r'localStorage', script)), 2)         # the listener's choices, read and written
+        self.assertEqual(len(re.findall(r'localStorage', script)), 4)         # the listener's choices and language, each read and written
 
     def test_the_feedback_says_nothing_of_the_music(self):
         script = re.search(r'<script>(.*?)</script>', self.html, re.S).group(1)
@@ -161,6 +167,40 @@ class Page(unittest.TestCase):
         self.assertEqual(result['verdict_after_click'], 'keep')
         self.assertEqual(result['saved_sounds'], ['constructor'])
 
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_a_language_change_writes_only_the_language(self):
+        result = self.stub('')
+        self.assertTrue(result['language_writes'])
+        self.assertTrue(all(key.endswith(':language') for key in result['language_writes']), result['language_writes'])
+
+    def test_a_flac_of_another_rate_or_one_larger_than_the_wav_is_not_used(self):
+        from unittest import mock
+        from sfxlib import export
+
+        def streaminfo(rate=48000, channels=1, bits=16, padding=0):
+            packed = (rate << 44) | ((channels - 1) << 41) | ((bits - 1) << 36)
+            return b'fLaC' + bytes([0x80, 0, 0, 34]) + bytes(10) + packed.to_bytes(8, 'big') + bytes(16) + bytes(padding)
+
+        def ffmpeg(header):
+            seen = {}
+
+            def run(path, args, data=None, timeout=None):
+                if args[:2] == ['-f', 'wav']:
+                    seen['wav'] = data
+                    i = wav._info_of(data, 'page')
+                    seen['pcm'] = data[i['offset']:i['offset'] + i['frames'] * i['channels'] * 2]
+                    seen['channels'] = i['channels']
+                    return header(seen['channels'])
+                return seen['pcm']
+            return run
+        for name, header in (('another rate', lambda ch: streaminfo(rate=24000, channels=ch)), ('larger than the WAV', lambda ch: streaminfo(channels=ch, padding=10 ** 6))):
+            with self.subTest(name=name), mock.patch.object(export, '_run', side_effect=ffmpeg(header)):
+                audition.build(self.out, ffmpeg='ffmpeg')
+                page = (self.out / 'audition.html').read_text(encoding='utf-8')
+                data = json.loads(re.search('<script type="application/json" id="data">(.*?)</script>', page, re.S).group(1))
+                self.assertEqual(base64.b64decode(data['sounds'][0]['variants'][0]['audio'])[:4], b'RIFF')
+        audition.build(self.out)
+
     def test_every_language_has_every_label_with_the_same_blanks(self):
         blanks = lambda text: sorted(re.findall('[{]([a-z_]+)[}]', text))
         english = page_text.TEXT['en']
@@ -190,7 +230,9 @@ class Page(unittest.TestCase):
 
         def hangs(ffmpeg, args, data=None, timeout=None):
             raise export.ExportError('FFmpeg did not finish in 60 s')
-        for name, broken in (('just the marker', answer(b'fLaC')), ('a header and no audio', answer(good_header)), ('a timeout', hangs)):
+        right_header = b'fLaC' + bytes([0x80, 0, 0, 34]) + bytes(10) + ((48000 << 44) | (15 << 36)).to_bytes(8, 'big') + bytes(16)
+        for name, broken in (('just the marker', answer(b'fLaC')), ('a header and no audio', answer(good_header)), ('a timeout', hangs),
+                             ('a right header that decodes to other samples', answer(right_header, b'\x01\x00' * 64))):
             with self.subTest(name=name), mock.patch.object(export, '_run', side_effect=broken):
                 audition.build(self.out, ffmpeg='ffmpeg')
                 page = (self.out / 'audition.html').read_text(encoding='utf-8')

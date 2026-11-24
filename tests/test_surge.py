@@ -202,19 +202,29 @@ class Events(unittest.TestCase):
         rows = self.rows()
         self.assertEqual(rows, [(bytes([0x90, 69, 100]), surge.LEAD_S), (bytes([0x80, 69, 64]), surge.LEAD_S + 0.1)])
 
-    def test_the_catalog_transposition_is_played_within_midi(self):
+    def test_the_catalog_transposition_is_played(self):
         self.assertEqual(self.rows(transpose=12)[0][0], bytes([0x90, 81, 100]))
-        self.assertEqual(self.rows(transpose=12, notes=[[0, 120, 0.1, 90]])[0][0], bytes([0x90, 127, 90]))
-        self.assertEqual(self.rows(transpose=-12, notes=[[0, 5, 0.1, 90]])[0][0], bytes([0x90, 0, 90]))
+        self.assertEqual(self.rows(transpose=-12)[0][0], bytes([0x90, 57, 100]))
+
+    def test_two_notes_struck_at_once_on_one_key_play_once(self):
+        rows = self.rows(notes=[[0, 60, 0.3, 100], [0, 60, 0.3, 90]])
+        self.assertEqual([r[0][0] for r in rows], [0x90, 0x80])
+
+    def test_a_key_outside_midi_never_becomes_an_event(self):
+        with self.assertRaisesRegex(surge.SurgeError, 'outside MIDI'):
+            self.rows(transpose=12, notes=[[0, 120, 0.1, 90]])
+
+    def test_a_retriggered_key_ends_the_take_where_its_last_note_ends(self):
+        perf = surge.performance(source(notes=[[0, 60, 1.0, 100], [0.1, 60, 0.1, 90]], tail=0.1))
+        self.assertAlmostEqual(surge.length_s(perf), 0.2 + 0.1)
+        offs = [t for h, t in surge.midi_events(perf, 0) if h.startswith('80')]
+        self.assertAlmostEqual(max(offs), surge.LEAD_S + 0.2)
 
     def test_a_key_struck_again_ends_its_note_first(self):
         rows = self.rows(notes=[[0, 60, 0.5, 100], [0.2, 60, 0.1, 90]])
         statuses = [(r[0][0], round(r[1] - surge.LEAD_S, 3)) for r in rows]
         self.assertEqual(statuses, [(0x90, 0.0), (0x80, 0.2), (0x90, 0.2), (0x80, 0.3)])
 
-    def test_two_keys_that_land_on_one_after_clamping_do_not_hang(self):
-        rows = self.rows(transpose=12, notes=[[0, 126, 0.3, 100], [0, 127, 0.3, 100]])
-        self.assertEqual([r[0][0] for r in rows], [0x90, 0x80])
 
     def test_a_bend_is_set_before_the_note_and_moves_in_small_steps(self):
         rows = self.rows(bend=[[0, 0], [0.1, 12]], bend_range=12)
@@ -479,6 +489,40 @@ class Takes(unittest.TestCase):
             render.render(project_with(layer), out, takes=self.folder)
         self.assertFalse(out.exists())
 
+    def test_staging_files_never_write_over_a_file_already_there(self):
+        scratch = self.base / 'first' / surge.FOLDER
+        scratch.parent.mkdir()
+        with self.fake.env('fixed'):
+            self.fake.provider(scratch).render(source())
+        key = next(scratch.glob('*.json')).stem
+        digest = next(scratch.glob('*.wav')).stem
+        self.folder.mkdir()
+        keep = [self.folder / f'.{digest}.wav.0.part', self.folder / f'.{key}.json.0.part']
+        for path in keep:
+            path.write_bytes(b'keep')
+        with self.fake.env('fixed'):
+            self.fake.provider(self.folder).render(source())
+        self.assertEqual([p.read_bytes() for p in keep], [b'keep', b'keep'])
+        self.assertTrue((self.folder / f'{key}.json').is_file())
+
+    def test_a_render_into_the_take_folder_is_refused(self):
+        self.folder.mkdir()
+        for out in (self.folder, self.folder / 'render_1'):
+            with self.subTest(out=out.name), self.assertRaisesRegex(render.RenderError, 'holds only takes'):
+                render.render(project_with(copied()), out, takes=self.folder)
+        self.assertEqual(list(self.folder.iterdir()), [])
+
+    def test_a_take_shorter_than_its_performance_is_refused_on_replay(self):
+        with self.fake.env():
+            self.fake.provider(self.folder).render(source())
+        path = next(self.folder.glob('*.json'))
+        good = json.loads(path.read_text(encoding='utf-8'))
+        tail = dict(good['performance'], tail=0.9)          # a receipt rewritten for a longer performance, its take left short
+        renamed = {**good, 'performance': tail, 'key': surge.key_of(tail)}
+        (self.folder / f"{renamed['key']}.json").write_text(json.dumps(renamed), encoding='utf-8')
+        with self.assertRaisesRegex(surge.SurgeError, 'frames'):
+            surge.Provider(self.folder).render(source(tail=0.9))
+
     def test_the_folder_is_hidden_from_godot(self):
         with self.fake.env():
             self.fake.provider(self.folder).render(source())
@@ -563,6 +607,13 @@ class Host(unittest.TestCase):
         self.assertEqual(receipt['patch']['source'], 'Designer')
         self.assertEqual(receipt['patch']['id'], 'designer/atmospheres/glow')
 
+    def test_keys_the_patch_s_transposition_puts_outside_midi_are_refused_first(self):
+        with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, 'written keys 120 fall outside .* an octave lower'):
+            self.fake.provider(self.folder).render(source(patch='factory/fx/up', notes=[[0, 120, 0.1, 90], [0, 60, 0.1, 90]]))
+        with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, 'written keys 5 fall outside .* an octave higher'):
+            self.fake.provider(self.folder).render(source(patch='factory/fx/down', notes=[[0, 5, 0.1, 90]]))
+        self.assertEqual(self.fake.jobs(), [])
+
     def test_patches_that_cannot_play_a_plain_note_are_refused(self):
         for patch, why in (('designer/mpe/multi', 'MPE'), ('factory/fx/mute', 'silent'), ('factory/fx/nothing', 'no patch')):
             with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, why):
@@ -614,10 +665,12 @@ class Host(unittest.TestCase):
             self.record('fail')
         self.assertEqual(list(self.folder.glob('*.json')), [])
 
-    def native(self, tag):
-        """Put a compiled module of pedalboard for `tag` (such as cp399) into the fake package, listed in its RECORD."""
+    def native(self, tag, top=True):
+        """Put a compiled module of pedalboard for `tag` (such as cp399) where its wheel puts it, beside the package (or inside
+        it), listed in its RECORD."""
         pylib = Path(self.fake.config['pedalboard']['path'])
-        name = f'pedalboard/_native.{tag}-win_amd64.pyd' if os.name == 'nt' else f'pedalboard/_native.cpython-{tag[2:]}-x86_64-linux-gnu.so'
+        where = '' if top else 'pedalboard/'
+        name = f'{where}pedalboard_native.{tag}-win_amd64.pyd' if os.name == 'nt' else f'{where}pedalboard_native.cpython-{tag[2:]}-x86_64-linux-gnu.so'
         (pylib / name).write_bytes(b'native')
         record = pylib / 'pedalboard-0.9.26.dist-info' / 'RECORD'
         digest = base64.urlsafe_b64encode(hashlib.sha256(b'native').digest()).rstrip(b'=').decode()
@@ -625,7 +678,10 @@ class Host(unittest.TestCase):
         self.fake.config['pedalboard']['record_sha256'] = sha(record.read_bytes())
 
     def test_a_pedalboard_built_for_another_python_is_said_first(self):
-        self.native('cp399')
+        self.native('cp399', top=False)
+        self.assertIn('3.99', surge.status(self.fake.config, self.fake.skill))
+        self.native('cp398')
+        self.assertIn('3.98', surge.status(self.fake.config, self.fake.skill))     # found beside the package, where its wheel puts it
         self.assertIn('3.99', surge.status(self.fake.config, self.fake.skill))
         with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, '3.99'):
             self.fake.provider(self.folder).render(source())
