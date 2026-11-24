@@ -165,6 +165,10 @@ class StrayAttacks(unittest.TestCase):
         x[k:k + n] += burst
         self.assertEqual(len(artifacts.stray_attacks(x[:, None], [0.0])), 1)
 
+    def test_a_note_past_the_end_of_the_recording_is_no_error(self):
+        self.assertEqual(artifacts.stray_attacks(struck(seconds=1.0)[:, None], [0.0, 5.0]), [])
+        self.assertEqual(artifacts.stray_attacks(struck(seconds=1.0)[:, None], [5.0]), [])
+
     def test_nothing_to_judge(self):
         self.assertEqual(artifacts.stray_attacks(np.zeros((100, 2)), [0.0]), [])
         self.assertEqual(artifacts.stray_attacks(struck()[:, None], []), [])

@@ -29,6 +29,7 @@ import numpy as np
 from . import dsp, licences, page_text, record, wav
 
 FLAC_LEVEL = '8'                         # FFmpeg's highest FLAC compression: smaller, and decoded as fast
+FFMPEG_TIMEOUT_S = 60                    # for one variant: a page is not held up by an FFmpeg that hangs
 
 TEMPLATE = r"""<!doctype html>
 <html lang="en">
@@ -106,19 +107,25 @@ input[type=range] { width: 140px; }
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
 const STORE = 'sound-effects-audition:' + DATA.title + ':' + DATA.render;
-const buffers = {};
-const last = {};
+// keyed by sound ids, which may be any name ("constructor" too): no prototype to find them in
+const buffers = Object.create(null);
+const last = Object.create(null);
 let ctx = null;
 let master = null;
 let state = loadState();
 let LANG = pickLanguage();
 
+function own(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
 function loadState() {
+  const sounds = Object.create(null);
   try {
     const saved = JSON.parse(window.localStorage.getItem(STORE));
-    if (saved && saved.sounds) return saved;
+    if (saved && saved.sounds && typeof saved.sounds === 'object') {
+      for (const id of Object.keys(saved.sounds)) sounds[id] = saved.sounds[id];
+      return { sounds: sounds, general: typeof saved.general === 'string' ? saved.general : '', lang: saved.lang };
+    }
   } catch (e) { /* storage may be unavailable */ }
-  return { sounds: {}, general: '' };
+  return { sounds: sounds, general: '' };
 }
 function saveState() {
   try { window.localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* not kept */ }
@@ -126,7 +133,7 @@ function saveState() {
 }
 // the language chosen before on this page, else the first of the browser's languages the page speaks, else English
 function pickLanguage() {
-  if (state.lang && DATA.text[state.lang]) return state.lang;
+  if (typeof state.lang === 'string' && own(DATA.text, state.lang)) return state.lang;
   const asked = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || 'en'];
   for (const tag of asked) {
     const code = String(tag).toLowerCase();
@@ -139,7 +146,7 @@ function pickLanguage() {
   return 'en';
 }
 function t(key, values) {
-  const table = DATA.text[LANG] || {};
+  const table = own(DATA.text, LANG) ? DATA.text[LANG] : {};
   let text = key in table ? table[key] : DATA.text.en[key];
   for (const name in (values || {})) text = text.split('{' + name + '}').join(String(values[name]));
   return text;
@@ -201,7 +208,7 @@ function play(sound, n, when) {
   flash(sound.id, n);
   return buf.duration;
 }
-const loops = {};
+const loops = Object.create(null);
 function stopLoop(id) {
   const l = loops[id];
   if (!l) return;
@@ -468,7 +475,7 @@ function setup() {
   for (const code of DATA.languages) select.appendChild(el('option', { value: code }, DATA.text[code].name));
   select.value = LANG;
   select.addEventListener('change', () => {
-    LANG = DATA.text[select.value] ? select.value : 'en';
+    LANG = own(DATA.text, select.value) ? select.value : 'en';
     state.lang = LANG;
     saveState();
     showLanguage();
@@ -509,13 +516,18 @@ def flac(ffmpeg, blob, frames):
     length into its header, so it is written here (the MD5 stays zero, which the format reads as not given)."""
     from . import export                 # imported here: export imports render, which imports this module
     data = bytearray(export._run(ffmpeg, ['-f', 'wav', '-i', 'pipe:0', '-c:a', 'flac', '-compression_level', FLAC_LEVEL, '-f', 'flac', 'pipe:1'],
-                                 data=blob))
-    if data[:4] != b'fLaC' or data[4] & 0x7F != 0 or len(data) < 42:
+                                 data=blob, timeout=FFMPEG_TIMEOUT_S))
+    if len(data) < 42 or data[:4] != b'fLaC' or data[4] & 0x7F != 0:
         raise export.ExportError('FFmpeg did not write a FLAC stream that begins with its STREAMINFO')
     # STREAMINFO from byte 8: block and frame sizes (10 bytes), then 20 bits of rate, 3 of channels, 5 of bits a sample
     # and 36 of the length in frames
     packed = int.from_bytes(data[18:26], 'big')
     data[18:26] = ((packed >> 36 << 36) | (frames & (2 ** 36 - 1))).to_bytes(8, 'big')
+    # it is kept only if it decodes to the very samples of the WAV it replaces
+    i = wav._info_of(blob, 'page')
+    back = export._run(ffmpeg, ['-f', 'flac', '-i', 'pipe:0', '-f', 's16le', '-c:a', 'pcm_s16le', 'pipe:1'], data=bytes(data), timeout=FFMPEG_TIMEOUT_S)
+    if back != blob[i['offset']:i['offset'] + i['frames'] * i['channels'] * 2]:
+        raise export.ExportError('the FLAC does not decode to the samples of the WAV')
     return bytes(data)
 
 
@@ -527,7 +539,7 @@ def _page_audio(folder, rel, seed, ffmpeg):
         from . import export
         try:
             return flac(ffmpeg, blob, len(x)), len(x)
-        except (OSError, export.ExportError):
+        except (OSError, ValueError, export.ExportError):
             pass                         # the page is the same with WAV, only larger
     return blob, len(x)
 

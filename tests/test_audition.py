@@ -45,7 +45,7 @@ for (const m of html.split('<script')[0].matchAll(/\sid="([^"]+)"/g)) {
 ids['data'] = { textContent: dataText };
 global.document = { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {},
                     execCommand: () => true, querySelectorAll: () => [] };
-global.window = { localStorage: { getItem: () => null, setItem: () => {} }, devicePixelRatio: 1 };
+global.window = { localStorage: { getItem: () => null, setItem: (k, v) => { global.saved = v; } }, devicePixelRatio: 1 };
 global.getComputedStyle = () => ({ getPropertyValue: () => '#000' });
 global.atob = s => Buffer.from(s, 'base64').toString('binary');
 // Node has a navigator of its own, which an assignment does not replace
@@ -63,7 +63,8 @@ const feedback = JSON.parse(ids['feedback'].value);
 console.log(JSON.stringify({ cards: ids['cards'].children.length, flows: ids['flows'].children.length,
                              feedback_sounds: Object.keys(feedback.sounds),
                              verdict_after_click: feedback.sounds[Object.keys(feedback.sounds)[0]].verdict,
-                             keep_label: keep.textContent, about: ids['about'].textContent }));
+                             keep_label: keep.textContent, about: ids['about'].textContent,
+                             saved_sounds: Object.keys((JSON.parse(global.saved || '{}').sounds) || {}) }));
 """
 
 
@@ -146,6 +147,20 @@ class Page(unittest.TestCase):
                 self.assertEqual(result['keep_label'], keep)
                 self.assertEqual(result['verdict_after_click'], 'keep')
 
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_a_sound_named_like_a_property_of_every_object_keeps_its_choice(self):
+        data = test_project.minimal()
+        data['sounds'] = [dict(data['sounds'][0], id='constructor')]
+        out = helpers.scratch('audition_constructor') / 'render'
+        render.render(project.validate(data), out)
+        harness = out.parent / 'harness.js'
+        harness.write_text(HARNESS, encoding='utf-8')
+        proc = subprocess.run(['node', str(harness), str(out / 'audition.html'), ''], capture_output=True, text=True, encoding='utf-8', timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        self.assertEqual(result['verdict_after_click'], 'keep')
+        self.assertEqual(result['saved_sounds'], ['constructor'])
+
     def test_every_language_has_every_label_with_the_same_blanks(self):
         blanks = lambda text: sorted(re.findall('[{]([a-z_]+)[}]', text))
         english = page_text.TEXT['en']
@@ -164,6 +179,35 @@ class Page(unittest.TestCase):
         for sound in self.data['sounds']:
             for v in sound['variants']:
                 self.assertEqual(base64.b64decode(v['audio'])[:4], b'RIFF')
+
+    def test_flac_that_is_not_whole_leaves_the_page_as_wav(self):
+        from unittest import mock
+        from sfxlib import export
+        good_header = b'fLaC' + bytes([0x00, 0, 0, 34]) + bytes(34)
+
+        def answer(encoded, decoded=b''):          # what a broken FFmpeg gives when asked to encode, and to decode
+            return lambda ffmpeg, args, data=None, timeout=None: encoded if args[:2] == ['-f', 'wav'] else decoded
+
+        def hangs(ffmpeg, args, data=None, timeout=None):
+            raise export.ExportError('FFmpeg did not finish in 60 s')
+        for name, broken in (('just the marker', answer(b'fLaC')), ('a header and no audio', answer(good_header)), ('a timeout', hangs)):
+            with self.subTest(name=name), mock.patch.object(export, '_run', side_effect=broken):
+                audition.build(self.out, ffmpeg='ffmpeg')
+                page = (self.out / 'audition.html').read_text(encoding='utf-8')
+                data = json.loads(re.search('<script type="application/json" id="data">(.*?)</script>', page, re.S).group(1))
+                self.assertEqual(base64.b64decode(data['sounds'][0]['variants'][0]['audio'])[:4], b'RIFF')
+        audition.build(self.out)
+
+    def test_a_stale_ffmpeg_setting_leaves_the_page_as_wav(self):
+        import os
+        import sys
+        env = dict(helpers.child_env(), SFX_SKILL_FFMPEG=str(self.base / 'no-ffmpeg-here.exe'))
+        done = subprocess.run([sys.executable, str(helpers.SCRIPTS / 'sfx.py'), 'audition', str(self.out)], capture_output=True, text=True, encoding='utf-8',
+                              errors='replace', env=env, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn('WAV', done.stdout)
+        page = (self.out / 'audition.html').read_text(encoding='utf-8')
+        self.assertIn('UklGR', page)                       # base64 of RIFF
 
     def test_an_ffmpeg_that_cannot_make_flac_leaves_the_page_as_wav(self):
         import sys

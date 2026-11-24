@@ -16,8 +16,10 @@
   menu. The feedback is the same in every language.
 - **A smaller page.** With FFmpeg, the page holds FLAC instead of WAV: the same samples in less than half the size on a typical set.
 - **Search.** Recordings about as clean as each other come in an order of the project's own, so two games start from different
-  recordings. When fewer than five recordings hold every word, the list goes on with those holding some of them, marked. Recordings
-  labelled only as music come last unless you ask for music.
+  recordings. When fewer than five recordings hold every word, the list goes on with those holding some of them, marked (in `--json`,
+  `files` and `matched` still hold only recordings with every word, and the others are in `some_words`). Recordings labelled only as
+  music come last unless you ask for music.
+- `doctor --library LIB` reports on a sample library kept elsewhere.
 - A sound still at its recipe's default parameters gets a note (not a flag) asking to set them for the game.
 - `check` flags an attack inside an instrument layer's sample that none of its notes explains (`stray_attack`): a tick left in a
   sample, which the click test let through.

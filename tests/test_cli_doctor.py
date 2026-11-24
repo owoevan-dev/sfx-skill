@@ -36,6 +36,17 @@ class Doctor(unittest.TestCase):
             self.assertIn(line, proc.stdout)
 
 
+class TheLibrary(unittest.TestCase):
+    def test_a_library_named_with_library_is_the_one_shown(self):
+        from sfxlib import samples
+        folder = helpers.scratch('doctor_library') / 'lib'
+        folder.mkdir()
+        (folder / samples.INDEX).write_text('{"schema": "%s", "packs": {}, "files": []}' % samples.SCHEMA, encoding='utf-8')
+        proc = run('doctor', '--music-skill', '', '--library', str(folder))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn(f'sample library: {folder}: 0 packs', proc.stdout)
+
+
 class AnFFmpegWithoutAnEncoder(unittest.TestCase):
     def test_it_is_no_failure_and_says_what_it_costs(self):
         import sfx

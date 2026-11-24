@@ -118,7 +118,7 @@ def stray_attacks(x, note_starts_s, rate=RATE):
     if not len(x) or not len(note_starts_s):
         return []
     e = _hf_envelope_db(x, rate)
-    starts = sorted({max(0, int(round(float(s) * 1000))) for s in note_starts_s})
+    starts = sorted({max(0, int(round(float(s) * 1000))) for s in note_starts_s} & set(range(len(e))))   # a note past the recording's end has none
     found = []
     for first, stop in zip(starts, starts[1:] + [len(e)]):
         top = float(e[first:stop].max())

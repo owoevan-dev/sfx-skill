@@ -66,6 +66,47 @@ def read(path):
     with open(i['path'], 'rb') as f:
         f.seek(i['offset'])
         raw = f.read(i['frames'] * i['channels'] * i['bits'] // 8)
+    return _samples(raw, i)
+
+
+def decode(data, name='WAV bytes'):
+    """(frames, info) of a whole WAV file already in memory, read as `read` reads a file."""
+    i = _info_of(bytes(data), name)
+    return _samples(bytes(data)[i['offset']:i['offset'] + i['frames'] * i['channels'] * i['bits'] // 8], i)
+
+
+def _info_of(data, name):
+    import io
+    size = len(data)
+    f = io.BytesIO(data)
+    head = f.read(12)
+    if head[:4] != b'RIFF' or head[8:12] != b'WAVE':
+        raise ValueError(f'Not RIFF/WAVE: {name}')
+    fmt = chunk = None
+    pos = 12
+    while pos + 8 <= size:
+        f.seek(pos)
+        cid, csize = struct.unpack('<4sI', f.read(8))
+        if pos + 8 + csize > size + 1:
+            if fmt is not None and chunk is not None:
+                break
+            raise ValueError(f'Truncated chunk in {name}')
+        if cid == b'fmt ':
+            fmt = f.read(min(csize, 64))
+        elif cid == b'data':
+            chunk = (pos + 8, min(csize, size - pos - 8))
+        pos += 8 + csize + (csize & 1)
+    if fmt is None or chunk is None or len(fmt) < 16:
+        raise ValueError(f'Missing or short fmt/data in {name}')
+    tag, channels, rate, _, align, bits = struct.unpack_from('<HHIIHH', fmt)
+    if tag == 0xFFFE and len(fmt) >= 26:
+        tag = struct.unpack_from('<H', fmt, 24)[0]
+    if channels not in (1, 2) or not 8000 <= rate <= 192000 or align != channels * bits // 8 or (tag, bits) not in ((1, 8), (1, 16), (1, 24), (1, 32), (3, 32)):
+        raise ValueError(f'Unsupported WAV layout in {name}')
+    return {'path': name, 'tag': tag, 'channels': channels, 'rate': rate, 'bits': bits, 'offset': chunk[0], 'frames': chunk[1] // align, 'loops': []}
+
+
+def _samples(raw, i):
     if i['tag'] == 3:
         x = np.frombuffer(raw, '<f4').astype(np.float32)
     elif i['bits'] == 8:

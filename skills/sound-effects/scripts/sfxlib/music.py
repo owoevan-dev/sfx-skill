@@ -23,6 +23,9 @@ LETTERS = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
 SHARPS, FLATS = '#' + chr(0x266F), 'b' + chr(0x266D)
 UNPITCHED = ('drum_synth', 'noise')     # engines whose notes name no pitch
 ON_THE_LINE = 1e-6                      # quarter notes: a note this close to a bar line is on it
+TRACK_ID = re.compile('[a-z][a-z0-9_]{0,47}')     # music-production's track ids
+NOTE_ID_CHARS = 120                     # and its longest note id
+SUSTAIN = 64                            # the controller of the sustain pedal, which holds notes past their written ends
 TEMPO_SHOWN = 16                        # how many tempo points the overview names (--json gives them all)
 WIDTH = 110                             # of a line of the chord list
 PLAN_CHARS = 400                        # of a line of the plan (--json gives it whole)
@@ -34,8 +37,15 @@ class MusicError(ValueError):
     """A project that cannot be read, or a selection of it that cannot be quoted."""
 
 
+def _finite(value):
+    try:
+        return math.isfinite(value)
+    except OverflowError:               # an integer too large for a float
+        return False
+
+
 def _number(value, what, lo=None, hi=None):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) \
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not _finite(value) \
             or (lo is not None and value < lo) or (hi is not None and value > hi):
         limits = '' if lo is None else f' from {lo:g}' + ('' if hi is None else f' to {hi:g}')
         raise MusicError(f'{what} is {value!r}: expected a number{limits}')
@@ -104,14 +114,17 @@ class Clock:
 def load(path):
     """The project at this path; MusicError says what is wrong with it."""
     path = Path(path)
+    if not path.exists():
+        raise MusicError(f'cannot read {path}: there is no such file')
+    if not path.is_file():
+        raise MusicError(f'{path} is not a file')
     try:
-        size = path.stat().st_size
-        if size <= MAX_FILE_BYTES:
-            data = path.read_bytes()
+        with open(path, 'rb') as f:
+            data = f.read(MAX_FILE_BYTES + 1)           # never more, whatever the file says of its size
     except OSError as error:
         raise MusicError(f'cannot read {path}: {error}') from error
-    if size > MAX_FILE_BYTES:
-        raise MusicError(f'{path} is over {MAX_FILE_BYTES // 2 ** 20} MB, more than a music-production project holds')
+    if len(data) > MAX_FILE_BYTES:
+        raise MusicError(f'{path} holds more than {MAX_FILE_BYTES:,} bytes, more than a music-production project holds')
     try:
         song = json.loads(data)
     except (ValueError, RecursionError) as error:
@@ -176,21 +189,28 @@ def _notes(track):
         raise MusicError(f"track {_text(tid)}: its notes are not a list")
     out = []
     for note in written:
-        if not (isinstance(note, dict) and isinstance(note.get('id'), str)):
-            raise MusicError(f'track {_text(tid)}: a note has no id')
+        if not (isinstance(note, dict) and isinstance(note.get('id'), str) and 1 <= len(note['id']) <= NOTE_ID_CHARS):
+            raise MusicError(f'track {_text(tid)}: a note has no id of 1 to {NOTE_ID_CHARS} characters')
         where = f'track {_text(tid)}, note {_text(note["id"])}'
         out.append((float(_number(note.get('on'), f'{where}: on', 0)), float(_number(note.get('duration'), f'{where}: duration', 1e-9)),
                     _count(note.get('pitch'), f'{where}: pitch', 0, 127), note['id']))
     return sorted(out, key=lambda n: n[:3])
 
 
+def _kit(track):
+    """A sampled part on a kit's bank (128), as music-production's renderer reads it: the patch's bank if it names one, else the
+    part's own. A synthesizer's bank says nothing of its sound."""
+    holder = track['patch'] if isinstance(track.get('patch'), dict) and track['patch'] else track
+    return track.get('engine') == 'soundfont' and holder.get('bank', 0) == 128
+
+
 def _pitched(track):
-    return track.get('drums') is not True and track.get('engine') not in UNPITCHED
+    return track.get('drums') is not True and track.get('engine') not in UNPITCHED and not _kit(track)
 
 
 def _track_row(track, clock):
-    if not isinstance(track, dict) or not isinstance(track.get('id'), str):
-        raise MusicError('a track of this project has no id')
+    if not isinstance(track, dict) or not isinstance(track.get('id'), str) or not TRACK_ID.fullmatch(track['id']):
+        raise MusicError(f"a track of this project has no track id (lower-case letters, digits and underscores): {_text(track.get('id') if isinstance(track, dict) else track, 60)}")
     notes = _notes(track)
     row = {'id': track['id'], 'role': track.get('role'), 'engine': track.get('engine'), 'notes': len(notes)}
     for key in ('name', 'range'):
@@ -225,7 +245,7 @@ def describe(song):
     rubato = bool(song['clock'].get('rubato'))          # it stretches the played length, which is not worked out here
     tempo = []
     for beat, bpm in zip(clock.beats, clock.bpm):
-        bar, within = clock.place(beat)
+        bar, within = clock.place(beat) if beat < clock.quarters_per_bar * clock.bars - ON_THE_LINE else (clock.bars + 1, 1.0)   # at the end
         tempo.append({'bar': bar, 'beat': within, 'bpm': bpm})
     return {'title': song.get('title'), 'meter': clock.meter, 'bars': clock.bars, 'quarters_per_bar': clock.quarters_per_bar, 'tempo': tempo,
             'rubato': rubato, 'score_seconds': round(clock.end, 3), 'tail_seconds': clock.tail,
@@ -299,7 +319,7 @@ def overview(info):
     numerator, unit = info['meter']
     lines = [f"{_text(info['title'] or 'Untitled piece')}: {numerator}/{unit}, {info['bars']} bar{'s' if info['bars'] != 1 else ''} "
              f"of {info['quarters_per_bar']:g} quarter notes"]
-    shown = [f"{row['bpm']:g} at {_at(row['bar'], row['beat'])}" for row in info['tempo'][:TEMPO_SHOWN]]
+    shown = [f"{row['bpm']:g} at {'the end' if row['bar'] > info['bars'] else _at(row['bar'], row['beat'])}" for row in info['tempo'][:TEMPO_SHOWN]]
     more = len(info['tempo']) - len(shown)
     lines.append('Tempo (quarter notes a minute): ' + '; '.join(shown) + (f'; {more} more changes (--json lists them)' if more else ''))
     if info['rubato']:
@@ -339,6 +359,8 @@ def _left_out(song, track, picked):
     out = []
     if song['clock'].get('rubato'):
         out.append("the piece's rubato")
+    if track.get('reverse') is True:              # each note renders on its own: no swing, timing, gate, offset, bend or controller applies
+        return out + ['each note played backwards']
     swing = performance.get('swing')
     if isinstance(swing, dict) and swing.get('ratio', 0.5) != 0.5:
         out.append("this part's swing")
@@ -350,6 +372,9 @@ def _left_out(song, track, picked):
         out.append('per-note gate')
     if performance.get('bend'):
         out.append("this part's pitch bend")
+    cc = performance.get('cc') if isinstance(performance.get('cc'), list) else []
+    if any(isinstance(c, list) and len(c) == 3 and c[1] == SUSTAIN and isinstance(c[2], (int, float)) and c[2] >= 64 for c in cc):
+        out.append("this part's sustain pedal")
     key_map = track.get('key_map')
     if isinstance(key_map, dict) and any(key_map.get(str(note[2]), note[2]) != note[2] for note in picked):
         out.append("this part's key map")
@@ -359,7 +384,7 @@ def _left_out(song, track, picked):
 def quote(song, track_id, first, last):
     """The written notes of one part in bars first to last, as [time s, MIDI pitch, length s, velocity] from the first bar's start."""
     clock = Clock(song.get('clock'))
-    tracks = {t.get('id'): t for t in song['tracks'] if isinstance(t, dict)}
+    tracks = {t['id']: t for t in song['tracks'] if isinstance(t, dict) and isinstance(t.get('id'), str)}
     if track_id not in tracks:
         raise MusicError(f"there is no track '{_text(track_id)}': this project has " + ', '.join(_text(key) for key in tracks))
     track = tracks[track_id]

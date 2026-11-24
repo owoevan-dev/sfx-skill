@@ -6,10 +6,12 @@ rendering is a take, not a function of its inputs. So a take is recorded once, o
 into the folder surge_takes beside the project file, and every later render plays that file. With its takes, a project renders
 the same without Surge.
 
-A take's key is the hash of what shapes the performance (the patch, the notes, the controls, and which performance it is) and of
-nothing that happens to it afterwards, so a change of pitch, gain, filter or placement records nothing. Its audio is stored under
-its own hash, and a receipt named by the key is the one step that commits it: a render stopped at any point leaves at most an
-unused file. An operating-system lock keeps two renders from recording one key twice.
+A take's key is the hash of what shapes the performance (the patch, the notes in time order, the controls, and which performance it
+is) and of nothing that happens to it afterwards, so a change of pitch, gain, filter or placement records nothing. Its audio is
+stored under its own hash, and a receipt named by the key is the one step that commits it: a render stopped at any point leaves at
+most an unused file. An operating-system lock keeps two renders from recording one key twice. surge_takes holds only takes, so
+it can go wherever the project goes: what the host is given and writes (the job, a copy of the patch, the raw take) is in the
+render's own folder, and emptied once the take is read.
 
 Surge XT and pedalboard are GPL-3.0. Nothing here loads them: music-production's scripts/surge_host.py, a separate program, is
 given a job file and writes a WAV (the repository's MUSIC_PRODUCTION_CONTRACT.md). No patch and no part of Surge ships with this
@@ -40,7 +42,7 @@ from .samples import _forms, _words, locked
 RATE = 48000
 PEAK = 0.5                     # a take is kept at this peak, as other recorded layers come before the layer's gain
 FOLDER = 'surge_takes'         # beside the project file
-WORK = '.work'                 # inside it: the job, the patch and the take of the recording under way, reused each time
+WORK = 'surge_work'            # in the render's folder: the job, the patch and the raw take of the recording under way, emptied once read
 SCHEMA = 'sfx-surge-take/1'
 LEAD_S = 0.1                   # the host plays this long before the first event and trims it, as music-production's render does
 CONTROL_STEP_S = 0.005         # a bend or the mod wheel moves in steps at most this far apart
@@ -48,6 +50,8 @@ DEFAULT_BPM = 120.0
 DEFAULT_TAIL_S = 2.0
 DEFAULT_BEND_RANGE = 2
 HOST_TIMEOUT_S = 300
+FRAMES_SLACK = 2               # the host's take may differ from the length asked by this many frames of rounding
+NATIVE_TAG = re.compile(r'(?:\.cp|cpython-)(\d)(\d+)')   # the Python a compiled module of pedalboard was built for
 SILENT = 1e-6
 WAV_NAME = re.compile(r'^[0-9a-f]{64}\.wav$')
 UNPLAYABLE = {'MPE': 'it is an MPE patch, made for a controller that sends each note its own expression',
@@ -73,7 +77,7 @@ def performance(source):
     variant's own (sound/layer/variant) or a named take."""
     bend = [[_n(t), _n(s)] for t, s in source.get('bend', [])]
     return {'format': 1, 'patch': source['patch'],
-            'notes': [[_n(t), int(pitch), _n(length), int(velocity)] for t, pitch, length, velocity in source['notes']],
+            'notes': sorted([_n(t), int(pitch), _n(length), int(velocity)] for t, pitch, length, velocity in source['notes']),
             'macros': {str(k): _n(source['macros'][k]) for k in sorted(source.get('macros', {}), key=str)},
             'bend': bend, 'bend_range': int(source.get('bend_range', DEFAULT_BEND_RANGE)) if bend else DEFAULT_BEND_RANGE,
             'wheel': [[_n(t), _n(v)] for t, v in source.get('wheel', [])],
@@ -90,12 +94,13 @@ def _note_end(perf):
 
 
 def _curve(points, end):
-    """(seconds, value) along a curve, at most CONTROL_STEP_S apart, from 0 to its last point or `end`. Before its first point it
-    holds that point's value."""
+    """(seconds, value) along a curve, at most CONTROL_STEP_S apart and at every point written, from 0 to its last point or `end`.
+    Before its first point it holds that point's value."""
     times, values = [p[0] for p in points], [p[1] for p in points]
     last = min(times[-1], end)
     count = int(math.ceil(last / CONTROL_STEP_S - 1e-9))
-    at = np.linspace(0.0, last, count + 1) if count > 0 else np.zeros(1)
+    grid = np.linspace(0.0, last, count + 1) if count > 0 else np.zeros(1)
+    at = np.unique(np.concatenate([grid, [t for t in times if 0 <= t <= last]]))
     return zip(at.tolist(), np.interp(at, times, values).tolist())
 
 
@@ -112,25 +117,25 @@ def midi_events(perf, transpose):
             note[1] = min(note[1], following[0])
         for start, stop, velocity in notes:
             if stop > start:
-                rows.append((start, 2, bytes([0x90, key, velocity])))
-                rows.append((stop, 1, bytes([0x80, key, 64])))
+                rows.append((round(start + LEAD_S, 6), 2, bytes([0x90, key, velocity])))
+                rows.append((round(stop + LEAD_S, 6), 1, bytes([0x80, key, 64])))
     end = _note_end(perf) + perf['tail']
     if perf['bend']:
         last = None
         for t, semitones in _curve(perf['bend'], end):
             value = max(0, min(16383, int(round(8192 + 8192 * semitones / perf['bend_range']))))
             if value != last:
-                rows.append((t, 0, bytes([0xE0, value & 0x7F, value >> 7])))
+                rows.append((round(t + LEAD_S, 6), 0, bytes([0xE0, value & 0x7F, value >> 7])))
                 last = value
     if perf['wheel']:
         last = None
         for t, level in _curve(perf['wheel'], end):
             value = max(0, min(127, int(round(level * 127))))
             if value != last:
-                rows.append((t, 0, bytes([0xB0, 1, value])))
+                rows.append((round(t + LEAD_S, 6), 0, bytes([0xB0, 1, value])))
                 last = value
-    rows.sort(key=lambda row: (row[0], row[1]))
-    return [[data.hex(), round(t + LEAD_S, 6)] for t, _, data in rows]
+    rows.sort(key=lambda row: (row[0], row[1]))         # by the time the host is given, so rounding cannot put an on before its off
+    return [[data.hex(), t] for t, _, data in rows]
 
 
 SYNCED_DELAY = re.compile(r'fx(\d+)_p[01]$')  # a Delay effect's (type 1) left and right times
@@ -284,7 +289,8 @@ def status(config, skill):
         presets = load_catalog(skill)
     except SurgeError as error:
         return str(error)
-    return f'OK ({sum(1 for entry in presets.values() if not refused(entry))} patches to play)'
+    playable = sum(1 for entry in presets.values() if not refused(entry))
+    return f'OK ({playable} of its {len(presets)} patches can play a layer; {len(presets) - playable} are MPE or silent)'
 
 
 def _write(path, data):
@@ -298,8 +304,9 @@ class Provider:
     """The takes of one project, in `folder`. A take is replayed from there with no Surge. With `record`, one that is missing is
     played by the Surge of the music-production configuration `config`."""
 
-    def __init__(self, folder, config=None, music_skill=None, record=False):
+    def __init__(self, folder, config=None, music_skill=None, record=False, work=None):
         self.folder = Path(folder) if folder else None
+        self.work = work                # where a recording's job, patch and raw take go: a render gives its own folder's WORK
         self.config = config
         self.music_skill = music_skill
         self.record = record
@@ -331,18 +338,27 @@ class Provider:
             raise SurgeError(f'{path.name} in {FOLDER} is not a receipt this skill wrote: move it out of the folder')
         return data
 
-    def _read(self, receipt):
+    def _missing(self, receipt):
         path = self.folder / receipt['wav']
         self._no_link(path)
         if not path.is_file():
-            raise SurgeError(f"the recording of take {receipt['key'][:12]} ({receipt['patch']['id']}) is missing from {FOLDER}: put it back, "
-                             f"or move its receipt {receipt['key']}.json out of the folder and record the take again")
-        if _sha(path.read_bytes()) != receipt['wav_sha256']:
+            return SurgeError(f"the recording of take {receipt['key'][:12]} ({receipt['patch']['id']}) is missing from {FOLDER}: put it back, "
+                              f"or move its receipt {receipt['key']}.json out of the folder and record the take again")
+        return None
+
+    def _read(self, receipt, perf):
+        missing = self._missing(receipt)
+        if missing:
+            raise missing
+        if receipt.get('performance') != perf:
+            raise SurgeError(f"the receipt {receipt['key']}.json in {FOLDER} is not of the performance its name says: move it out of the folder")
+        data = (self.folder / receipt['wav']).read_bytes()          # the bytes checked are the bytes decoded
+        if _sha(data) != receipt['wav_sha256']:
             raise SurgeError(f"the recording of take {receipt['key'][:12]} ({receipt['patch']['id']}) has changed since it was recorded: put the "
                              f"original back, or move {receipt['wav']} and its receipt out of the folder and record the take again")
-        x, info = wav.read(path)
-        if info['rate'] != RATE or info['channels'] != 2:
-            raise SurgeError(f"the recording of take {receipt['key'][:12]} is not 48 kHz stereo")
+        x, info = wav.decode(data)
+        if info['rate'] != RATE or info['channels'] != 2 or len(x) != receipt.get('frames'):
+            raise SurgeError(f"the recording of take {receipt['key'][:12]} is not the 48 kHz stereo take of {receipt.get('frames')} frames its receipt names")
         return np.asarray(x, dtype=np.float64)
 
     def _skill(self):
@@ -352,7 +368,7 @@ class Provider:
             raise SurgeError(str(error)) from None
         if skill is None:
             raise SurgeError('recording a Surge take needs the music-production skill, which installs Surge XT')
-        return Path(skill)
+        return Path(skill).resolve()         # the host runs in its own folder, where a relative path would be read again
 
     def _locate(self):
         """(plugin, pedalboard folder, host, skill folder), each checked as music-production checks them before it plays a part."""
@@ -375,7 +391,13 @@ class Provider:
             raise SurgeError(f"the Surge XT plugin is missing or changed ({binary.name}): run music-production's bootstrap.py again")
         if not (pylib / 'pedalboard').is_dir() or not board_intact(pylib, board.get('record_sha256')):
             raise SurgeError("pedalboard is not the package music-production installed: run its bootstrap.py again")
-        self._set_up = plugin, pylib, host, skill
+        built = sorted({(int(m.group(1)), int(m.group(2))) for f in (pylib / 'pedalboard').rglob('*') if f.suffix in ('.pyd', '.so')
+                        for m in [NATIVE_TAG.search(f.name)] if m})
+        if built and tuple(sys.version_info[:2]) not in built:
+            wanted = ' or '.join(f'{a}.{b}' for a, b in built)
+            raise SurgeError(f"the pedalboard music-production installed is built for Python {wanted}, and this is Python {sys.version_info[0]}.{sys.version_info[1]}: "
+                             f'run sfx.py with that Python')
+        self._set_up = plugin.resolve(), pylib.resolve(), host, skill
         return self._set_up
 
     def _entry(self, patch):
@@ -392,15 +414,20 @@ class Provider:
     def check(self, source):
         """Before a render makes its folder: this layer's take is there, or may be recorded."""
         perf = performance(source)
-        if self._receipt(key_of(perf)) is None:
-            if not self.record:
-                raise self._no_take(perf)
+        receipt = self._receipt(key_of(perf))
+        if receipt is not None:
+            missing = self._missing(receipt)
+            if missing:
+                raise missing
+        elif not self.record:
+            raise self._no_take(perf)
+        else:
             self._locate()
             self._entry(perf['patch'])
 
     @staticmethod
     def _no_take(perf):
-        return SurgeError(f"its Surge layer ({perf['patch']}) has no recorded take: render with --record-takes to record one, or bring back the "
+        return SurgeError(f"its Surge layer ({perf['patch']}) has no recorded take: render with --record-takes --config CONFIG to record one, or bring back the "
                           f"project's {FOLDER} folder")
 
     def render(self, source):
@@ -414,7 +441,7 @@ class Provider:
             if not self.record:
                 raise self._no_take(perf)
             receipt = self._record(perf, key)
-        x = self._read(receipt)
+        x = self._read(receipt, perf)
         self.done[key] = x
         self.used[key] = receipt
         return x
@@ -422,6 +449,8 @@ class Provider:
     def _record(self, perf, key):
         plugin, pylib, host, skill = self._locate()
         entry = self._entry(perf['patch'])
+        if self.work is None:
+            raise SurgeError('a Surge take is recorded by a render (sfx.py render --record-takes), which gives it a folder to work in')
         patch = Path(self.config['surge']['catalog']) / entry['path']
         blob = patch.read_bytes() if patch.is_file() else b''
         if len(blob) != entry['bytes'] or _sha(blob) != entry['sha256']:
@@ -433,47 +462,53 @@ class Provider:
             found = self._receipt(key)             # another render may have recorded it while this one waited
             if found is not None:
                 return found
-            return self._play(perf, key, entry, blob, patch, plugin, pylib, host, skill)
+            return self._play(perf, key, entry, blob, plugin, pylib, host, skill)
 
-    def _play(self, perf, key, entry, blob, patch, plugin, pylib, host, skill):
-        work = self.folder / WORK
+    def _play(self, perf, key, entry, blob, plugin, pylib, host, skill):
+        work = Path(self.work).absolute()          # not resolved: a link on the way is refused, not followed
+        self._no_link(work.parent)
         self._no_link(work)
-        work.mkdir(exist_ok=True)
+        work.mkdir(parents=True, exist_ok=True)
         hidden = self.folder / '.gdignore'             # inside a Godot project the editor would import every file here
         if not os.path.lexists(hidden):
             with open(hidden, 'xb'):
                 pass
-        job_file, out, staged_wav, staged_receipt, private = (work / n for n in ('job.json', 'take.wav', 'new.wav', 'new.json', 'patch.fxp'))
-        for path in (job_file, out, staged_wav, staged_receipt, private):
+        job_file, out, private = (work / n for n in ('job.json', 'take.wav', 'patch.fxp'))
+        staged_wav, staged_receipt = self.folder / '.take.part', self.folder / '.receipt.part'     # beside the takes: a rename within one folder
+        for path in (job_file, out, private, staged_wav, staged_receipt):
             self._no_link(path)
-        fxp, synced = at_tempo(blob, perf['bpm'])
-        if synced:
-            _write(private, fxp)
-            patch = private
-        _write(out, b'')                               # so that a host writing nothing cannot pass off the last take
-        events = midi_events(perf, int(entry.get('transpose', 0)))
-        _write(job_file, json.dumps({'plugin': str(plugin), 'pylib': str(pylib), 'patch': str(patch), 'out': str(out), 'rate': RATE, 'events': events,
-                                     'duration': LEAD_S + _note_end(perf) + perf['tail'], 'trim': int(round(LEAD_S * RATE)), 'macros': perf['macros'],
-                                     'bend_range': perf['bend_range']}).encode('utf-8'))
+        duration, trim = LEAD_S + _note_end(perf) + perf['tail'], int(round(LEAD_S * RATE))
         try:
-            proc = subprocess.run([sys.executable, str(host), str(job_file)], cwd=str(host.parent), capture_output=True, text=True, encoding='utf-8',
-                                  errors='replace', env=mpbridge.child_env(), timeout=HOST_TIMEOUT_S, stdin=subprocess.DEVNULL)
-        except subprocess.TimeoutExpired:
-            raise SurgeError(f"Surge XT did not finish '{perf['patch']}' in {HOST_TIMEOUT_S} s") from None
-        if proc.returncode != 0:
-            said = (proc.stdout + proc.stderr).strip()[-300:]
-            if 'pedalboard' in said and re.search(r'ImportError|ModuleNotFoundError|DLL load failed', said):
-                raise SurgeError(f"this Python ({sys.version_info[0]}.{sys.version_info[1]}) cannot load the pedalboard music-production installed: "
-                                 f'run its bootstrap.py with this Python. {said}')
-            raise SurgeError(f"Surge XT failed to play '{perf['patch']}' (music-production {_version(skill)}): {said}")
-        try:
-            data, info = wav.read(out)
-        except ValueError as error:
-            text = 'audio that is not finite' if 'finite' in str(error).lower() else f'no usable audio ({error})'
-            raise SurgeError(f"Surge XT gave {text} for '{perf['patch']}' (music-production {_version(skill)})") from None
+            _write(private, at_tempo(blob, perf['bpm'])[0])     # the bytes checked, tempo-synced parts set free: the host reads this copy
+            _write(job_file, json.dumps({'plugin': str(plugin), 'pylib': str(pylib), 'patch': str(private), 'out': str(out), 'rate': RATE,
+                                         'events': midi_events(perf, int(entry.get('transpose', 0))), 'duration': duration, 'trim': trim,
+                                         'macros': perf['macros'], 'bend_range': perf['bend_range']}).encode('utf-8'))
+            try:
+                proc = subprocess.run([sys.executable, str(host), str(job_file)], cwd=str(host.parent), capture_output=True, text=True, encoding='utf-8',
+                                      errors='replace', env=mpbridge.child_env(), timeout=HOST_TIMEOUT_S, stdin=subprocess.DEVNULL)
+            except subprocess.TimeoutExpired:
+                raise SurgeError(f"Surge XT did not finish '{perf['patch']}' in {HOST_TIMEOUT_S} s") from None
+            if proc.returncode != 0:
+                said = (proc.stdout + proc.stderr).strip()[-300:]
+                if 'pedalboard' in said and re.search(r'ImportError|ModuleNotFoundError|DLL load failed', said):
+                    raise SurgeError(f"this Python ({sys.version_info[0]}.{sys.version_info[1]}) cannot load the pedalboard music-production installed: "
+                                     f'run its bootstrap.py with this Python. {said}')
+                raise SurgeError(f"Surge XT failed to play '{perf['patch']}' (music-production {_version(skill)}): {said}")
+            try:
+                data, info = wav.read(out)
+            except ValueError as error:
+                text = 'audio that is not finite' if 'finite' in str(error).lower() else f'no usable audio ({error})'
+                raise SurgeError(f"Surge XT gave {text} for '{perf['patch']}' (music-production {_version(skill)})") from None
+        finally:
+            for path in (job_file, out, private):      # what the host was given and wrote goes no further than this take
+                if os.path.lexists(path) and not is_link(path):
+                    _write(path, b'')
         x = np.asarray(data, dtype=np.float64)
         if info['rate'] != RATE or x.ndim != 2 or x.shape[1] != 2 or not len(x):
             raise SurgeError(f"Surge XT gave no 48 kHz stereo audio for '{perf['patch']}'")
+        expected = int(round(duration * RATE)) - trim
+        if abs(len(x) - expected) > FRAMES_SLACK:
+            raise SurgeError(f"Surge XT gave {len(x)} frames for '{perf['patch']}' where {expected} were asked: the take is not kept")
         peak = float(np.max(np.abs(x)))
         if peak <= SILENT:
             raise SurgeError(f"this take of '{perf['patch']}' was silent: try other notes for this patch")
@@ -481,9 +516,11 @@ class Provider:
         digest = _sha(encoded)
         final = self.folder / f'{digest}.wav'
         self._no_link(final)
-        if not final.exists():
+        if not os.path.lexists(final):
             _write(staged_wav, encoded)
             os.replace(staged_wav, final)
+        elif final.read_bytes() != encoded:
+            raise SurgeError(f'{final.name} in {FOLDER} is named like this take but holds other audio: move it out of the folder and record again')
         receipt = {'schema': SCHEMA, 'key': key, 'performance': perf, 'wav': final.name, 'wav_sha256': digest, 'frames': int(len(x)),
                    'patch': {k: entry.get(k) for k in ('name', 'source', 'category', 'license', 'sha256', 'transpose')} | {'id': perf['patch']},
                    'made_with': {'surge': self.config['surge'].get('version'), 'plugin_sha256': self.config['surge'].get('sha256'),
@@ -503,7 +540,7 @@ class Provider:
         """The bytes of the takes in the folder (no link is followed)."""
         if self.folder is None or is_link(self.folder) or not self.folder.is_dir():
             return 0
-        return sum(p.stat().st_size for p in self.folder.iterdir() if p.is_file() and not is_link(p))
+        return sum(p.stat().st_size for p in self.folder.iterdir() if not is_link(p) and p.is_file())
 
 
 class Players:

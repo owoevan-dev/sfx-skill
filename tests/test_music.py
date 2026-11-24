@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import unittest
+from unittest import mock
 
 import helpers
 from sfxlib import music, project
@@ -185,6 +186,17 @@ class Reading(unittest.TestCase):
         self.assertEqual(row['pitch_classes'], ['C', 'E', 'G', 'B'])
         self.assertIn('C E G B', '\n'.join(music.overview(music.describe(piece()))))
 
+    def test_a_part_on_a_kit_s_bank_has_no_pitch_classes(self):
+        for fields in ({'bank': 128}, {'patch': {'bank': 128, 'program': 0}}):
+            song = piece(tracks=[part('kit', [(0, 0.5, 36)], **fields)])
+            with self.subTest(fields=fields):
+                self.assertNotIn('pitch_classes', music.describe(song)['tracks'][0])
+                self.assertTrue(music.quote(song, 'kit', 1, 1)['drums'])
+        pad = piece(tracks=[part('pad', [(0, 0.5, 60)], engine='synth', bank=128)])      # a synthesizer's bank says nothing of its sound
+        self.assertIn('pitch_classes', music.describe(pad)['tracks'][0])
+        melodic = piece(tracks=[part('keys', [(0, 0.5, 60)], bank=128, patch={'bank': 0, 'program': 4})])
+        self.assertIn('pitch_classes', music.describe(melodic)['tracks'][0])
+
     def test_drums_and_noise_have_no_pitch_classes(self):
         hits = [(0, 0.5, 36), (1, 0.5, 38)]
         for fields in ({'drums': True}, {'engine': 'drum_synth'}, {'engine': 'noise'}):
@@ -199,6 +211,11 @@ class Reading(unittest.TestCase):
         self.assertEqual(row['notes'], 0)
         self.assertNotIn('first_bar', row)
 
+    def test_a_tempo_change_at_the_very_end_is_placed_there(self):
+        info = music.describe(piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120], [16, 60]]}))
+        self.assertEqual((info['tempo'][1]['bar'], info['tempo'][1]['beat']), (5, 1.0))
+        self.assertIn('60 at the end', '\n'.join(music.overview(info)))
+
     def test_project_text_stays_on_its_line(self):
         song = piece(title='Line one\nLine two' + chr(0x202E) + chr(7))
         song['sections'][0]['intent'] = 'a\r\nb' + chr(0x2028) + 'c'
@@ -207,6 +224,40 @@ class Reading(unittest.TestCase):
         self.assertTrue(any('(a b c)' in line for line in lines))
         for line in lines:
             self.assertFalse(set(line) & {'\n', '\r', chr(0x202E), chr(7), chr(0x2028)}, line)
+
+
+class HostileFiles(unittest.TestCase):
+    def test_only_a_file_is_read(self):
+        with self.assertRaisesRegex(music.MusicError, 'not a file'):
+            music.load(folder())
+
+    def test_no_more_is_read_than_a_project_holds(self):
+        path = saved(piece())
+        with mock.patch.object(music, 'MAX_FILE_BYTES', 50), self.assertRaisesRegex(music.MusicError, 'more than'):
+            music.load(path)
+
+    def test_a_number_too_large_for_a_float_is_refused_not_a_crash(self):
+        song = piece()
+        song['tracks'][0]['notes'][0]['on'] = 10 ** 400
+        with self.assertRaisesRegex(music.MusicError, 'lead'):
+            music.describe(song)
+        with self.assertRaisesRegex(music.MusicError, 'tempo'):
+            music.Clock({'bars': 4, 'meter': [4, 4], 'tempo': [[0, 10 ** 400]]})
+
+    def test_a_track_whose_id_is_not_a_track_id_is_refused(self):
+        for bad in (['lead2'], 'L' * 3, 'a' * 49, 7):
+            song = piece()
+            song['tracks'].append(part('other', [(0, 1, 60)]))
+            song['tracks'][-1]['id'] = bad
+            with self.subTest(bad=bad), self.assertRaises(music.MusicError):
+                music.describe(song)
+            self.assertEqual(len(music.quote(song, 'lead', 2, 2)['notes']), 2)      # the part asked for still reads
+
+    def test_a_note_id_too_long_for_the_schema_is_refused(self):
+        song = piece()
+        song['tracks'][0]['notes'][0]['id'] = 'n' * 121
+        with self.assertRaisesRegex(music.MusicError, 'id'):
+            music.describe(song)
 
 
 class Quoting(unittest.TestCase):
@@ -267,6 +318,23 @@ class Quoting(unittest.TestCase):
             with self.subTest(word=word):
                 self.assertTrue(any(word in item for item in q['leaves_out']), q['leaves_out'])
                 self.assertIn('written score', '\n'.join(music.quote_lines(q)))
+
+    def test_a_sustain_pedal_is_named(self):
+        song = piece()
+        song['tracks'][0]['performance']['cc'] = [[0, 64, 127], [7.9, 64, 0]]
+        self.assertTrue(any('sustain' in item for item in music.quote(song, 'lead', 2, 2)['leaves_out']))
+        song['tracks'][0]['performance']['cc'] = [[0, 1, 90], [1, 64, 0]]
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], [])
+
+    def test_a_reversed_part_names_only_what_its_render_does(self):
+        song = piece()
+        track = song['tracks'][0]
+        track['reverse'] = True
+        track['performance'].update(offset_ms=-20, bend=[[0, 1]], swing={'ratio': 0.6})
+        track['performance']['notes']['lead_2'].update(gate=0.5, timing_ms=9)
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ['each note played backwards'])
+        song['clock']['rubato'] = {'final_ratio': 0.6, 'final_beats': 4}
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["the piece's rubato", 'each note played backwards'])
 
     def test_the_piece_s_rubato_is_named(self):
         q = music.quote(piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'rubato': {'final_ratio': 0.6, 'final_beats': 4}}), 'lead', 2, 2)

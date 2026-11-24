@@ -158,8 +158,11 @@ class TheCommand(unittest.TestCase):
         self.assertIn('(holds only: heavy)', done.stdout)
         self.assertIn("0 recordings match 'heavy door', and 13 more hold some of its words (marked)", done.stdout)
         data = json.loads(self.cli('--find', 'heavy door', '--json').stdout)
-        self.assertEqual((data['matched'], data['matched_some_words']), (13, 13))
-        self.assertEqual(data['files'][0]['matched_words'] in (['door'], ['heavy']), True)
+        self.assertEqual((data['matched'], data['files']), (0, []))           # as in 0.1.3: files and matched hold every word
+        self.assertEqual(len(data['some_words']), 13)
+        self.assertTrue(all(f['matched_words'] in (['door'], ['heavy']) for f in data['some_words']))
+        data = json.loads(self.cli('--find', 'door', '--json').stdout)
+        self.assertEqual((data['matched'], len(data['files']), data['some_words']), (12, 12, []))
 
     def test_a_full_search_reads_as_before(self):
         done = self.cli('--find', 'door')

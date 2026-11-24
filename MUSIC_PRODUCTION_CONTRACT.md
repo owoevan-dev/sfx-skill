@@ -78,13 +78,15 @@ A `song.json` of schema `music-production/v1`, read as data.
 ## Surge host (recording a take)
 
 `python <music-production>/scripts/surge_host.py JOB.json`, with the scripts folder as the working directory. It is a GPL-3.0-or-later program of music-production that
-runs as its own process: only files pass between it and this skill. `JOB.json` holds:
+runs as its own process: only files pass between it and this skill. The job, the patch copy and the take it writes are in the
+render's own folder (`surge_work`), and emptied once the take is read; `surge_takes` beside the project holds only the takes and
+their receipts. `JOB.json` holds:
 
 | Field | Value |
 |---|---|
 | `plugin`, `pylib` | `surge.path`, `pedalboard.path` |
-| `patch` | the checked patch file, or a private copy of it with its tempo-synced delays and LFOs set free for the layer's `bpm` |
-| `out` | the WAV to write: 32-bit float, stereo, at `rate` |
+| `patch` | a copy of the checked patch file's bytes, with its tempo-synced delays and LFOs set free for the layer's `bpm` |
+| `out` | the WAV to write: 32-bit float, stereo, at `rate`, of `duration` x `rate` frames less `trim` (within 2), or the take is not kept |
 | `rate` | 48000 |
 | `events` | `[hex MIDI, seconds]`: note on and off, pitch bend, CC1; each 0.1 s late, and at one time controls first, then note-offs, then note-ons |
 | `duration`, `trim` | 0.1 s + the last note-off + the layer's `tail`; 4800 frames, which take that lead off again |

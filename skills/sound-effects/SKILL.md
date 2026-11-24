@@ -33,7 +33,7 @@ Run the commands from the game's project folder, by the full path of this skill'
 `scripts/sfx.py`), so that renders land in the project and never inside the skill.
 
 1. **Setup.** `python scripts/sfx.py doctor` passes (Python and NumPy; without NumPy it prints the command that installs
-   them) and shows whether FFmpeg, a sample library and Surge XT are there. With `--config <music-production configuration>`
+   them) and shows whether FFmpeg, a sample library (`--library LIB` for one elsewhere) and Surge XT are there. With `--config <music-production configuration>`
    it also checks music-production's own setup and that Surge XT can play.
 2. **Brief and palette.** Write down what the request settles and what it leaves open: the game, its world and
    materials, its style, which events need sounds, how often each is heard, which are loops (weather, rooms,
@@ -63,7 +63,7 @@ Run the commands from the game's project folder, by the full path of this skill'
      them once the user agrees. Tell them what it takes: a 2.9 GB download into DATA, which stays until they remove it,
      and 4.3 GB once imported, in the home folder unless `--library` or `$SFX_SKILL_LIBRARY` names another (about 7.2 GB
      in all). Then, since you cannot hear them:
-     1. `samples --find "metal door" --passing` lists the best matches first, in an order of this project's own (whole
+     1. `samples --find "metal door" --passing` lists the best matches first, in an order of this project's own (the folder you run it from stands for the project; whole
         words; when fewer than five recordings hold them all, it goes on with those holding some, each marked with the words
         it holds; `--not WORD` and `--max-seconds` narrow it; recordings labelled only as music come last unless you
         ask for music; without `--passing` it also lists the others, with why they failed). `samples --labels` lists the classes of sound the library is labelled with. Titles, tags and
@@ -167,7 +167,7 @@ measures well: report measurements as measurements and let the user's ears decid
 | `audition FOLDER [--ffmpeg PATH] [--config CONFIG]` | writes the audition page again (as FLAC when it finds an FFmpeg) |
 | `export FOLDER --target godot --output NEW [--formats wav,ogg] [--config CONFIG] [--res-path res://sfx]` | writes a render's files for an engine (godot, unity, unreal, roblox, web, generic) with a manifest (a new folder) |
 | `clean FOLDER --keep RENDER [--exports] [--trash] [--json]` | lists the old renders the kept one no longer needs; `--trash` moves them whole into `FOLDER/.sfx-trash`. A folder holding anything the skill did not write, one newer than the kept version and, without `--exports`, any export stay. `clean FOLDER --downloads` only lists the archives the library holds in full. Nothing is deleted |
-| `doctor [--config CONFIG] [--ffmpeg PATH]` | checks the setup (music-production and FFmpeg are optional) |
+| `doctor [--config CONFIG] [--ffmpeg PATH] [--library LIB]` | checks the setup (music-production, FFmpeg and the library are optional) |
 
 Sounds made with this skill carry no conditions when they use only synthesis, Surge XT, the instrument banks it allows and
 recordings under CC0, in the public domain or the user's own: no credit is needed and they may be used for anything. A

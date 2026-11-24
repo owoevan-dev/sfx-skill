@@ -219,10 +219,14 @@ def render(proj, out_dir, config=None, samples=None, ffmpeg=None, page=True, tak
     if out.exists() and any(out.iterdir()):
         raise RenderError(f'{out} already holds files; a render goes into a new folder')
     surge_takes = _surge_takes(proj, takes, config, record_takes, music_skill)
-    (out / 'master').mkdir(parents=True, exist_ok=True)
+    try:
+        (out / 'master').mkdir(parents=True, exist_ok=False)      # the render's claim on the folder: a second one at once stops here
+    except FileExistsError:
+        raise RenderError(f'{out} is being written by another render; a render goes into a new folder') from None
     (out / '.gdignore').write_bytes(b'')               # inside a Godot project the editor would import every file here
     provider = instruments.Provider(config, out / 'instruments') if config else None
     if surge_takes is not None:
+        surge_takes.work = out / surge.WORK             # a recording's job, patch copy and raw take, emptied once read
         provider = surge.Players(provider, surge_takes)
     library = None
     if samples:

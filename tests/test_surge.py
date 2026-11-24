@@ -24,7 +24,7 @@ job = json.load(open(sys.argv[1], encoding="utf-8"))
 log = os.environ.get("SFX_FAKE_SURGE_LOG")
 if log:
     with open(log, "a", encoding="utf-8") as f:
-        f.write(json.dumps(job) + "\n")
+        f.write(json.dumps(dict(job, patch_bytes=open(job["patch"], "rb").read().decode("latin-1"))) + "\n")
 mode = os.environ.get("SFX_FAKE_SURGE_MODE", "")
 if mode == "slow":
     time.sleep(0.4)
@@ -37,8 +37,10 @@ if mode == "no_board":
 if mode == "nothing":
     sys.exit(0)
 frames = int(round(job["duration"] * job["rate"])) - job["trim"]
+if mode == "short":
+    frames = 2
 level = {"silent": 0.0, "loud": 2.5}.get(mode, 0.8)
-phase = random.random() * 6.283
+phase = 0.0 if mode == "fixed" else random.random() * 6.283
 out = array.array("f")
 for i in range(frames):
     x = level * math.sin(phase + 6.283185 * 440.0 * i / job["rate"]) * math.exp(-3.0 * i / job["rate"])
@@ -119,7 +121,7 @@ class FakeSurge:
         return mock.patch.dict(os.environ, {'SFX_FAKE_SURGE_LOG': str(self.log), 'SFX_FAKE_SURGE_MODE': mode})
 
     def provider(self, folder, record=True):
-        return surge.Provider(folder, self.config, self.skill, record=record)
+        return surge.Provider(folder, self.config, self.skill, record=record, work=self.base / 'render' / surge.WORK)
 
 
 def source(**extra):
@@ -180,6 +182,11 @@ class Identity(unittest.TestCase):
                        {'bpm': 90}, {'tail': 0.2}, {'slot': 'take:2'}, {'slot': 'spell/0/1'}):
             self.assertNotEqual(base, surge.key_of(surge.performance(source(**change))), change)
 
+    def test_the_order_notes_are_written_in_is_not_a_change(self):
+        a = source(notes=[[0, 69, 0.1, 100], [0.2, 72, 0.1, 90]])
+        b = source(notes=[[0.2, 72, 0.1, 90], [0, 69, 0.1, 100]])
+        self.assertEqual(surge.key_of(surge.performance(a)), surge.key_of(surge.performance(b)))
+
     def test_defaults_written_out_are_the_same_performance(self):
         a = {'type': 'surge', 'patch': 'factory/fx/plain', 'notes': [[0, 69, 1, 100]], 'slot': 'take:1'}
         b = dict(a, notes=[[0.0, 69, 1.0, 100]], macros={}, bpm=120, tail=2.0, bend_range=7)
@@ -221,6 +228,17 @@ class Events(unittest.TestCase):
         self.assertEqual(last[1] | (last[2] << 7), 16383)
         self.assertEqual(rows[0][0][1] | (rows[0][0][2] << 7), 8192)
 
+    def test_every_point_of_a_curve_is_played(self):
+        rows = self.rows(bend=[[0, 0], [0.002, 2], [0.004, 0]], bend_range=2)
+        values = [(r[0][1] | (r[0][2] << 7), round(r[1] - surge.LEAD_S, 6)) for r in rows if r[0][0] == 0xE0]
+        self.assertIn((16383, 0.002), values)
+        self.assertEqual(values[-1][0], 8192)
+
+    def test_at_one_time_as_the_host_has_it_an_off_comes_before_an_on(self):
+        rows = self.rows(notes=[[0, 60, 0.30000000000000004, 100], [0.3, 60, 0.1, 90]])
+        at = [(r[0][0], r[1]) for r in rows]
+        self.assertEqual(at[1:3], [(0x80, round(surge.LEAD_S + 0.3, 6)), (0x90, round(surge.LEAD_S + 0.3, 6))])
+
     def test_the_wheel_is_cc1_and_stops_with_the_take(self):
         rows = self.rows(wheel=[[0, 0], [5.0, 1]])
         wheel = [r for r in rows if r[0][0] == 0xB0]
@@ -239,14 +257,29 @@ class Variation(unittest.TestCase):
     def test_without_a_take_each_variant_is_its_own_performance_in_its_own_time(self):
         a, _ = self.spec(0)
         b, drawn = self.spec(2, bend=[[0.1, 1]], wheel=[[0.1, 1]])
-        self.assertEqual(a['slot'], 'spell/0/0')
-        self.assertEqual(b['slot'], 'spell/0/2')
+        self.assertEqual(a['slot'], 'spell/factory/fx/plain/0/0')
+        self.assertEqual(b['slot'], 'spell/factory/fx/plain/0/2')
         time = 1 + drawn['time_pct'] / 100
         self.assertAlmostEqual(b['notes'][0][0], 0.1 * time)
         self.assertAlmostEqual(b['notes'][0][2], 0.1 * time)
         self.assertAlmostEqual(b['bend'][0][0], 0.1 * time)
         self.assertAlmostEqual(b['wheel'][0][0], 0.1 * time)
         self.assertAlmostEqual(b['cents'], drawn['pitch_cents'])
+
+    def test_other_layers_coming_or_going_leave_a_take_where_it_is(self):
+        surge_layer = copied()
+        other = {'source': {'type': 'noise', 'color': 'pink'}, 'length': 0.1}
+        another_patch = dict(copied(), source=dict(copied()['source'], patch='factory/fx/up'))
+        slots = []
+        for layers in ([surge_layer], [other, surge_layer], [another_patch, surge_layer], [surge_layer, other, surge_layer]):
+            sound = project_with(copied(), variants_count=2)['sounds'][0]
+            sound['layers'] = json.loads(json.dumps(layers))
+            spec, _ = variants.layer_spec(sound, 7, 1)
+            slots.append([l['source']['slot'] for l in spec['layers'] if l['source'].get('patch') == 'factory/fx/plain'])
+        self.assertEqual(slots[0], slots[1])
+        self.assertEqual(slots[0], slots[2])
+        self.assertEqual(slots[3][0], slots[0][0])
+        self.assertNotEqual(slots[3][0], slots[3][1])                 # two layers on one patch are two performances
 
     def test_a_named_take_is_one_performance_for_every_variant(self):
         a, _ = self.spec(0, take=2)
@@ -298,7 +331,7 @@ class Takes(unittest.TestCase):
         np.testing.assert_array_equal(first, again)
 
     def test_with_no_take_and_no_word_to_record_it_stops(self):
-        with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, '--record-takes'):
+        with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, '--record-takes --config'):
             self.fake.provider(self.folder, record=False).render(source())
         self.assertEqual(self.fake.jobs(), [])
         self.assertFalse(self.folder.exists())
@@ -377,6 +410,75 @@ class Takes(unittest.TestCase):
         self.assertEqual(len(self.fake.jobs()), 1)
         np.testing.assert_array_equal(results[0], results[1])
 
+    def test_the_folder_holds_only_takes_and_the_work_files_are_emptied(self):
+        with self.fake.env():
+            self.fake.provider(self.folder).render(source(patch='factory/fx/synced'))
+        names = sorted(p.name for p in self.folder.iterdir())
+        self.assertEqual([n for n in names if not (n.endswith('.wav') or n.endswith('.json'))], ['.gdignore', '.lock'])
+        self.assertEqual(len([n for n in names if n.endswith('.wav')]), 1)
+        work = self.base / 'render' / surge.WORK
+        self.assertEqual({p.name: p.stat().st_size for p in work.iterdir()}, {'job.json': 0, 'take.wav': 0, 'patch.fxp': 0})
+        with self.fake.env('fail'), self.assertRaises(surge.SurgeError):
+            self.fake.provider(self.folder).render(source(slot='take:2'))
+        self.assertEqual({p.stat().st_size for p in work.iterdir()}, {0})
+
+    def test_recording_needs_a_work_folder(self):
+        with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, 'render'):
+            surge.Provider(self.folder, self.fake.config, self.fake.skill, record=True).render(source())
+        self.assertEqual(self.fake.jobs(), [])
+
+    def test_relative_folders_reach_the_host_whole(self):
+        here = os.getcwd()
+        os.chdir(self.base)
+        try:
+            with self.fake.env():
+                surge.Provider(Path('game') / surge.FOLDER, self.fake.config, 'music-production', record=True, work=Path('render') / surge.WORK).render(source())
+        finally:
+            os.chdir(here)
+        job = self.fake.jobs()[0]
+        self.assertTrue(all(Path(job[k]).is_absolute() for k in ('patch', 'out')))
+
+    def test_a_take_of_the_wrong_length_is_not_kept(self):
+        with self.fake.env('short'), self.assertRaisesRegex(surge.SurgeError, 'frames'):
+            self.fake.provider(self.folder).render(source())
+        self.assertEqual(list(self.folder.glob('*.json')), [])
+
+    def test_a_file_already_named_like_the_take_but_holding_other_audio_is_not_taken_for_it(self):
+        with self.fake.env('fixed'):
+            self.fake.provider(self.folder).render(source())
+        receipt = next(self.folder.glob('*.json'))
+        record = json.loads(receipt.read_text(encoding='utf-8'))
+        (self.base / 'aside').mkdir()
+        os.rename(receipt, self.base / 'aside' / receipt.name)
+        wav_path = self.folder / record['wav']
+        wav_path.write_bytes(wav_path.read_bytes()[:-3] + b'abc')
+        with self.fake.env('fixed'), self.assertRaisesRegex(surge.SurgeError, record['wav']):
+            self.fake.provider(self.folder).render(source())
+        self.assertEqual(list(self.folder.glob('*.json')), [])
+
+    def test_a_receipt_must_be_of_this_performance_and_length(self):
+        with self.fake.env():
+            self.fake.provider(self.folder).render(source())
+        path = next(self.folder.glob('*.json'))
+        good = json.loads(path.read_text(encoding='utf-8'))
+        for bad in ({'frames': good['frames'] + 1}, {'performance': dict(good['performance'], tail=9)}):
+            path.write_text(json.dumps({**good, **bad}), encoding='utf-8')
+            with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, 'receipt', msg=str(bad)[:30]):
+                surge.Provider(self.folder).render(source())
+
+    def test_a_missing_recording_stops_before_the_render_makes_its_folder(self):
+        with self.fake.env():
+            self.fake.provider(self.folder).render(dict(source(), slot=None, take=1))
+        receipt = json.loads(next(self.folder.glob('*.json')).read_text(encoding='utf-8'))
+        (self.base / 'aside').mkdir()
+        os.rename(self.folder / receipt['wav'], self.base / 'aside' / receipt['wav'])
+        out = self.base / 'render_2'
+        layer = copied()
+        layer['source']['take'] = 1
+        with self.assertRaisesRegex(render.RenderError, 'missing'):
+            render.render(project_with(layer), out, takes=self.folder)
+        self.assertFalse(out.exists())
+
     def test_the_folder_is_hidden_from_godot(self):
         with self.fake.env():
             self.fake.provider(self.folder).render(source())
@@ -400,27 +502,26 @@ class Takes(unittest.TestCase):
     def test_takes_are_not_replayed_through_a_link(self):
         real = self.base / 'real_takes'
         with self.fake.env():
-            surge.Provider(real, self.fake.config, self.fake.skill, record=True).render(source())
+            surge.Provider(real, self.fake.config, self.fake.skill, record=True, work=self.base / 'render' / surge.WORK).render(source())
         self.link_folder(self.folder, real)
         with self.assertRaisesRegex(surge.SurgeError, 'link'):
             surge.Provider(self.folder).render(source())
 
     def test_a_linked_work_folder_is_not_written_through(self):
-        self.folder.mkdir()
+        (self.base / 'render').mkdir()
         outside = self.base / 'outside'
         outside.mkdir()
-        self.link_folder(self.folder / surge.WORK, outside)
+        self.link_folder(self.base / 'render' / surge.WORK, outside)
         with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, 'link'):
             self.fake.provider(self.folder).render(source())
         self.assertEqual(list(outside.iterdir()), [])
 
     def test_a_link_inside_the_folder_is_not_written_through(self):
-        self.folder.mkdir()
-        (self.folder / surge.WORK).mkdir()
+        (self.base / 'render' / surge.WORK).mkdir(parents=True)
         victim = self.base / 'victim.wav'
         victim.write_bytes(b'keep')
         try:
-            os.symlink(victim, self.folder / surge.WORK / 'take.wav')
+            os.symlink(victim, self.base / 'render' / surge.WORK / 'take.wav')
         except OSError:
             self.skipTest('this account cannot make symbolic links')
         with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, 'link'):
@@ -442,14 +543,15 @@ class Host(unittest.TestCase):
     def test_the_job_is_what_the_host_expects(self):
         self.record(macros={'2': 0.25}, bend=[[0, 1]], bend_range=5)
         job = self.fake.jobs()[0]
-        self.assertEqual(job['plugin'], self.fake.config['surge']['path'])
-        self.assertEqual(job['pylib'], self.fake.config['pedalboard']['path'])
+        self.assertEqual(job['plugin'], str(Path(self.fake.config['surge']['path']).resolve()))
+        self.assertEqual(job['pylib'], str(Path(self.fake.config['pedalboard']['path']).resolve()))
         self.assertEqual(job['rate'], RATE)
         self.assertEqual(job['trim'], 4800)
         self.assertEqual(job['macros'], {'2': 0.25})
         self.assertEqual(job['bend_range'], 5)
         self.assertAlmostEqual(job['duration'], surge.LEAD_S + 0.1 + 0.1)
-        self.assertEqual(Path(job['patch']).read_bytes(), (self.fake.patches / 'patches_factory/FX/Plain.fxp').read_bytes())
+        self.assertEqual(job['patch_bytes'].encode('latin-1'), (self.fake.patches / 'patches_factory/FX/Plain.fxp').read_bytes())
+        self.assertEqual(Path(job['patch']).parent, (self.base / 'render' / surge.WORK).resolve())
 
     def test_a_patch_built_an_octave_off_is_played_where_it_sounds_right(self):
         self.record(patch='factory/fx/up')
@@ -471,7 +573,7 @@ class Host(unittest.TestCase):
         original = (self.fake.patches / 'patches_factory/FX/Synced.fxp').read_bytes()
         self.record(patch='factory/fx/synced', bpm=60)
         job = self.fake.jobs()[0]
-        played = Path(job['patch']).read_bytes()
+        played = job['patch_bytes'].encode('latin-1')
         self.assertNotEqual(played, original)
         self.assertNotIn(b'temposync="1"', played)
         self.assertIn(b'<fx0_p0 type="2" value="-1.000000"', played)
@@ -511,6 +613,27 @@ class Host(unittest.TestCase):
         with self.assertRaisesRegex(surge.SurgeError, 'the fake host stopped'):
             self.record('fail')
         self.assertEqual(list(self.folder.glob('*.json')), [])
+
+    def native(self, tag):
+        """Put a compiled module of pedalboard for `tag` (such as cp399) into the fake package, listed in its RECORD."""
+        pylib = Path(self.fake.config['pedalboard']['path'])
+        name = f'pedalboard/_native.{tag}-win_amd64.pyd' if os.name == 'nt' else f'pedalboard/_native.cpython-{tag[2:]}-x86_64-linux-gnu.so'
+        (pylib / name).write_bytes(b'native')
+        record = pylib / 'pedalboard-0.9.26.dist-info' / 'RECORD'
+        digest = base64.urlsafe_b64encode(hashlib.sha256(b'native').digest()).rstrip(b'=').decode()
+        record.write_bytes(record.read_bytes() + f'{name},sha256={digest},6\n'.encode())
+        self.fake.config['pedalboard']['record_sha256'] = sha(record.read_bytes())
+
+    def test_a_pedalboard_built_for_another_python_is_said_first(self):
+        self.native('cp399')
+        self.assertIn('3.99', surge.status(self.fake.config, self.fake.skill))
+        with self.fake.env(), self.assertRaisesRegex(surge.SurgeError, '3.99'):
+            self.fake.provider(self.folder).render(source())
+        self.assertEqual(self.fake.jobs(), [])
+
+    def test_a_pedalboard_built_for_this_python_passes(self):
+        self.native(f'cp{sys.version_info[0]}{sys.version_info[1]}')
+        self.assertTrue(surge.status(self.fake.config, self.fake.skill).startswith('OK'))
 
     def test_a_python_that_cannot_load_pedalboard_is_told(self):
         with self.assertRaisesRegex(surge.SurgeError, 'Python'):
@@ -628,7 +751,7 @@ class Finding(unittest.TestCase):
         changed = surge.status(self.fake.config, self.fake.skill)
         self.assertIn('plugin', changed)
         self.fake.binary.write_bytes(b'plugin')
-        self.assertEqual(surge.status(self.fake.config, self.fake.skill), 'OK (5 patches to play)')
+        self.assertEqual(surge.status(self.fake.config, self.fake.skill), 'OK (5 of its 7 patches can play a layer; 2 are MPE or silent)')
         self.assertIn('not in this configuration', surge.status({}, self.fake.skill))
         self.assertIn('not found', surge.status(None, None))
 

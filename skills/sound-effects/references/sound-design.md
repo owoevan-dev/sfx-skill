@@ -321,8 +321,9 @@ easy with the chain's `room`.
 `render --record-takes --config CONFIG` into `surge_takes` beside the project, and every later render plays that file: the
 sound stays as it was heard, and the project renders without Surge. Keep the folder with the project. Each variant has a
 performance of its own, which is what makes repeats sound alive. Name a `take` when every variant should be the same
-performance, moved only in pitch, time and level. Changing `cents`, gain, filter, envelope or placement records nothing;
-changing the patch, notes or controls asks for a new take.
+performance, moved only in pitch, time and level. A take belongs to its sound, its variant and its place among the
+sound's layers on the same patch, so adding or removing other layers records nothing, and neither does changing `cents`, gain,
+filter, envelope or placement; changing the patch, notes or controls, or renaming the sound, asks for a new take.
 
 **Five magic sounds as stacks.** These are this skill's own starting points, built on the stack of section 3 and the meanings
 of section 5. Keep the short transient and the low weight in synthesis, where they are exact, and let Surge carry the

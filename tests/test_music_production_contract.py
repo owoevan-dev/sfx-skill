@@ -73,7 +73,7 @@ class Contract(unittest.TestCase):
         folder = helpers.scratch('contract_surge') / surge.FOLDER
         source = {'type': 'surge', 'patch': 'factory/fx/fireworks', 'notes': [[0.0, 72, 0.4, 100]], 'tail': 0.6, 'bpm': 96, 'macros': {'1': 0.5},
                   'bend': [[0, 0], [0.4, 2]], 'wheel': [[0, 0], [0.4, 1]], 'slot': 'take:1'}
-        played = surge.Provider(folder, config, LOCAL['music_skill'], record=True).render(source)
+        played = surge.Provider(folder, config, LOCAL['music_skill'], record=True, work=folder.parent / 'render' / surge.WORK).render(source)
         self.assertLessEqual(abs(len(played) - 48000), 2)
         self.assertAlmostEqual(float(abs(played).max()), 0.5, places=3)
         self.assertTrue((surge.Provider(folder).render(source) == played).all())

@@ -168,7 +168,7 @@ def cmd_render(args):
                     flows=[f for f in proj['flows'] if set(f['sounds']) <= set(args.sound)])
     try:
         report = render.render(proj, args.output, config=config, samples=lib, ffmpeg=ff, page=not args.no_page,
-                               takes=Path(args.project).resolve().parent / surge.FOLDER, record_takes=args.record_takes,
+                               takes=Path(args.project).absolute().parent / surge.FOLDER, record_takes=args.record_takes,
                                music_skill=args.music_skill)
     except render.RenderError as error:
         print(f'render: {error}')
@@ -194,9 +194,11 @@ def cmd_audition(args):
     if not (folder / 'check.json').is_file():
         print(f'audition: {folder} is not a checked render folder (no check.json)')
         return 1
-    ok, ff = _ffmpeg(args, 'audition')
-    if not ok:
-        return 1
+    try:                                 # FFmpeg only makes the page smaller, so a missing or stale one is no failure
+        ff = ffmpeg.find(args.ffmpeg, mpbridge.load_config(args.config) if args.config else None)
+    except (ffmpeg.FFmpegError, mpbridge.MusicSkillError) as error:
+        print(f'audition: {error}; the page holds WAV')
+        ff = None
     path = audition.build(folder, ffmpeg=ff)
     render.refresh_listing(folder, ['audition.html'])
     print(f'audition page: {path}')
@@ -530,8 +532,9 @@ def cmd_samples(args):
     summary = not args.find and not args.json and args.limit is None
     limit = args.limit if args.limit is not None else (FIND_SHOWN if args.find and not args.json else 0)
     files = [] if summary else files[:limit] if limit else files
-    if args.json:
-        print(json.dumps({'packs': index['packs'], 'files': files, 'matched': total, 'matched_some_words': some}, indent=1, ensure_ascii=False))
+    if args.json:                        # files and matched hold every word, as before; those holding some of them come apart
+        print(json.dumps({'packs': index['packs'], 'files': [f for f in files if 'matched_words' not in f], 'matched': total - some,
+                          'some_words': [f for f in files if 'matched_words' in f]}, indent=1, ensure_ascii=False))
         return 0
     shown = {f['library'] for f in files} if args.find else set(index['packs'])
     for pack_id, pack in sorted(index['packs'].items()):        # a search names only the packs whose licence asks for something
@@ -655,8 +658,8 @@ def cmd_music(args):
     return 0
 
 
-def _library_line():
-    folder = samples.default_library()
+def _library_line(named=None):
+    folder = Path(named) if named else samples.default_library()
     if not (folder / samples.INDEX).is_file():
         return f'sample library: none yet at {folder} (needed only for recorded layers; sfx.py samples tells how to fill it)'
     try:
@@ -698,7 +701,7 @@ def cmd_doctor(args):
         return 1
     print(f'Surge XT: {surge.status(config, skill)}')
 
-    print(_library_line())
+    print(_library_line(args.library))
     found, ff = _ffmpeg(args, 'FFmpeg')
     if not found:
         return 1
@@ -1048,6 +1051,7 @@ def build_parser():
     doc.add_argument('--music-skill', help='the music-production folder, if not beside this skill or in '
                      '~/.claude/skills')
     doc.add_argument('--tmp', help='a folder for TMP and TEMP of child processes')
+    doc.add_argument('--library', help='the sample library to report on, if not the default one (~/.sfx-skill/library or $SFX_SKILL_LIBRARY)')
     doc.set_defaults(func=cmd_doctor)
     return parser
 

@@ -84,9 +84,12 @@ def _write_json(path, data):
     path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + '\n', encoding='utf-8', newline='\n')
 
 
-def _run(ffmpeg, args, data=None):
-    proc = subprocess.run([str(ffmpeg), '-hide_banner', '-loglevel', 'error', *args], input=data,
-                          capture_output=True)
+def _run(ffmpeg, args, data=None, timeout=None):
+    try:
+        proc = subprocess.run([str(ffmpeg), '-hide_banner', '-loglevel', 'error', *args], input=data,
+                              capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ExportError(f"FFmpeg did not finish in {timeout} s ({' '.join(args[:6])} ...)") from None
     if proc.returncode != 0:
         raise ExportError(f"FFmpeg failed ({' '.join(args[:6])} ...): {proc.stderr.decode('utf-8', 'replace')[:400]}")
     return proc.stdout
