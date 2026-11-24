@@ -73,7 +73,7 @@ A `song.json` of schema `music-production/v1`, read as data.
 | `title`, `sections[].id`, `.start_bar` (from 0), `.bars`, `.intent` | printed, with bars counted from 1 |
 | `harmony[].bar` (from 1), `.beat` (quarter notes into the bar), `.symbol`, `.transpose_semitones`, or an older free-form value | printed as declared, a transposed chord beside its symbol |
 | `plan` | printed as written |
-| `tracks[].id`, `.name`, `.role`, `.engine`, `.drums`, `.range` | printed; `drums` and the engines `drum_synth` and `noise` have no pitch classes |
+| `tracks[].id`, `.name`, `.role`, `.engine`, `.drums`, `.range`, `.patch.bank` | printed; the engines `drum_synth` and `noise` have no pitch classes, nor does a SoundFont part on a kit's bank (128) or one with `drums` and no `patch` (music-production plays it on the drum channel); with `drums` and a patch off the kit's bank it is played as pitches |
 | `tracks[].notes[].id`, `.on`, `.duration`, `.pitch` | the written notes, in quarter notes |
 | `tracks[].performance.notes.<id>.velocity` | a quoted note's velocity |
 | `.performance.notes.<id>.timing_ms`, `.gate`, `.performance.swing`, `.offset_ms`, `.bend`, `.cc`, `.cc_mode`, `.legato`, `.dynamics`, `tracks[].key_map`, `.reverse` | named when a quote leaves them out: a bend or controller where it reaches the quoted bars (a value set before them too) and the part's engine plays it (Surge XT the mod wheel and sustain pedal; the additive synth expression, brightness and the mod wheel; a SoundFont preset any; the built-in synth, drum machine and noise engine none), and a SoundFont part's legato where it joins quoted notes |

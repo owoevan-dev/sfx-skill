@@ -298,7 +298,8 @@ def describe(key, entry):
 def status(config, skill):
     """What `doctor` says of Surge XT, which only surge layers need."""
     if skill is None:
-        return "not found (only surge layers need it; music-production's setup installs it)"
+        return ("not found (only surge layers need it; music-production's setup installs it, and one installed as a plugin sits in a "
+                "folder of its own: name it with --music-skill DIR)")
     if config is None:
         return 'give --config to check it (only surge layers need it)'
     if not config.get('surge') or not config.get('pedalboard') or not config['surge'].get('catalog'):
@@ -397,7 +398,8 @@ class Provider:
         except mpbridge.MusicSkillError as error:
             raise SurgeError(str(error)) from None
         if skill is None:
-            raise SurgeError('recording a Surge take needs the music-production skill, which installs Surge XT')
+            raise SurgeError('recording a Surge take needs the music-production skill, which installs Surge XT; one installed as a plugin '
+                             'sits in a folder of its own: name it with --music-skill DIR')
         return Path(skill).resolve()         # the host runs in its own folder, where a relative path would be read again
 
     def _locate(self):

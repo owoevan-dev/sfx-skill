@@ -693,7 +693,8 @@ def cmd_doctor(args):
         print(f'music-production: {error}')
         return 1
     print(f'music-production: {skill}' if skill else
-          'music-production: not found (needed only for instrument and Surge layers)')
+          'music-production: not found (needed only for instrument and Surge layers; one installed as a plugin sits in a folder of its '
+          'own: name it with --music-skill DIR)')
     try:
         config = mpbridge.load_config(args.config) if args.config else None
     except mpbridge.MusicSkillError as error:

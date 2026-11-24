@@ -22,6 +22,16 @@ class Doctor(unittest.TestCase):
         self.assertIn('NumPy', proc.stdout)
         self.assertIn('synthesis: OK', proc.stdout)
 
+    def test_a_music_production_it_cannot_find_is_said_with_how_to_name_it(self):
+        home = helpers.scratch('doctor_empty_home')                     # no ~/.claude/skills here, as with a plugin install
+        env = dict(helpers.child_env(), USERPROFILE=str(home), HOME=str(home))
+        proc = subprocess.run([sys.executable, str(SFX), 'doctor'], capture_output=True, text=True, encoding='utf-8', errors='replace',
+                              env=env, timeout=300)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        line = next(l for l in proc.stdout.splitlines() if l.startswith('music-production:'))
+        self.assertIn('not found', line)
+        self.assertIn('--music-skill', line)
+
     def test_a_named_folder_that_is_not_music_production_fails(self):
         base = helpers.scratch('doctor_bad_skill')
         proc = run('doctor', '--music-skill', str(base))

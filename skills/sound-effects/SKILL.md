@@ -34,7 +34,10 @@ Run the commands from the game's project folder, by the full path of this skill'
 
 1. **Setup.** `python scripts/sfx.py doctor` passes (Python and NumPy; without NumPy it prints the command that installs
    them) and shows whether FFmpeg, a sample library (`--library LIB` for one elsewhere) and Surge XT are there. With `--config <music-production configuration>`
-   it also checks music-production's own setup and that Surge XT can play.
+   it also checks music-production's own setup and that Surge XT can play. It looks for music-production beside this skill
+   and in `~/.claude/skills`; installed as a plugin, music-production sits in a folder of its own, so when it is among your
+   skills but `doctor` does not find it, find that folder (the one holding `scripts/studio.py`, under your plugins folder)
+   and pass it as `--music-skill DIR` to `doctor`, `surge` and `render`, before suggesting an install.
 2. **Brief and palette.** Write down what the request settles and what it leaves open: the game, its world and
    materials, its style, which events need sounds, how often each is heard, which are loops (weather, rooms,
    machines), mono or stereo (mono for sounds the engine positions, stereo for ambience). Ask only for what blocks

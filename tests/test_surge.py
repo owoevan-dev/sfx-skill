@@ -857,6 +857,9 @@ class Finding(unittest.TestCase):
         self.assertEqual(surge.status(self.fake.config, self.fake.skill), 'OK (5 of its 7 patches can play a layer; 2 are MPE or silent)')
         self.assertIn('not in this configuration', surge.status({}, self.fake.skill))
         self.assertIn('not found', surge.status(None, None))
+        self.assertIn('--music-skill', surge.status(None, None))                 # a plugin install sits in a folder of its own
+        with mock.patch.object(surge.mpbridge, 'find_music_skill', return_value=None), self.assertRaisesRegex(surge.SurgeError, '--music-skill'):
+            surge.Provider(self.base / 'takes', self.fake.config, None, record=True)._skill()
 
     def test_doctor_counts_only_the_patches_its_patch_folder_holds(self):
         (self.fake.patches / self.fake.PATCHES['factory/fx/plain'][0]).unlink()
