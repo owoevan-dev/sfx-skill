@@ -534,6 +534,26 @@ def _check_use(c, sound, path, recipe_use):
     return use, {'seconds': seconds}
 
 
+def _check_doubled_takes(c, layers, path):
+    """Two unnamed surge layers of one sound that play one performance would tell their takes apart only by their order, so
+    that removing the first would hand the second the first one's recording: each needs a take of its own."""
+    from . import surge                         # here: surge reads the sample library's words, which this module need not load
+    seen = {}
+    for i, layer in enumerate(layers):
+        src = layer.get('source') if isinstance(layer, dict) else None
+        if not isinstance(src, dict) or src.get('type') != 'surge' or 'take' in src:
+            continue
+        try:
+            same = surge.key_of(dict(surge.performance(src), slot=None))
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue                            # the layer's own checks say what is wrong with it
+        if same in seen:
+            c.err(f'{path}.layers[{i}]', f'plays the same Surge performance as layers[{seen[same]}]: give each its own `take` (1-16), or '
+                  'make their notes differ (one velocity is enough), so that each keeps its own recording')
+        else:
+            seen[same] = i
+
+
 def _check_sound(c, sound, path, defaults):
     if not c.fields(sound, path, SOUND_FIELDS, ('id', 'category')):
         return None
@@ -611,6 +631,7 @@ def _check_sound(c, sound, path, defaults):
                 kind = _check_layer(c, layer, lpath, MAX_LOOP_S if loop else MAX_LENGTH_S)
                 if loop:
                     _check_loop_layer(c, layer, kind, lpath, loop['seconds'])
+            _check_doubled_takes(c, layers, path)
         if 'params' in sound:
             c.err(_join(path, 'params'), "belongs to a sound made by a recipe")
         if 'chain' in sound:

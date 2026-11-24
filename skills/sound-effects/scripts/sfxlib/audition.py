@@ -111,6 +111,8 @@ const LANGUAGE_STORE = STORE + ':language';      // apart from the feedback, so 
 // keyed by sound ids, which may be any name ("constructor" too): no prototype to find them in
 const buffers = Object.create(null);
 const last = Object.create(null);
+const views = Object.create(null);      // each card's way to show the feedback as it is now
+let showGeneral = () => {};
 let ctx = null;
 let master = null;
 let state = loadState();
@@ -128,24 +130,37 @@ function loadState() {
   } catch (e) { /* storage may be unavailable */ }
   return { sounds: sounds, general: '' };
 }
+// This window's changes that storage has not kept yet (a full storage refuses them): each stays here, on top of what is saved,
+// until a write goes through. `id` null is the general feedback.
+const unsaved = new Map();
+function change(base, u) {
+  if (u.id === null) { base.general = u.value; return; }
+  const was = own(base.sounds, u.id) && base.sounds[u.id] && typeof base.sounds[u.id] === 'object' ? base.sounds[u.id] : {};
+  const now = { verdict: was.verdict || '', note: was.note || '', gain_db: was.gain_db || 0 };
+  now[u.field] = u.value;
+  base.sounds[u.id] = now;
+}
 // One change, written into the feedback as it was saved last, by this window or another open on this page, so that what the
-// other window wrote stays; where nothing can be read back, into this window's own. `id` null is the general feedback.
+// other window wrote stays; where nothing can be read back, into this window's own.
 function saveState(id, field, value) {
+  unsaved.set(JSON.stringify([id, field]), { id: id, field: field, value: value });
   let base = state;
   try { if (window.localStorage.getItem(STORE) !== null) base = loadState(); } catch (e) { /* storage may be unavailable */ }
-  if (id === null) base.general = value;
-  else {
-    const was = own(base.sounds, id) && base.sounds[id] && typeof base.sounds[id] === 'object' ? base.sounds[id] : {};
-    const now = { verdict: was.verdict || '', note: was.note || '', gain_db: was.gain_db || 0 };
-    now[field] = value;
-    base.sounds[id] = now;
-  }
+  for (const u of unsaved.values()) change(base, u);
   state = base;
-  try { window.localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* not kept */ }
+  try { window.localStorage.setItem(STORE, JSON.stringify(state)); unsaved.clear(); } catch (e) { /* kept here until a write goes through */ }
   showFeedback();
 }
-// another window on this page saved: the feedback this one shows and copies is that now
-window.addEventListener('storage', e => { if (e.key === STORE || e.key === null) { state = loadState(); showFeedback(); } });
+// another window on this page saved: this one's feedback and controls show that now, with its own unkept changes on top, so that
+// what is typed here next starts from what was saved there
+window.addEventListener('storage', e => {
+  if (e.key !== STORE && e.key !== null) return;
+  state = loadState();
+  for (const u of unsaved.values()) change(state, u);
+  for (const id in views) views[id]();
+  showGeneral();
+  showFeedback();
+});
 // the language chosen before on this page, else the first of the browser's languages the page speaks, else English
 function pickLanguage() {
   let chosen = null;
@@ -340,16 +355,16 @@ function buildCard(s) {
   }
   card.appendChild(row);
   card.appendChild(el('canvas', { id: 'w-' + s.id }));
-  const st = entry(s.id);
+  const st = entry(s.id);                   // as the card opens: its handlers read entry(s.id), which another window's save can replace
   const gainRow = el('div', { class: 'row small' });
   const label = el('span', {}, '');
   const slider = el('input', { type: 'range', min: '-12', max: '6', step: '0.5', value: String(st.gain_db || 0) });
-  const showGain = () => { label.textContent = t('level', { db: signed(st.gain_db || 0) }); };
+  const showGain = () => { label.textContent = t('level', { db: signed(entry(s.id).gain_db || 0) }); };
   slider.addEventListener('input', () => {
-    st.gain_db = Number(slider.value);
-    if (loops[s.id]) loops[s.id].gain.gain.value = dbToGain(st.gain_db);
+    const db = Number(slider.value);
+    if (loops[s.id]) loops[s.id].gain.gain.value = dbToGain(db);
+    saveState(s.id, 'gain_db', db);
     showGain();
-    saveState(s.id, 'gain_db', st.gain_db);
   });
   showGain();
   gainRow.appendChild(slider);
@@ -362,9 +377,9 @@ function buildCard(s) {
     const b = el('button', {}, LANG === 'en' ? name : name + ' · ' + t(name));
     buttons[name] = b;
     b.addEventListener('click', () => {
-      st.verdict = st.verdict === name ? '' : name;
-      for (const k in buttons) buttons[k].classList.toggle('on', st.verdict === k);
-      saveState(s.id, 'verdict', st.verdict);
+      const verdict = entry(s.id).verdict === name ? '' : name;
+      for (const k in buttons) buttons[k].classList.toggle('on', verdict === k);
+      saveState(s.id, 'verdict', verdict);
     });
     if (st.verdict === name) b.classList.add('on');
     verdicts.appendChild(b);
@@ -372,8 +387,16 @@ function buildCard(s) {
   card.appendChild(verdicts);
   const note = el('textarea', { rows: '2', placeholder: t('note') });
   note.value = st.note || '';
-  note.addEventListener('input', () => { st.note = note.value; saveState(s.id, 'note', st.note); });
+  note.addEventListener('input', () => { saveState(s.id, 'note', note.value); });
   card.appendChild(note);
+  views[s.id] = () => {
+    const now = entry(s.id);
+    slider.value = String(now.gain_db || 0);
+    if (loops[s.id]) loops[s.id].gain.gain.value = dbToGain(now.gain_db || 0);
+    showGain();
+    for (const k in buttons) buttons[k].classList.toggle('on', now.verdict === k);
+    if (document.activeElement !== note) note.value = now.note || '';     // not under the cursor of someone typing here
+  };
   for (const flag of s.flags) card.appendChild(el('div', { class: 'flag' }, flag));
   return card;
 }
@@ -510,6 +533,7 @@ function setup() {
   const general = document.getElementById('general');
   general.value = state.general || '';
   general.addEventListener('input', () => { saveState(null, 'general', general.value); });
+  showGeneral = () => { if (document.activeElement !== general) general.value = state.general || ''; };
   document.getElementById('copy').addEventListener('click', async () => {
     const text = document.getElementById('feedback');
     let done = false;

@@ -183,6 +183,18 @@ class TheReleaseCheck(unittest.TestCase):
                 check_release.main()
         self.assertIn('names no release', str(caught.exception))
 
+    def test_a_full_check_downloads_and_leaves_the_links_to_the_other_job(self):
+        import check_release
+        for argv, wanted in ((['--full', 'data', 'library'], ['install']), ([], ['links'])):
+            called = []
+            with mock.patch.object(check_release.fsd50k, 'RELEASE_URL', 'https://example.invalid/release'), \
+                    mock.patch.object(check_release, 'check_links', side_effect=lambda: called.append('links')), \
+                    mock.patch.object(check_release, 'check_install', side_effect=lambda *a: called.append('install')), \
+                    mock.patch.object(sys, 'argv', ['check_release.py'] + argv):
+                check_release.main()
+            with self.subTest(argv=argv):
+                self.assertEqual(called, wanted)        # the download checks the index and every part by their sums
+
 
 class TheDocumentsSayWhatHappens(unittest.TestCase):
     SKILL = helpers.REPO / 'skills' / 'sound-effects'

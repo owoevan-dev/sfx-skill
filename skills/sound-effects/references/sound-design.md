@@ -157,7 +157,8 @@ floor (not asked of steady sounds such as rain, wind, surf, fire, engines and cr
 sound), and whether its label is the predominant sound (FSD50K's ratings). A recording whose description asks for
 credit, permission or notice, or speaks of commercial use, is flagged as well ('author note'): CC0 puts no condition on
 it, but read the note (`--find` prints it) and respect the author's wish; many such notes only say that no credit is
-needed. `samples --labels` lists the classes they are labelled with, and `--find "metal door" --passing` lists the recordings that pass every screen, the cleanest first, with their titles,
+needed. `samples --labels` lists the classes they are labelled with, and `--find "metal door" --passing` lists the recordings that pass every screen, the best match first (the words in both title and
+labels before either alone) and, within a match, the cleanest, those within 6 dB of each other in an order of the project's own, with their titles,
 labels, peak and range; it matches whole words, `--not WORD`, `--min-seconds` and `--max-seconds` narrow it, and without
 `--passing` a recording that fails is listed with its reasons. Recordings that FSD50K labels as speech, singing or a voice that may hold words, and those whose title or
 tags name adult content, are screened out; people's sounds without words stay (laughter, screams, breathing, coughs), so a bed that must hold
@@ -327,10 +328,11 @@ easy with the chain's `room`.
 `render --record-takes --config CONFIG` into `surge_takes` beside the project, and every later render plays that file: the
 sound stays as it was heard, and the project renders without Surge. Keep the folder with the project. Each variant has a
 performance of its own, which is what makes repeats sound alive. Name a `take` when every variant should be the same
-performance, moved only in pitch, time and level. A take belongs to its sound, its variant and its place among the
-sound's layers that play the same performance, so adding or removing a layer that plays anything else records nothing, and
-neither does changing `cents`, gain, filter, envelope or placement; changing the patch, notes or controls, or renaming the
-sound, asks for a new take.
+performance, moved only in pitch, time and level. An unnamed take belongs to its sound and its variant, so adding or removing
+other layers records nothing, and neither does changing `cents`, gain, filter, envelope or placement; changing the patch, notes
+or controls, or renaming the sound, asks for a new take. A named take belongs to its performance and number alone, so a renamed
+sound keeps it. Two unnamed layers of one sound may not play the same performance: to double a patch, give each its own `take`,
+or change one velocity.
 
 **Five magic sounds as stacks.** These are this skill's own starting points, built on the stack of section 3 and the meanings
 of section 5. Keep the short transient and the low weight in synthesis, where they are exact, and let Surge carry the

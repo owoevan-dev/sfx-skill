@@ -379,7 +379,23 @@ def parse_bars(text):
 
 def _real(value, default):
     """A number the performance gives, else `default`: music-production validates a project, and this only reads one."""
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else default
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and _finite(value) else default
+
+
+def _swung(beat, swing, bar):
+    """Where a part's swing plays written position `beat` (music-production's model.swung): inside each pair of `unit` notes,
+    counted from the bar line, the first stretches to `ratio` of the pair; a bar's last unit, when it has no pair, plays straight."""
+    if not swing:
+        return beat
+    u, r = 2 * _real(swing.get('unit'), 0.5), _real(swing.get('ratio'), 0.5)
+    if u <= 0:
+        return beat
+    start = math.floor(beat / bar + 1e-9) * bar
+    k = math.floor((beat - start) / u + 1e-9)
+    if (k + 1) * u > bar + 1e-9:
+        return beat
+    x = (beat - start) / u - k
+    return start + u * (k + (x * 2 * r if x <= 0.5 else r + (x - 0.5) * 2 * (1 - r)))
 
 
 def _during(points, start, stop, rest, ramp):
@@ -408,10 +424,10 @@ def _pairs(items):
 def _controls(track, performance, start, stop):
     """The bend and the controllers that reach beats `start` to `stop`, a value set before them too, as the part's engine hears them."""
     out = []
+    engine = track.get('engine') if isinstance(track.get('engine'), str) else None
     bend = sorted(_pairs(performance.get('bend')), key=lambda p: p[0])         # of two points on one beat the later written holds
-    if bend and any(abs(v) > 1e-9 for v in _during(bend, start, stop, 0.0, True)):
+    if engine not in UNPITCHED and bend and any(abs(v) > 1e-9 for v in _during(bend, start, stop, 0.0, True)):   # no pitch to bend there
         out.append("this part's pitch bend")
-    engine = track.get('engine')
     heard = HEARD.get(engine)                                                   # None: any controller, as a SoundFont preset may answer
     ramp = performance.get('cc_mode', 'linear' if engine == 'additive' else 'step') != 'step'
     by = {}
@@ -443,16 +459,21 @@ def _controls(track, performance, start, stop):
 
 def _slurs(track, performance, every, picked, clock):
     """What a SoundFont part's legato (music-production's performance.legato) does to the selected notes, grouping the part's notes
-    as it does by their played times: per-note timing and gate (swing moves a note's start and end alike, and is left aside)."""
+    as it does: by their played times (swing, per-note timing and gate) and on the keys its key map plays. An empty legato is none."""
     legato = performance.get('legato')
-    if track.get('engine') != 'soundfont' or not isinstance(legato, dict):
+    if track.get('engine') != 'soundfont' or not isinstance(legato, dict) or not legato:
         return []
     played = performance.get('notes') if isinstance(performance.get('notes'), dict) else {}
+    key_map = track.get('key_map') if isinstance(track.get('key_map'), dict) else {}
+    swing = performance.get('swing') if isinstance(performance.get('swing'), dict) else None
     notes = []
     for on, duration, pitch, note_id in every:
         entry = played.get(note_id) if isinstance(played.get(note_id), dict) else {}
-        begin = clock.seconds(on) + _real(entry.get('timing_ms'), 0.0) / 1000
-        notes.append((begin, begin + (clock.seconds(on + duration) - clock.seconds(on)) * _real(entry.get('gate'), 1.0), pitch, note_id))
+        a, b = _swung(on, swing, clock.quarters_per_bar), _swung(on + duration, swing, clock.quarters_per_bar)
+        begin = clock.seconds(a) + _real(entry.get('timing_ms'), 0.0) / 1000
+        key = key_map.get(str(pitch), pitch)
+        key = key if isinstance(key, int) and not isinstance(key, bool) else pitch
+        notes.append((begin, begin + (clock.seconds(b) - clock.seconds(a)) * _real(entry.get('gate'), 1.0), key, note_id))
     notes.sort(key=lambda n: (n[0], n[2]))
     chosen = {note[3] for note in picked}
     gap = _real(legato.get('gap_ms'), 40.0) / 1000
@@ -499,7 +520,7 @@ def _left_out(song, track, picked, every, clock, start, stop):
         out.append("this part's time offset")
     if any(entry.get('timing_ms') for entry in entries):
         out.append('per-note timing')
-    if any(entry.get('gate', 1) != 1 for entry in entries):
+    if track.get('engine') != 'drum_synth' and any(entry.get('gate', 1) != 1 for entry in entries):     # a drum machine plays each hit whole
         out.append('per-note gate')
     out += _slurs(track, performance, every, picked, clock)
     if track.get('engine') == 'soundfont' and isinstance(performance.get('dynamics'), list) and performance['dynamics']:
@@ -560,8 +581,8 @@ def quote_lines(q):
     if q['cut']:
         lines.append(f"{q['cut']} note{' ran' if q['cut'] == 1 else 's ran'} past the end of bar {last} and {'is' if q['cut'] == 1 else 'are'} cut there.")
     if q['rang_in']:
-        lines.append(f"{q['rang_in']} note{'' if q['rang_in'] == 1 else 's'} begun earlier still sound{'s' if q['rang_in'] == 1 else ''} at the start of bar {first} "
-                     f"and {'is' if q['rang_in'] == 1 else 'are'} not included.")
+        lines.append(f"{q['rang_in']} note{'' if q['rang_in'] == 1 else 's'} written to run across the start of bar {first} "     # as written:
+                     f"{'is' if q['rang_in'] == 1 else 'are'} not included.")                                                  # a gate may end it sooner
     if q['leaves_out']:
         lines.append('This is the written score. The render also plays ' + _and(q['leaves_out']) + ', which these notes leave out.')
     if q['drums']:

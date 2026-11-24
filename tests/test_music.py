@@ -293,6 +293,16 @@ class HostileFiles(unittest.TestCase):
         with self.assertRaisesRegex(music.MusicError, 'tempo'):
             music.Clock({'bars': 1, 'meter': [4, 4], 'tempo': [[0, 120], [9, 60]]})
 
+    def test_a_quote_of_a_part_with_odd_fields_is_not_a_crash(self):
+        song = piece()
+        song['tracks'][0]['engine'] = {'name': 'soundfont'}
+        song['tracks'][0]['performance']['cc'] = [[0, 1, 10 ** 400], [0, 7, 90]]
+        song['tracks'][0]['performance']['bend'] = [[0, 10 ** 400]]
+        song['tracks'][0]['performance']['legato'] = {'gap_ms': 10 ** 400}
+        song['tracks'][0]['performance']['notes']['lead_2']['timing_ms'] = 10 ** 400
+        self.assertIsInstance(music.quote(song, 'lead', 2, 2)['leaves_out'], list)
+        self.assertTrue(music.overview(music.describe(song)))
+
     def test_a_note_id_too_long_for_the_schema_is_refused(self):
         song = piece()
         song['tracks'][0]['notes'][0]['id'] = 'n' * 121
@@ -318,7 +328,9 @@ class Quoting(unittest.TestCase):
         self.assertEqual(q['rang_in'], 1)
         self.assertNotIn(64, [n[1] for n in q['notes']])
         self.assertEqual(music.quote(piece(), 'lead', 1, 1)['rang_in'], 0)
-        self.assertIn('still sound', '\n'.join(music.quote_lines(q)))
+        line = '\n'.join(music.quote_lines(q))
+        self.assertIn('written to run across the start of bar 2', line)          # as written: its gate may end it sooner
+        self.assertNotIn('still sound', line)
 
     def test_a_note_ending_on_the_line_is_neither_cut_nor_ringing(self):
         song = piece(tracks=[part('lead', [(3, 1, 60), (4, 4, 62)])])
@@ -446,6 +458,29 @@ class Quoting(unittest.TestCase):
         song['tracks'][0]['engine'] = 'synth'                                       # legato is a SoundFont part's
         del song['tracks'][0]['performance']['notes']['lead_0']['gate']
         self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
+
+    def test_a_slur_is_grouped_as_the_part_is_played(self):
+        song = piece(tracks=[part('lead', [(0, 1, 60), (1, 1, 62), (2, 1, 67)])])
+        perf = song['tracks'][0]['performance']
+        perf.update(legato={}, bend_range=5)                                        # an empty legato is no legato
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
+        perf['legato'] = {'max_interval': 5}
+        self.assertTrue(any('slurs (1 of' in item for item in music.quote(song, 'lead', 1, 1)['leaves_out']))
+        song['tracks'][0]['key_map'] = {'62': 74}                                   # played on 74: too far to join 60
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ["this part's key map"])
+        swung = piece(tracks=[part('lead', [(0.5, 0.4, 60), (1, 0.5, 62)])])        # 50 ms apart as written
+        swung['tracks'][0]['performance'].update(legato={'max_interval': 5}, bend_range=5)
+        self.assertEqual(music.quote(swung, 'lead', 1, 1)['leaves_out'], [])
+        swung['tracks'][0]['performance']['swing'] = {'ratio': 0.66}                 # swung, 34 ms: joined
+        self.assertEqual(music.quote(swung, 'lead', 1, 1)['leaves_out'][-1], "this part's slurs (1 of these notes glides on from the note before it, with no attack of its own)")
+
+    def test_a_drum_machine_or_noise_part_names_no_bend_and_a_drum_machine_no_gate(self):
+        for engine, gate_named in (('drum_synth', False), ('noise', True)):
+            song = piece(tracks=[part('kit', [(4, 0.5, 36), (5, 0.5, 38)], engine=engine)])
+            song['tracks'][0]['performance']['bend'] = [[4, 1]]
+            song['tracks'][0]['performance']['notes']['kit_0']['gate'] = 0.5
+            with self.subTest(engine=engine):
+                self.assertEqual(music.quote(song, 'kit', 2, 2)['leaves_out'], ['per-note gate'] if gate_named else [])
 
     def test_a_dynamics_curve_is_named(self):
         song = piece()

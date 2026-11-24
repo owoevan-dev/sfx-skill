@@ -85,6 +85,7 @@ const dataText = html.split('<script type="application/json" id="data">')[1].spl
 const script = html.split('<script>')[1].split('</script>')[0];
 const store = new Map();
 const windows = [];
+const scenario = process.argv[3] || '';
 function open() {
   const ids = {};
   class El {
@@ -109,7 +110,8 @@ function open() {
   const me = { ids, heard: {} };
   const win = { devicePixelRatio: 1, addEventListener: (t, f) => (me.heard[t] = me.heard[t] || []).push(f),
                 localStorage: { getItem: k => (store.has(k) ? store.get(k) : null),
-                                setItem: (k, v) => { store.set(k, String(v)); if (process.argv[3] === 'quiet') return;   // a browser that tells no other window
+                                setItem: (k, v) => { if (scenario === 'full') throw new Error('QuotaExceededError');      // storage at its quota
+                                                     store.set(k, String(v)); if (scenario === 'quiet') return;           // a browser that tells no other window
                                                      for (const w of windows) if (w !== me) (w.heard.storage || []).forEach(f => f({ key: k })); } } };
   const context = { window: win, navigator: { languages: [] }, console, setTimeout, clearTimeout, atob: s => Buffer.from(s, 'base64').toString('binary'),
                     getComputedStyle: () => ({ getPropertyValue: () => '#000' }),
@@ -126,6 +128,35 @@ function find(node, pred) {
   return null;
 }
 const fire = (el, type) => el.listeners[type].forEach(f => f());
+const DATA = JSON.parse(dataText);
+const KEY = 'sound-effects-audition:' + DATA.title + ':' + DATA.render;
+const firstId = DATA.sounds[0].id;
+const noteOf = w => find(w.ids['cards'].children[0], n => n.tag === 'textarea');
+if (scenario === 'stale' || scenario === 'full') {
+  // stale: both windows open on a saved note; A changes it, then B adds to it. full: one window, storage at quota, a note then
+  // the general feedback typed in it.
+  store.set(KEY, JSON.stringify({ sounds: { [firstId]: { verdict: '', note: scenario === 'stale' ? 'tail' : 'older', gain_db: 0 } }, general: '' }));
+  const one = open();
+  if (scenario === 'full') {
+    noteOf(one).value = 'lower the bell';
+    fire(noteOf(one), 'input');
+    one.ids['general'].value = 'balance the set';
+    fire(one.ids['general'], 'input');
+    console.log(JSON.stringify({ copies: JSON.parse(one.ids['feedback'].value), shows: noteOf(one).value }));
+  } else {
+    const other = open();
+    noteOf(other).value = 'trim the tail';
+    fire(noteOf(other), 'input');
+    other.ids['general'].value = 'quieter overall';
+    fire(other.ids['general'], 'input');
+    const generalShows = one.ids['general'].value;
+    const shows = noteOf(one).value;
+    noteOf(one).value = shows + '; soften attack';
+    fire(noteOf(one), 'input');
+    console.log(JSON.stringify({ shows: shows, saved: JSON.parse(store.get(KEY)), other_shows: noteOf(other).value, general_shows: generalShows }));
+  }
+  process.exit(0);
+}
 const b = open();
 const a = open();
 const cardA = a.ids['cards'].children[0];
@@ -261,6 +292,31 @@ class Page(unittest.TestCase):
     def test_two_windows_editing_different_things_keep_each_others_feedback(self):
         result, first = self.two_windows()
         self.assertEqual(result['b_sees']['sounds'][first]['note'], 'trim the ring')   # window B's feedback follows A's as A saves
+
+    def windows(self, scenario):
+        harness = self.base / 'two_windows.js'
+        harness.write_text(TWO_WINDOWS, encoding='utf-8')
+        proc = subprocess.run(['node', str(harness), str(self.out / 'audition.html'), scenario], capture_output=True, text=True, encoding='utf-8', timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_a_note_changed_in_another_window_is_the_one_this_window_edits(self):
+        result = self.windows('stale')
+        self.assertEqual(result['shows'], 'trim the tail')
+        first = next(iter(result['saved']['sounds']))
+        self.assertEqual(result['saved']['sounds'][first]['note'], 'trim the tail; soften attack')
+        self.assertEqual(result['other_shows'], 'trim the tail; soften attack')          # and the first window, whose edit was kept, follows
+        self.assertEqual(result['general_shows'], 'quieter overall')
+        self.assertEqual(result['saved']['general'], 'quieter overall')
+
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_an_edit_storage_could_not_keep_stays_in_the_feedback(self):
+        result = self.windows('full')
+        self.assertEqual(result['shows'], 'lower the bell')
+        first = next(iter(result['copies']['sounds']))
+        self.assertEqual(result['copies']['sounds'][first]['note'], 'lower the bell')
+        self.assertEqual(result['copies']['general'], 'balance the set')
 
     @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
     def test_two_windows_keep_each_others_feedback_where_no_window_is_told_of_the_other(self):

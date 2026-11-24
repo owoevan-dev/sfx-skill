@@ -2,8 +2,10 @@
 
 Usage: python tools/check_release.py                    every pack of the release answers with its size, the index is
                                                         the one this version names, the dataset's record answers
-       python tools/check_release.py --full DATA LIB    also downloads the packs, imports them into a new library and
-                                                        renders the recorded example from it (about 7.2 GB of disk)
+       python tools/check_release.py --full DATA LIB    instead downloads the packs (the index checked against the sum
+                                                        this version names, every part against the index), imports them
+                                                        into a new library and renders the recorded example from it (about
+                                                        7.2 GB of disk); the first form checks the links, the dataset's too
 
 A version that names no release yet has nothing to check."""
 import argparse
@@ -62,9 +64,10 @@ def main():
             raise SystemExit('this version names no release (RELEASE_URL), so the packs a release must carry cannot be checked')
         print('this version names no release yet: nothing to check')
         return 0
-    check_links()
-    if args.full:
+    if args.full:              # its download checks more than the sizes; the links are the job of the first form
         check_install(*args.full)
+    else:
+        check_links()
     return 0
 
 

@@ -158,6 +158,18 @@ class Schema(unittest.TestCase):
             with self.assertRaises(project.ProjectError, msg=str(fields)):
                 self.check(**fields)
 
+    def test_two_unnamed_layers_of_one_performance_are_refused(self):
+        left, right = dict(copied(), pan=-0.5), dict(copied(), pan=0.5)                # a doubled patch, for width
+        sound = {'id': 'spell', 'category': 'magic', 'variants': 1, 'layers': [left, right]}
+        data = {'schema': 'sound-effects/1', 'title': 'surge test', 'seed': 7, 'sounds': [sound]}
+        with self.assertRaisesRegex(project.ProjectError, r'layers\[1\].*same Surge performance as layers\[0\]'):
+            project.validate(json.loads(json.dumps(data)))
+        right['source']['notes'] = [[0, 69, 0.1, 101]]                                  # another velocity: another performance
+        project.validate(json.loads(json.dumps(data)))
+        right['source']['notes'] = left['source']['notes']
+        left['source']['take'], right['source']['take'] = 1, 2                          # or a take of its own each
+        project.validate(json.loads(json.dumps(data)))
+
     def test_it_is_not_the_bed_of_a_loop(self):
         layer = dict(copied(), length=2.0)
         with self.assertRaises(project.ProjectError):
