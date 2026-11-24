@@ -130,6 +130,16 @@ class Reading(unittest.TestCase):
         self.assertIsNone(info['render_seconds'])                  # the render's length is not worked out, so none is claimed
         self.assertNotIn('rubato', '\n'.join(music.overview(music.describe(piece()))))
 
+    def test_rubato_that_slows_nothing_is_not_said(self):
+        one_section = [{'id': 'all', 'start_bar': 0, 'bars': 4}]
+        for rubato in ({'phrase_ratio': 0.9, 'phrase_beats': 1}, {'final_ratio': 0.6}, {'final_ratio': 1, 'final_beats': 4}):
+            info = music.describe(piece(sections=one_section, clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'tail_seconds': 3, 'rubato': rubato}))
+            with self.subTest(rubato=rubato):
+                self.assertNotIn('rubato', '\n'.join(music.overview(info)))     # no boundary to ease into, no final beats, no slowing
+                self.assertEqual(info['render_seconds'], 11.0)
+        info = music.describe(piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'rubato': {'phrase_ratio': 0.9, 'phrase_beats': 1}}))
+        self.assertIn('rubato', '\n'.join(music.overview(info)))                # two sections: it eases into the second
+
     def test_no_declared_harmony_is_said_and_no_key_is_guessed(self):
         info = music.describe(piece())
         self.assertIsNone(info['harmony'])
@@ -360,7 +370,7 @@ class Quoting(unittest.TestCase):
             music.quote(song, 'lead', 2, 2)
 
     def test_what_the_render_also_plays_is_named(self):
-        cases = [('swing', {'swing': {'ratio': 0.62}}, None), ('offset', {'offset_ms': -12}, None), ('bend', {'bend': [[0, 0], [1, 1]]}, None),
+        cases = [('offset', {'offset_ms': -12}, None), ('bend', {'bend': [[0, 0], [1, 1]]}, None),
                  ('timing', None, {'timing_ms': 8}), ('gate', None, {'gate': 0.8})]
         for word, performance, note in cases:
             song = piece()
@@ -370,6 +380,15 @@ class Quoting(unittest.TestCase):
             with self.subTest(word=word):
                 self.assertTrue(any(word in item for item in q['leaves_out']), q['leaves_out'])
                 self.assertIn('written score', '\n'.join(music.quote_lines(q)))
+
+    def test_swing_is_named_only_where_it_moves_a_quoted_note(self):
+        song = piece(tracks=[part('lead', [(4, 1, 60), (5, 1, 62), (6, 0.5, 64), (6.5, 0.5, 65)])])
+        song['tracks'][0]['performance']['swing'] = {'ratio': 0.62}
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's swing"])          # the off-beat eighth is moved
+        song['tracks'][0]['notes'] = song['tracks'][0]['notes'][:2]
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], [])                           # quarter notes on the beat are not
+        song['tracks'][0]['performance']['swing'] = {'ratio': 0.62, 'unit': 1e-320}                     # no unit music-production takes
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], [])
 
     def test_a_sustain_pedal_is_named(self):
         song = piece()
@@ -385,7 +404,7 @@ class Quoting(unittest.TestCase):
         track['performance'].update(offset_ms=-20, bend=[[0, 1]], swing={'ratio': 0.6})
         track['performance']['notes']['lead_2'].update(gate=0.5, timing_ms=9)
         self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ['each note played backwards'])
-        song['clock']['rubato'] = {'final_ratio': 0.6, 'final_beats': 4}
+        song['clock']['rubato'] = {'final_ratio': 0.6, 'final_beats': 16}
         self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["the piece's rubato", 'each note played backwards'])
         track['key_map'] = {'67': 79}
         self.assertIn("this part's key map", music.quote(song, 'lead', 2, 2)['leaves_out'])
@@ -487,9 +506,28 @@ class Quoting(unittest.TestCase):
         song['tracks'][0]['performance']['dynamics'] = [[0, 40], [16, 100]]
         self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's dynamics curve, which sets its loudness in place of velocity"])
 
-    def test_the_piece_s_rubato_is_named(self):
-        q = music.quote(piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'rubato': {'final_ratio': 0.6, 'final_beats': 4}}), 'lead', 2, 2)
-        self.assertTrue(any('rubato' in item for item in q['leaves_out']))
+    def test_the_piece_s_rubato_is_named_where_it_slows_the_bars(self):
+        slowed = lambda beats: piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'rubato': {'final_ratio': 0.6, 'final_beats': beats}})
+        self.assertIn("the piece's rubato", music.quote(slowed(10), 'lead', 2, 2)['leaves_out'])      # the last 10 beats reach bar 2
+        self.assertNotIn("the piece's rubato", music.quote(slowed(4), 'lead', 2, 2)['leaves_out'])    # the last 4 do not
+
+    def test_a_slur_under_the_piece_s_rubato_is_said_to_be_as_written(self):
+        song = piece(tracks=[part('lead', [(14.5, 0.4375, 60), (15, 0.5, 62)])])                      # 31 ms apart as written
+        song['tracks'][0]['performance'].update(legato={'max_interval': 5}, bend_range=5)
+        self.assertEqual(music.quote(song, 'lead', 4, 4)['leaves_out'],
+                         ["this part's slurs (1 of these notes glides on from the note before it, with no attack of its own)"])
+        song['clock']['rubato'] = {'final_ratio': 0.6, 'final_beats': 4}                                  # slowed, they part
+        said = music.quote(song, 'lead', 4, 4)['leaves_out']
+        self.assertEqual(said[0], "the piece's rubato")
+        self.assertEqual(said[-1], "this part's slurs (as written, 1 of these notes glides on from the note before it, with no attack of its "
+                                   "own; the piece's rubato can change that)")
+
+    def test_a_noise_part_says_its_articulations_choose_its_sounds(self):
+        line = '\n'.join(music.quote_lines(music.quote(piece(tracks=[part('fx', [(0, 0.5, 48)], engine='noise')]), 'fx', 1, 1)))
+        self.assertIn("articulation", line)
+        self.assertNotIn('keys of its kit', line)
+        kit = '\n'.join(music.quote_lines(music.quote(piece(tracks=[part('kit', [(0, 0.5, 36)], engine='drum_synth')]), 'kit', 1, 1)))
+        self.assertIn('keys of its kit', kit)
 
     def test_a_plain_part_claims_nothing_left_out(self):
         song = piece()

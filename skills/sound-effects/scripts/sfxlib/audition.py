@@ -113,6 +113,14 @@ const buffers = Object.create(null);
 const last = Object.create(null);
 const views = Object.create(null);      // each card's way to show the feedback as it is now
 let showGeneral = () => {};
+// a text box shows the feedback as saved, the cursor of someone who left it there staying where it was, so that what they type
+// next goes into the saved text and not into what the box showed before
+function showText(box, text) {
+  if (box.value === text) return;
+  const here = document.activeElement === box && typeof box.selectionStart === 'number' ? [box.selectionStart, box.selectionEnd] : null;
+  box.value = text;
+  if (here) { try { box.setSelectionRange(Math.min(here[0], text.length), Math.min(here[1], text.length)); } catch (e) { /* not every box keeps one */ } }
+}
 let ctx = null;
 let master = null;
 let state = loadState();
@@ -395,7 +403,7 @@ function buildCard(s) {
     if (loops[s.id]) loops[s.id].gain.gain.value = dbToGain(now.gain_db || 0);
     showGain();
     for (const k in buttons) buttons[k].classList.toggle('on', now.verdict === k);
-    if (document.activeElement !== note) note.value = now.note || '';     // not under the cursor of someone typing here
+    showText(note, now.note || '');
   };
   for (const flag of s.flags) card.appendChild(el('div', { class: 'flag' }, flag));
   return card;
@@ -533,7 +541,7 @@ function setup() {
   const general = document.getElementById('general');
   general.value = state.general || '';
   general.addEventListener('input', () => { saveState(null, 'general', general.value); });
-  showGeneral = () => { if (document.activeElement !== general) general.value = state.general || ''; };
+  showGeneral = () => showText(general, state.general || '');
   document.getElementById('copy').addEventListener('click', async () => {
     const text = document.getElementById('feedback');
     let done = false;

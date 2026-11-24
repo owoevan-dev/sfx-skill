@@ -95,6 +95,9 @@ function open() {
       const set = new Set();
       this.classList = { add: c => set.add(c), remove: c => set.delete(c), toggle: (c, on) => { if (on) set.add(c); else set.delete(c); } };
     }
+    get value() { return this._value; }
+    set value(v) { this._value = String(v); this.selectionStart = this.selectionEnd = this._value.length; }    // as a browser moves the cursor
+    setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; }
     setAttribute(k, v) { this.attrs[k] = v; if (k === 'id') ids[v] = this; if (k === 'value') this.value = v; }
     appendChild(c) { this.children.push(c); return c; }
     addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }
@@ -113,10 +116,10 @@ function open() {
                                 setItem: (k, v) => { if (scenario === 'full') throw new Error('QuotaExceededError');      // storage at its quota
                                                      store.set(k, String(v)); if (scenario === 'quiet') return;           // a browser that tells no other window
                                                      for (const w of windows) if (w !== me) (w.heard.storage || []).forEach(f => f({ key: k })); } } };
+  me.doc = { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {}, execCommand: () => true,
+             querySelectorAll: () => [], activeElement: null };
   const context = { window: win, navigator: { languages: [] }, console, setTimeout, clearTimeout, atob: s => Buffer.from(s, 'base64').toString('binary'),
-                    getComputedStyle: () => ({ getPropertyValue: () => '#000' }),
-                    document: { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {}, execCommand: () => true,
-                                querySelectorAll: () => [] } };
+                    getComputedStyle: () => ({ getPropertyValue: () => '#000' }), document: me.doc };
   vm.createContext(context);
   vm.runInContext(script, context);
   windows.push(me);
@@ -145,15 +148,20 @@ if (scenario === 'stale' || scenario === 'full') {
     console.log(JSON.stringify({ copies: JSON.parse(one.ids['feedback'].value), shows: noteOf(one).value }));
   } else {
     const other = open();
+    one.doc.activeElement = noteOf(one);                       // the cursor left in this window's note, after its second letter
+    noteOf(one).setSelectionRange(2, 2);
     noteOf(other).value = 'trim the tail';
     fire(noteOf(other), 'input');
+    const cursor = [noteOf(one).selectionStart, noteOf(one).selectionEnd];
+    one.doc.activeElement = one.ids['general'];
     other.ids['general'].value = 'quieter overall';
     fire(other.ids['general'], 'input');
     const generalShows = one.ids['general'].value;
     const shows = noteOf(one).value;
     noteOf(one).value = shows + '; soften attack';
     fire(noteOf(one), 'input');
-    console.log(JSON.stringify({ shows: shows, saved: JSON.parse(store.get(KEY)), other_shows: noteOf(other).value, general_shows: generalShows }));
+    console.log(JSON.stringify({ shows: shows, saved: JSON.parse(store.get(KEY)), other_shows: noteOf(other).value, general_shows: generalShows,
+                                 cursor: cursor }));
   }
   process.exit(0);
 }
@@ -307,8 +315,9 @@ class Page(unittest.TestCase):
         first = next(iter(result['saved']['sounds']))
         self.assertEqual(result['saved']['sounds'][first]['note'], 'trim the tail; soften attack')
         self.assertEqual(result['other_shows'], 'trim the tail; soften attack')          # and the first window, whose edit was kept, follows
-        self.assertEqual(result['general_shows'], 'quieter overall')
+        self.assertEqual(result['general_shows'], 'quieter overall')                    # both edited where the cursor was left
         self.assertEqual(result['saved']['general'], 'quieter overall')
+        self.assertEqual(result['cursor'], [2, 2])                                       # which stays where it was
 
     @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
     def test_an_edit_storage_could_not_keep_stays_in_the_feedback(self):

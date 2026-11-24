@@ -30,6 +30,7 @@ MOD_WHEEL = 1
 EXPRESSION = 11
 BRIGHTNESS = 74
 PEDALS = range(64, 70)                  # switch controllers, which step whatever a part's cc_mode says
+SWING_UNITS = (0.25, 0.5, 1)            # music-production's: sixteenths, eighths or quarters, in quarter notes
 # The controllers each engine plays, each with the value it rests at until the part sets it, as music-production renders a part:
 # Surge XT is sent the mod wheel and the sustain pedal; the additive synth reads expression, brightness and the mod wheel (its
 # vibrato); the built-in synthesizer, the drum machine and the noise engine read none. A SoundFont preset may answer any.
@@ -265,10 +266,34 @@ def _section_row(section, clock):
     return row
 
 
+def _rubato_spans(song, clock):
+    """The stretches of the score `clock.rubato` slows, as (from beat, to beat), as music-production's rubato_spans lays them: the
+    last `phrase_beats` before each section's start but the first, the last `final_beats` of the piece and any written `spans`,
+    each to a ratio under 1; none where nothing slows (one section and phrase settings only, or no final beats)."""
+    r = song['clock'].get('rubato')
+    if not isinstance(r, dict):
+        return []
+    total, bar = clock.quarters_per_bar * clock.bars, clock.quarters_per_bar
+    spans = []
+    phrase = _real(r.get('phrase_beats'), 0.0)
+    if phrase > 0 and _real(r.get('phrase_ratio'), 0.94) < 1:
+        for section in (song.get('sections') if isinstance(song.get('sections'), list) else [])[1:]:
+            first = section.get('start_bar') if isinstance(section, dict) else None
+            if isinstance(first, int) and not isinstance(first, bool) and 0 < first * bar < total:
+                spans.append((max(0.0, first * bar - phrase), first * bar))
+    final = _real(r.get('final_beats'), 0.0)
+    if final > 0 and _real(r.get('final_ratio'), 0.6) < 1:
+        spans.append((max(0.0, total - final), total))
+    for s in r.get('spans') if isinstance(r.get('spans'), list) else []:
+        if isinstance(s, list) and len(s) == 3 and all(_real(x, None) is not None for x in s) and float(s[2]) < 1:
+            spans.append((max(0.0, float(s[0])), min(total, float(s[1]))))
+    return [(a, b) for a, b in spans if b > a]
+
+
 def describe(song):
     """What the project declares, as one dictionary (the command's --json)."""
     clock = Clock(song.get('clock'))
-    rubato = bool(song['clock'].get('rubato'))          # it stretches the played length, which is not worked out here
+    rubato = bool(_rubato_spans(song, clock))           # a slowing stretches the played length, which is not worked out here
     tempo = []
     for beat, bpm in zip(clock.beats, clock.bpm):
         bar, within = clock.place(beat) if beat < clock.quarters_per_bar * clock.bars - ON_THE_LINE else (clock.bars + 1, 1.0)   # at the end
@@ -384,12 +409,12 @@ def _real(value, default):
 
 def _swung(beat, swing, bar):
     """Where a part's swing plays written position `beat` (music-production's model.swung): inside each pair of `unit` notes,
-    counted from the bar line, the first stretches to `ratio` of the pair; a bar's last unit, when it has no pair, plays straight."""
-    if not swing:
+    counted from the bar line, the first stretches to `ratio` of the pair; a bar's last unit, when it has no pair, plays straight.
+    A unit music-production does not take (a quarter, an eighth or a sixteenth of a whole note) swings nothing here."""
+    unit = swing.get('unit', 0.5) if isinstance(swing, dict) else None
+    if not swing or unit not in SWING_UNITS:
         return beat
-    u, r = 2 * _real(swing.get('unit'), 0.5), _real(swing.get('ratio'), 0.5)
-    if u <= 0:
-        return beat
+    u, r = 2 * float(unit), _real(swing.get('ratio'), 0.5)
     start = math.floor(beat / bar + 1e-9) * bar
     k = math.floor((beat - start) / u + 1e-9)
     if (k + 1) * u > bar + 1e-9:
@@ -457,9 +482,11 @@ def _controls(track, performance, start, stop):
     return out
 
 
-def _slurs(track, performance, every, picked, clock):
+def _slurs(track, performance, every, picked, clock, unsure=()):
     """What a SoundFont part's legato (music-production's performance.legato) does to the selected notes, grouping the part's notes
-    as it does: by their played times (swing, per-note timing and gate) and on the keys its key map plays. An empty legato is none."""
+    as it does: by their played times (swing, per-note timing and gate) and on the keys its key map plays. An empty legato is none.
+    The times are the written tempo's: where `unsure` names what moves them (the piece's rubato), or the part's offset pushes a
+    note before the score's start, the count is said to be as written."""
     legato = performance.get('legato')
     if track.get('engine') != 'soundfont' or not isinstance(legato, dict) or not legato:
         return []
@@ -495,9 +522,12 @@ def _slurs(track, performance, every, picked, clock):
             group = [note]
     if not joined:
         return []
+    unsure = list(unsure)
+    if any(n[0] + _real(performance.get('offset_ms'), 0.0) / 1000 < 0 for n in notes):
+        unsure.append("the part's offset at the score's start")
     one = joined == 1
-    return [f"this part's slurs ({joined} of these notes {'glides' if one else 'glide'} on from the note before {'it' if one else 'them'}, "
-            f"with no attack of {'its' if one else 'their'} own)"]
+    return [f"this part's slurs ({'as written, ' if unsure else ''}{joined} of these notes {'glides' if one else 'glide'} on from the note before "
+            f"{'it' if one else 'them'}, with no attack of {'its' if one else 'their'} own" + (f'; {_and(unsure)} can change that)' if unsure else ')')]
 
 
 def _left_out(song, track, picked, every, clock, start, stop):
@@ -507,14 +537,16 @@ def _left_out(song, track, picked, every, clock, start, stop):
     played = performance.get('notes') if isinstance(performance.get('notes'), dict) else {}
     entries = [played.get(note[3]) or {} for note in picked]
     out = []
-    if song['clock'].get('rubato'):
+    slowed = any(a < stop - ON_THE_LINE and b > start + ON_THE_LINE for a, b in _rubato_spans(song, clock))
+    if slowed:                                    # a slowing that reaches these bars, not one elsewhere in the piece
         out.append("the piece's rubato")
     key_map = track.get('key_map')
     mapped = isinstance(key_map, dict) and any(key_map.get(str(note[2]), note[2]) != note[2] for note in picked)
     if track.get('reverse') is True:              # each note renders on its own: no swing, timing, gate, offset, bend or controller applies
         return out + ['each note played backwards'] + (["this part's key map"] if mapped else [])
     swing = performance.get('swing')
-    if isinstance(swing, dict) and swing.get('ratio', 0.5) != 0.5:
+    if isinstance(swing, dict) and any(abs(_swung(x, swing, clock.quarters_per_bar) - x) > ON_THE_LINE     # a quoted note it moves
+                                       for on, duration, _, _ in picked for x in (on, on + duration)):
         out.append("this part's swing")
     if performance.get('offset_ms'):
         out.append("this part's time offset")
@@ -522,7 +554,7 @@ def _left_out(song, track, picked, every, clock, start, stop):
         out.append('per-note timing')
     if track.get('engine') != 'drum_synth' and any(entry.get('gate', 1) != 1 for entry in entries):     # a drum machine plays each hit whole
         out.append('per-note gate')
-    out += _slurs(track, performance, every, picked, clock)
+    out += _slurs(track, performance, every, picked, clock, ["the piece's rubato"] if slowed else [])
     if track.get('engine') == 'soundfont' and isinstance(performance.get('dynamics'), list) and performance['dynamics']:
         out.append("this part's dynamics curve, which sets its loudness in place of velocity")
     out += _controls(track, performance, start, stop)
@@ -568,7 +600,8 @@ def quote(song, track_id, first, last):
         notes.append([round(at, 4), pitch, max(0.0001, round(clock.seconds(min(ends, stop)) - zero - at, 4)), velocity])
     rang_in = sum(1 for note in every if note[0] < start - ON_THE_LINE and note[0] + note[1] > start + ON_THE_LINE)
     return {'track': track_id, 'bars': [first, last], 'start_s': round(zero, 4), 'length_s': round(length, 4), 'notes': notes, 'cut': cut,
-            'rang_in': rang_in, 'leaves_out': _left_out(song, track, picked, every, clock, start, stop), 'drums': not _pitched(track)}
+            'rang_in': rang_in, 'leaves_out': _left_out(song, track, picked, every, clock, start, stop), 'drums': not _pitched(track),
+            'noise': track.get('engine') == 'noise'}
 
 
 def quote_lines(q):
@@ -585,6 +618,9 @@ def quote_lines(q):
                      f"{'is' if q['rang_in'] == 1 else 'are'} not included.")                                                  # a gate may end it sooner
     if q['leaves_out']:
         lines.append('This is the written score. The render also plays ' + _and(q['leaves_out']) + ', which these notes leave out.')
-    if q['drums']:
-        lines.append('This is a drum or noise part: its notes are the keys of its kit, which a pitched instrument plays as plain pitches.')
+    if q.get('noise'):                          # music-production's noise engine: the articulation chooses the event, the number is no pitch
+        lines.append("This is a noise part: each note's articulation chooses its noise event (a rise, an impact, vinyl or a fading transition) "
+                     'and its number is no pitch there; an instrument or surge layer plays these numbers as plain pitches.')
+    elif q['drums']:
+        lines.append('This is a drum part: its notes are the keys of its kit, which a pitched instrument plays as plain pitches.')
     return lines

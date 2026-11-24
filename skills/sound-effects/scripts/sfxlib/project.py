@@ -548,7 +548,7 @@ def _check_doubled_takes(c, layers, path):
         except (KeyError, TypeError, ValueError, OverflowError):
             continue                            # the layer's own checks say what is wrong with it
         if same in seen:
-            c.err(f'{path}.layers[{i}]', f'plays the same Surge performance as layers[{seen[same]}]: give each its own `take` (1-16), or '
+            c.err(f'{path}.layers[{i}]', f'plays the same Surge performance as layers[{seen[same]}]: name a `take` (1-16) on one of them, or '
                   'make their notes differ (one velocity is enough), so that each keeps its own recording')
         else:
             seen[same] = i

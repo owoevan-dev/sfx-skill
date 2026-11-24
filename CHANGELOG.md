@@ -21,7 +21,8 @@
   recordings. When fewer than five recordings hold every word, the list goes on with those holding some of them, marked (in `--json`,
   `files` and `matched` still hold only recordings with every word, and the others are in `some_words`). Among recordings that pass
   the same screens, those labelled only as music come after the others unless you ask for music; then the better match comes first,
-  and the order of the project's own sorts only recordings within 6 dB of each other's cleanliness.
+  and the order of the project's own sorts only recordings within 6 dB of each other's cleanliness (the range between body and
+  noise floor, counted up to 60 dB).
 - `doctor --library LIB` reports on a sample library kept elsewhere.
 - A sound still at its recipe's default parameters gets a note (not a flag) asking to set them for the game.
 - `check` flags an attack inside an instrument layer's sample that none of its notes explains (`stray_attack`): a tick left in a
