@@ -72,6 +72,8 @@ def layer_spec(sound, project_seed, variant):
         g = _u(project_seed, sound['id'], variant, f'gain_db:{i}') * gain_amount if gain_amount > 0 else 0.0
         drawn['gain_db'].append(g)
         src = layer.get('source', {})
+        if src.get('type') == 'surge':                  # which performance this is: a named take, or this variant's own
+            src['slot'] = f"take:{int(src['take'])}" if 'take' in src else f"{sound['id']}/{i}/{variant}"
         if src.get('type') == 'sample' and isinstance(src.get('file'), list):
             take = src['file'][variant % len(src['file'])]
             if isinstance(take, dict):                  # a take that starts at its own time in the recording
@@ -111,6 +113,13 @@ def layer_spec(sound, project_seed, variant):
             src['notes'] = [[float(n[0]) * time, n[1], float(n[2]) * time, n[3]] for n in src.get('notes', [])]
         if src.get('type') == 'sample':                   # a recording moves in pitch by resampling
             src['cents'] = float(src.get('cents', 0.0)) + drawn['pitch_cents']
+        if src.get('type') == 'surge':                    # a take moves in pitch by resampling; a named take keeps its notes
+            src['cents'] = float(src.get('cents', 0.0)) + drawn['pitch_cents']
+            if 'take' not in src:
+                src['notes'] = [[float(n[0]) * time, n[1], float(n[2]) * time, n[3]] for n in src['notes']]
+                for name in ('bend', 'wheel'):
+                    if name in src:
+                        src[name] = [[float(p[0]) * time, p[1]] for p in src[name]]
         if 'filter' in layer:
             layer['filter']['cutoff'] = _scale_curve(layer['filter']['cutoff'], cutoff, time)
         if g:

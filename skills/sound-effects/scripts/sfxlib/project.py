@@ -18,6 +18,7 @@ CATEGORIES = ('ui', 'retro', 'scifi', 'magic', 'impact', 'foley', 'ambience')
 USES = ('one_shot', 'loop')
 ID_RE = re.compile(r'^[a-z][a-z0-9_]{0,31}$')
 MAX_LENGTH_S = 30.0
+MAX_NOTES = 64
 MAX_LOOP_S = 60.0
 DEFAULT_LOOP_S = 12.0      # this skill's default loop length (keeps the audition page small)
 LAYER_VARY = {'pitch_cents': 1200.0, 'time_pct': 50.0, 'cutoff_cents': 2400.0, 'gain_db': 12.0, 'scatter_s': 30.0}
@@ -109,6 +110,8 @@ class _Checker:
 DROPS_FIELDS = {'rate', 'r_min_mm', 'r_max_mm', 'size_slope', 'gain_slope', 'depth', 'rise', 'rise_cutoff'}
 WIND_FIELDS = {'band_hz', 'turbulence', 'gust_hz', 'whistle_hz', 'whistle_db', 'whistle_q'}
 INSTRUMENT_FIELDS = {'soundfont', 'program', 'bank', 'drums', 'notes', 'cents'}
+SURGE_FIELDS = {'patch', 'notes', 'macros', 'bend', 'bend_range', 'wheel', 'bpm', 'tail', 'take', 'cents'}
+SURGE_PATCH_RE = re.compile(r'^[a-z0-9_]{1,64}(/[a-z0-9_]{1,64}){1,4}$')
 BANK_NAME_RE = re.compile(r'^[A-Za-z0-9_.-]{1,64}$')
 SAMPLE_FIELDS = {'library', 'file', 'offset', 'cents', 'reverse', 'denoise', 'time_stretch'}
 STRETCH_FIELDS = {'factor', 'method', 'keep_attack_ms'}
@@ -118,8 +121,8 @@ MAX_TAKES = 16
 MAX_CENTS = 4800.0      # four octaves either way: this skill's choice (varispeed to 1/16 or 16 times)
 SOURCE_FIELDS = ({'type', 'wave', 'duty', 'phase', 'ratio', 'index', 'color', 'mode', 'step_hz', 'levels', 'quantize',
                   'material', 't_d', 'modes', 'hardness', 'detune_cents', 'shape', 'ratios'}
-                 | DROPS_FIELDS | WIND_FIELDS | INSTRUMENT_FIELDS | SAMPLE_FIELDS)
-SOURCE_TYPES = ('osc', 'fm', 'noise', 'chip', 'modal', 'drops', 'wind', 'instrument', 'sample')
+                 | DROPS_FIELDS | WIND_FIELDS | INSTRUMENT_FIELDS | SAMPLE_FIELDS | SURGE_FIELDS)
+SOURCE_TYPES = ('osc', 'fm', 'noise', 'chip', 'modal', 'drops', 'wind', 'instrument', 'sample', 'surge')
 MAX_TAKE_GAIN_DB = 40.0
 
 
@@ -206,8 +209,38 @@ def _check_instrument(c, src, path):
     c.number(src, 'cents', path, -MAX_CENTS, MAX_CENTS)
     if 'drums' in src and not isinstance(src['drums'], bool):
         c.err(_join(path, 'drums'), 'expected true or false')
+    _check_notes(c, src, path)
+
+
+def _check_surge(c, src, path):
+    patch = src.get('patch')
+    if not (isinstance(patch, str) and SURGE_PATCH_RE.match(patch)):
+        c.err(_join(path, 'patch'), f'{patch!r}: expected the id of a Surge patch, such as factory/fx/fireworks')
+    _check_notes(c, src, path)
+    c.number(src, 'cents', path, -MAX_CENTS, MAX_CENTS)
+    macros = src.get('macros', {})
+    if not isinstance(macros, dict) or not all(k in tuple('12345678') and isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1
+                                               for k, v in macros.items()):
+        c.err(_join(path, 'macros'), f'{macros!r}: expected {{"1": 0.5}}: macros 1 to 8, each 0 to 1')
+    bend_range = c.number(src, 'bend_range', path, 1, 24, default=2, integer=True)
+    for key, lo, hi, unit in (('bend', -bend_range, bend_range, 'semitones within bend_range'), ('wheel', 0.0, 1.0, '0 to 1')):
+        if key not in src:
+            continue
+        points = src[key]
+        ok = (isinstance(points, list) and 1 <= len(points) <= 64
+              and all(isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in p)
+                      and 0 <= p[0] <= MAX_LENGTH_S and lo <= p[1] <= hi for p in points)
+              and all(a[0] <= b[0] for a, b in zip(points, points[1:])))
+        if not ok:
+            c.err(_join(path, key), f'{points!r}: expected 1 to 64 points [time s, {unit}], in time order, within {MAX_LENGTH_S:g} s')
+    c.number(src, 'bpm', path, 30.0, 300.0)
+    c.number(src, 'tail', path, 0.1, 15.0)
+    c.number(src, 'take', path, 1, MAX_TAKES, integer=True)
+
+
+def _check_notes(c, src, path):
     notes = src.get('notes')
-    if not isinstance(notes, list) or not 1 <= len(notes) <= 64:
+    if not isinstance(notes, list) or not 1 <= len(notes) <= MAX_NOTES:
         c.err(_join(path, 'notes'), 'expected 1 to 64 notes, each [time s, MIDI pitch, length s, velocity]')
         return
     for i, note in enumerate(notes):
@@ -231,13 +264,16 @@ def _check_source(c, src, path):
                'chip': {'type', 'wave', 'duty', 'mode', 'step_hz', 'levels', 'quantize'},
                'modal': {'type', 'material', 't_d', 'modes', 'hardness', 'detune_cents', 'shape', 'ratios'},
                'drops': {'type'} | DROPS_FIELDS, 'wind': {'type'} | WIND_FIELDS,
-               'instrument': {'type'} | INSTRUMENT_FIELDS, 'sample': {'type'} | SAMPLE_FIELDS}.get(kind)
+               'instrument': {'type'} | INSTRUMENT_FIELDS, 'sample': {'type'} | SAMPLE_FIELDS,
+               'surge': {'type'} | SURGE_FIELDS}.get(kind)
     if allowed:
         for key in src:
             if key not in allowed and key in SOURCE_FIELDS:
                 c.err(_join(path, key), f"does not apply to a source of type '{kind}'")
     if kind == 'instrument':
         _check_instrument(c, src, path)
+    if kind == 'surge':
+        _check_surge(c, src, path)
     if kind == 'sample':
         _check_sample(c, src, path)
         return 'instrument'

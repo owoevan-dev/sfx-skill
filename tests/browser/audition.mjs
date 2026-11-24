@@ -12,6 +12,26 @@ if (!page_path) throw new Error('usage: node audition.mjs PAGE [engines]');
 const url = pathToFileURL(page_path).href;
 let failed = 0;
 
+// A short tone as a WAV file, to stand for a track the listener picks.
+function trackBytes(seconds = 0.4, rate = 48000) {
+  const frames = Math.floor(seconds * rate);
+  const data = Buffer.alloc(44 + frames * 2);
+  data.write('RIFF', 0);
+  data.writeUInt32LE(36 + frames * 2, 4);
+  data.write('WAVEfmt ', 8);
+  data.writeUInt32LE(16, 16);
+  data.writeUInt16LE(1, 20);
+  data.writeUInt16LE(1, 22);
+  data.writeUInt32LE(rate, 24);
+  data.writeUInt32LE(rate * 2, 28);
+  data.writeUInt16LE(2, 32);
+  data.writeUInt16LE(16, 34);
+  data.write('data', 36);
+  data.writeUInt32LE(frames * 2, 40);
+  for (let i = 0; i < frames; i++) data.writeInt16LE(Math.round(9000 * Math.sin(2 * Math.PI * 330 * i / rate)), 44 + i * 2);
+  return data;
+}
+
 async function check(name) {
   const browser = await ENGINES[name].launch();
   const page = await (await browser.newContext()).newPage();
@@ -55,6 +75,47 @@ async function check(name) {
       .catch(() => { throw new Error('the loop does not play looping'); });
     await page.evaluate(id => stopLoop(id), expected.loop);
   }
+
+  // music from the listener's disk plays under the sounds, and a file it cannot read leaves them playing
+  const oneShot = await page.evaluate(() => { const s = DATA.sounds.find(x => x.use !== 'loop'); return s ? `v-${s.id}-${s.variants[0].n}` : null; });
+  const pressSound = async () => {
+    if (!oneShot) return;
+    const before = await page.evaluate(() => window.played.length);
+    await page.locator(`button[id="${oneShot}"]`).click();
+    await page.waitForFunction(n => window.played.length > n && window.played[window.played.length - 1], before, { timeout: 10000 })
+      .catch(() => { throw new Error('a sound did not play with the music control in use'); });
+  };
+  await page.locator('#musicfile').setInputFiles({ name: 'track.wav', mimeType: 'audio/wav', buffer: trackBytes() });
+  await page.waitForFunction(() => Boolean(music.buffer) && !document.getElementById('musicplay').disabled, null, { timeout: 20000 })
+    .catch(() => { throw new Error('a WAV track was not decoded'); });
+  await page.evaluate(() => {
+    window.routed = [];
+    const connect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (target, ...rest) { window.routed.push([this, target]); return connect.call(this, target, ...rest); };
+  });
+  await page.locator('#musicplay').click();
+  await page.waitForFunction(() => Boolean(music.src && music.src.loop), null, { timeout: 10000 })
+    .catch(() => { throw new Error('the music does not play looping'); });
+  if (!await page.evaluate(() => window.routed.some(([from, to]) => from === music.gain && to === master))) {
+    throw new Error("the music does not go through the page's volume");
+  }
+  await pressSound();
+  const levelSet = await page.evaluate(() => {
+    const level = document.getElementById('musiclevel');
+    level.value = '-20';
+    level.dispatchEvent(new Event('input'));
+    return music.gain.gain.value;
+  });
+  if (Math.abs(levelSet - 0.1) > 0.001) throw new Error(`the music's level is ${levelSet}`);
+  await page.locator('#musicplay').click();
+  await page.waitForFunction(() => music.src === null, null, { timeout: 10000 })
+    .catch(() => { throw new Error('the music does not stop'); });
+  const seen = errors.length;
+  await page.locator('#musicfile').setInputFiles({ name: 'broken.mp3', mimeType: 'audio/mpeg', buffer: Buffer.from('this is no audio at all') });
+  await page.waitForFunction(() => music.buffer === null && document.getElementById('musicnote').textContent.includes('could not read'), null, { timeout: 20000 })
+    .catch(() => { throw new Error('a file it cannot decode is not reported'); });
+  errors.splice(seen, errors.length - seen, ...errors.slice(seen).filter(text => !/decod|audio/i.test(text)));   // the browser's own note on that file
+  await pressSound();
 
   await page.getByRole('button', { name: 'keep', exact: true }).first().click();
   const feedback = JSON.parse(await page.locator('#feedback').inputValue());

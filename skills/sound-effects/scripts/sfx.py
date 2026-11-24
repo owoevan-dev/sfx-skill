@@ -10,6 +10,8 @@ Commands (python sfx.py COMMAND --help for each):
   export     write a render's files for a game engine (godot, unity, unreal, roblox, web, generic)
   clean      list old renders the kept ones no longer need; with --trash move them to .sfx-trash
   banks      list the sample banks of music-production's configuration that recorded layers may use, and their presets
+  surge      find the Surge XT patches a surge layer can play, with their measured character
+  music      read a music-production project: tempo, sections, declared harmony, parts; quote a part's written notes
   samples    fill and search the sample library: FSD50K's CC0 recordings, sounds a person has, a recording's time map
   spectrogram  draw a picture of each sound of a render (or of one WAV) to look at: level, spectrum, loudest moment
   doctor     check what synthesis needs, and FFmpeg and music-production when named
@@ -47,7 +49,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from sfxlib import (VERSION, audition, check, clean, denoise, export, ffmpeg, fsd50k, instruments,  # noqa: E402
-                    licences, mpbridge, project, recipes, record, render, samples, spectrogram, variants, wav)
+                    licences, mpbridge, music, project, recipes, record, render, samples, spectrogram, surge, variants, wav)
 
 LIMITED_SHOWN = 5                   # how many limited files a render or a check names
 LIMITED_FROM_DB = 0.05              # less than this is not reported as limiting
@@ -163,11 +165,17 @@ def cmd_render(args):
         proj = dict(proj, sounds=[s for s in proj['sounds'] if s['id'] in args.sound],
                     flows=[f for f in proj['flows'] if set(f['sounds']) <= set(args.sound)])
     try:
-        report = render.render(proj, args.output, config=config, samples=lib, ffmpeg=ff, page=not args.no_page)
+        report = render.render(proj, args.output, config=config, samples=lib, ffmpeg=ff, page=not args.no_page,
+                               takes=Path(args.project).resolve().parent / surge.FOLDER, record_takes=args.record_takes,
+                               music_skill=args.music_skill)
     except render.RenderError as error:
         print(f'render: {error}')
         return 1
     print(f"{report['title']}: {report['files']} files in {args.output} ({report['seconds']} s)")
+    if 'surge_takes' in report:
+        takes = report['surge_takes']
+        print(f"Surge takes: {takes['recorded']} recorded, {takes['played'] - takes['recorded']} replayed; {surge.FOLDER} beside the project holds "
+              f"{takes['folder_bytes'] / 1e6:.1f} MB and belongs with it")
     _print_level(args.output)
     _print_flags(json.loads((Path(args.output) / 'check.json').read_text(encoding='utf-8')))
     if args.sound and proj['level'].get('target_lufs') is None:
@@ -579,6 +587,64 @@ def cmd_banks(args):
     return 0
 
 
+def cmd_surge(args):
+    try:
+        skill = mpbridge.find_music_skill(args.music_skill or None)
+    except mpbridge.MusicSkillError as error:
+        print(f'surge: {error}')
+        return 1
+    if skill is None:
+        print("surge: Surge XT comes with the music-production skill, which was not found (its setup installs it; --music-skill names its folder)")
+        return 1
+    try:
+        presets = surge.load_catalog(skill)
+    except surge.SurgeError as error:
+        print(f'surge: {error}')
+        return 1
+    if args.id:
+        entry = presets.get(args.id)
+        if entry is None:
+            print(f"surge: there is no patch '{args.id}' in Surge's catalog (sfx.py surge --find WORDS lists them)")
+            return 1
+        why = surge.refused(entry)
+        if why:
+            print(f"surge: patch '{args.id}' cannot be used: {why}")
+            return 1
+        print(json.dumps(dict(entry, id=args.id), indent=1, ensure_ascii=False) if args.json else '\n'.join(surge.describe(args.id, entry)))
+        return 0
+    if args.find is not None and not samples.searchable(args.find):
+        print(f"surge: '{args.find}' holds no letters A-Z or digits to search by. Patch names, categories and designers are in English, for example --find bell")
+        return 1
+    found = surge.find(presets, args.find or '', args.role, args.character, project=Path.cwd().name)
+    shown = found if args.limit == 0 else found[:args.limit]
+    if args.json:
+        print(json.dumps([dict(presets[key], id=key) for key in shown], indent=1, ensure_ascii=False))
+        return 0
+    print(f'{len(found)} patches match, {len(shown)} shown' + (' (--limit 0 lists all)' if len(shown) < len(found) else '') + ", in this project's own order:")
+    for key in shown:
+        print(f'  {surge.summary(key, presets[key])}')
+    print('--id ID shows what its macros and mod wheel move. A layer plays one: {"type": "surge", "patch": ID, "notes": [[0, 72, 0.5, 100]]}; '
+          'render with --record-takes --config CONFIG to record it')
+    return 0
+
+
+def cmd_music(args):
+    try:
+        song = music.load(args.song)
+        if args.track is None and args.bars is None:
+            info = music.describe(song)
+            print(json.dumps(info, indent=1, ensure_ascii=False) if args.json else '\n'.join(music.overview(info)))
+            return 0
+        if args.track is None or args.bars is None:
+            raise music.MusicError('--track and --bars go together, such as --track lead --bars 5-6')
+        quoted = music.quote(song, args.track, *music.parse_bars(args.bars))
+    except music.MusicError as error:
+        print(f'music: {error}')
+        return 1
+    print(json.dumps(quoted, indent=1, ensure_ascii=False) if args.json else '\n'.join(music.quote_lines(quoted)))
+    return 0
+
+
 def _library_line():
     folder = samples.default_library()
     if not (folder / samples.INDEX).is_file():
@@ -614,7 +680,13 @@ def cmd_doctor(args):
         print(f'music-production: {error}')
         return 1
     print(f'music-production: {skill}' if skill else
-          'music-production: not found (needed only for instrument layers)')
+          'music-production: not found (needed only for instrument and Surge layers)')
+    try:
+        config = mpbridge.load_config(args.config) if args.config else None
+    except mpbridge.MusicSkillError as error:
+        print(f'configuration: {error}')
+        return 1
+    print(f'Surge XT: {surge.status(config, skill)}')
 
     print(_library_line())
     found, ff = _ffmpeg(args, 'FFmpeg')
@@ -807,6 +879,9 @@ def build_parser():
     ren.add_argument('--samples', action='append', metavar='LIB',
                      help='a sample library; repeat it for packs kept in several (default: $SFX_SKILL_LIBRARY or '
                           '~/.sfx-skill/library, when it exists)')
+    ren.add_argument('--record-takes', action='store_true', help='let Surge XT record the takes of Surge layers that have none yet (needs --config); '
+                     'without it a render plays only the takes kept in surge_takes beside the project')
+    ren.add_argument('--music-skill', help='the music-production folder, if not beside this skill or in ~/.claude/skills')
     ren.set_defaults(func=cmd_render)
 
     chk = sub.add_parser('check', help='measure a render again', description="Measure a render's master files "
@@ -931,6 +1006,27 @@ def build_parser():
     bk.add_argument('--find', help='only presets whose name holds this text (any case)')
     bk.add_argument('--json', action='store_true', help='print the listing as JSON')
     bk.set_defaults(func=cmd_banks)
+
+    su = sub.add_parser('surge', help='find Surge XT patches for surge layers', description="List the Surge XT patches of music-production's catalog that a surge "
+                        'layer can play, with their measured character, in an order of this project\'s own.')
+    su.add_argument('--find', help="only patches holding these words in their id, name, category or designer")
+    su.add_argument('--role', help='only this role: lead, brass, pad, chords, keys, pluck, bass, sequence, fx, percussion, special or other')
+    su.add_argument('--character', help='comma-separated words their measured character must hold: dark, warm, mid, bright; fast, soft, slow; dry, short, long; '
+                    'mono, narrow, wide; steady, moving')
+    su.add_argument('--id', help='one patch in full: its measurement and what its macros and mod wheel move')
+    su.add_argument('--limit', type=int, default=25, help='list at most this many (default 25; 0 for all)')
+    su.add_argument('--music-skill', help='the music-production folder, if not beside this skill or in ~/.claude/skills')
+    su.add_argument('--json', action='store_true', help='print them as JSON')
+    su.set_defaults(func=cmd_surge)
+
+    mu = sub.add_parser('music', help="read a music-production project, or quote a part's written notes",
+                        description="What a music-production project (song.json) declares: tempo, meter, sections, harmony, plan and parts, counted from "
+                        "bar 1. With --track and --bars, those bars' written notes, ready for an instrument or surge layer. It works out no key and changes no music.")
+    mu.add_argument('song', help="the project's song.json")
+    mu.add_argument('--track', help='the id of the part to quote')
+    mu.add_argument('--bars', help='the bars to quote, counted from 1: 5 or 5-6')
+    mu.add_argument('--json', action='store_true', help='print it as JSON')
+    mu.set_defaults(func=cmd_music)
 
     doc = sub.add_parser('doctor', help='check the setup', description='Check what synthesis needs (Python, NumPy); '
                          'with --config also FFmpeg and music-production\'s own doctor.')

@@ -50,12 +50,14 @@ def _source(layer, freq, n, seed, index, channels=1, loop=False, ratio=None, ins
     src = layer['source']
     kind = src['type']
     spread = float(layer.get('spread', 0.0)) if channels == 2 else 0.0
-    if kind == 'instrument':
+    if kind in ('instrument', 'surge'):
         if loop:
-            raise ValueError('an instrument source cannot be the bed of a loop; play it as an event (a shorter layer)')
+            raise ValueError(f"{'an instrument' if kind == 'instrument' else 'a Surge'} source cannot be the bed of a loop; "
+                             'play it as an event (a shorter layer)')
         if instruments is None:
             raise ValueError("an instrument layer plays on music-production's sample banks: render with its "
-                             'configuration (--config)')
+                             'configuration (--config)' if kind == 'instrument' else
+                             "a Surge layer plays a take kept beside the project: render it with sfx.py render")
         x = recorded.placed(recorded.detune(instruments.render(src), src.get('cents', 0.0)), channels)
         out = np.zeros((n,) + x.shape[1:])
         out[:min(n, len(x))] = x[:n]
@@ -298,7 +300,8 @@ def _layer_report(layer, frames, start, info=None):
     """What a layer contributes before the chain: its source, peak in dB and when it peaks in the sound, in seconds;
     with `runs_out_s` and `length_s` when its recording ended while the envelope still held it (a hole in the sound)."""
     source = layer.get('source', {})
-    name = f"{source['library']}/{source['file']}" if source.get('type') == 'sample' else source.get('type', '')
+    name = (f"{source['library']}/{source['file']}" if source.get('type') == 'sample' else
+            f"surge:{source['patch']}" if source.get('type') == 'surge' else source.get('type', ''))
     level = np.max(np.abs(frames.reshape(len(frames), -1)), axis=1) if len(frames) else np.zeros(1)
     top = int(np.argmax(level))
     out = {'source': name, 'peak_db': round(20 * math.log10(max(float(level[top]), 1e-10)), 1),

@@ -2,7 +2,7 @@
 name: sound-effects
 description: "Designs and makes original sound effects for games and apps. The agent designs each sound for the brief, as layers it writes and edits (transients, bodies, low end and tails from oscillators, FM, chip voices, noise, struck modes, rain, wind, instruments and CC0 field recordings) or from recipes it adapts; scripts render every sound with variants, level the set, measure each sound and build a one-file audition page where the game's developer listens and leaves feedback. It covers interface sounds (clicks, confirmations, errors), retro chip sounds, sci-fi (zaps, charges, shields, explosions), magic (sparkles, casts, heals, curses), impacts (punches, wood, metal, glass, swings), layered designs for anything else (doors, footsteps, mechanisms) and seamless ambience loops, with exports for Godot, Unity, Unreal, Roblox and the web. Use it whenever the user wants sound effects, UI sounds, game sounds or ambience loops for a game or an app, even if they only ask for 'some sounds'."
 license: MIT
-compatibility: "Python 3.10+ with NumPy. FFmpeg, if present, adds FLAC, Ogg and MP3 and reads recordings that are not WAV. An installed music-production skill adds layers on sampled instruments. CC0 field recordings are an optional download from the FSD50K dataset, with the user's agreement. No audio model."
+compatibility: "Python 3.10+ with NumPy. FFmpeg, if present, adds FLAC, Ogg and MP3 and reads recordings that are not WAV. An installed music-production skill adds layers on sampled instruments and Surge XT. CC0 field recordings are an optional download from the FSD50K dataset, with the user's agreement. No audio model."
 metadata:
   version: "0.1.3"
 ---
@@ -33,8 +33,8 @@ Run the commands from the game's project folder, by the full path of this skill'
 `scripts/sfx.py`), so that renders land in the project and never inside the skill.
 
 1. **Setup.** `python scripts/sfx.py doctor` passes (Python and NumPy; without NumPy it prints the command that installs
-   them) and shows whether FFmpeg and a sample library are there. With `--config <music-production configuration>` it
-   also checks music-production's own setup.
+   them) and shows whether FFmpeg, a sample library and Surge XT are there. With `--config <music-production configuration>`
+   it also checks music-production's own setup and that Surge XT can play.
 2. **Brief and palette.** Write down what the request settles and what it leaves open: the game, its world and
    materials, its style, which events need sounds, how often each is heard, which are loops (weather, rooms,
    machines), mono or stereo (mono for sounds the engine positions, stereo for ambience). Ask only for what blocks
@@ -43,6 +43,9 @@ Run the commands from the game's project folder, by the full path of this skill'
    the list holds what is hard to synthesize (doors, footsteps, metal, engines, water, animals), say so once, with the
    list: recommend the library (what it takes is under **Recordings** below) and mention that the user can hand you a
    folder or zip of sounds they already have. A game of only interface or chip sounds needs neither, so do not ask.
+   If the list holds magic or sci-fi sounds and `doctor` shows no Surge XT, say that once too: the music-production skill's
+   setup adds it (about 0.5 GB), and it suits sounds that should move and ring by themselves. Install it only if they
+   agree; without it these sounds are made from the other layers.
 3. **Design the sounds** in the project file ([project-format.md](references/project-format.md)), one per event:
    - **A recipe**, when one is close. `python scripts/sfx.py recipes --category impact` lists them and `--name
      impact.punch` prints a recipe's parameters and rules ([ui-sounds.md](references/ui-sounds.md),
@@ -70,20 +73,26 @@ Run the commands from the game's project folder, by the full path of this skill'
      3. Trim with `offset`, take noise out (filters, envelopes, `denoise`), change size, weight and distance, stack the
         recording with synthesis and give each variant its own take ([sound-design.md](references/sound-design.md),
         section 6).
+   - **Surge XT**, for sounds that should move and ring by themselves: magic, sci-fi, drones, shimmers. `python
+     scripts/sfx.py surge --find bell --character bright` lists patches and `--id ID` says what each one's macros move. A
+     `surge` layer plays one ([sound-design.md](references/sound-design.md), section 10). Two plays of a note differ, so each
+     take is recorded once, by `render --record-takes --config CONFIG`, into `surge_takes` beside the project: keep that
+     folder with the project, since every later render plays it.
    - **Instruments**, for pitched notes on sampled instruments: `python scripts/sfx.py banks --config CONFIG --find
      marimba` lists what an installed music-production skill offers.
 
    Add `flows` for the sequences a player hears together (hover, select, confirm). `python scripts/sfx.py validate
    project.json` passes.
 4. **Render.** `python scripts/sfx.py render project.json --output render_1` (with `--config CONFIG` for instrument
-   layers, `--samples LIB` for a library elsewhere) writes the masters, `resolved.json` (every value each file was made
+   layers, `--record-takes --config CONFIG` for Surge layers with no take yet, `--samples LIB` for a library elsewhere) writes the masters, `resolved.json` (every value each file was made
    from, and each layer's peak), `check.json` and `audition.html`. Read the flags and each sound's traits in
    `check.json` (`check render_1 --traits` prints them as a table): how dense, bright, long and heavy it is, set against
    the brief ([checks.md](references/checks.md)). No flags does not mean clean: a noise inside a recording or a sample can look like part of the sound, so look at the spectrogram (`spectrogram render_1`) of anything with a long tail. Change what they point at in a new render folder (`render_2`, ...). While you work on one sound, `--sound ID` renders
    it alone and `--no-page` skips the page; render the whole project before you send it.
 5. **Listen.** Send the user `audition.html`. It plays each variant, random variants without repeats, rapid repeats
    and the flows; loops play looping, with a button that starts two seconds before the join. The user sets a level,
-   chooses keep / change / drop and writes notes per sound, then copies the feedback JSON back to you.
+   chooses keep / change / drop and writes notes per sound, then copies the feedback JSON back to you. If the game has
+   music, they can load a track from their computer and hear the sounds over it.
 6. **Revise.** Turn each note into design changes (a layer added, swapped or moved; a recipe's parameters;
    `trim_db`; `vary`), render again and send the new page, saying what changed and why. When the user cannot say
    what is wrong, offer two or three versions of the sound that each differ in one direction (heavier, brighter,
@@ -100,6 +109,21 @@ loudness, loudness range and how its halves differ, which tell you whether a swe
 round. The level step brings a loop to the one-shots' loudness, so a bed needs a negative `trim_db` to sit under them (the
 check flags one within 3 dB of the loudest one-shot). Audition the length that ships, since the page holds it whole (about 13 MB for 48 stereo seconds): one variant of
 a long loop keeps the page small.
+
+## The game's music
+
+When the music comes from a music-production project, its `song.json` shows what the sounds will sit against, and a sound
+can quote it. Which notes to use and where a sound sits are your choice: nothing here fits a sound to the music by itself.
+
+- `python scripts/sfx.py music song.json` prints what the project declares: tempo, meter, the sections by bar and second,
+  its harmony and plan, and what each part holds (its range and, for pitched parts, the pitch classes it plays). It works
+  out no key: if no harmony is declared it says so.
+- `--track flute --bars 1-2` prints those bars' written notes, ready to paste as the `notes` of an `instrument` or `surge`
+  layer, so that a pickup or a level-up can quote the game's theme. Time 0 is the start of the first bar, a note running past
+  the last bar is cut there, and it names what the performance adds that the written notes leave out (swing, gate,
+  per-note timing, rubato). Quote only music that is the user's own or that they may use this way.
+- On the audition page, **Music** loads a file from the user's computer and loops it at its own level under the sounds. The
+  file stays in the browser: it is not embedded in the page or sent anywhere, and nothing of it reaches the masters.
 
 ## Sounds the user already has
 
@@ -131,7 +155,9 @@ measures well: report measurements as measurements and let the user's ears decid
 | `expand PROJECT --output NEW [--sound ID]` | writes a project in which recipe sounds are explicit layers |
 | `banks --config CONFIG [--find TEXT] [--bank NAME] [--json]` | lists the sample banks instrument layers may use and their presets |
 | `samples [--library LIB] [--download-fsd50k DATA] [--add-fsd50k DATA] [--add FOLDER_OR_ZIP [--licence L] [--author NAME] [--confirm-licence]] [--labels] [--find TEXT [--passing] [--not WORD] [--min-seconds S] [--max-seconds S] [--limit N]] [--events PACK/FILE [--min-gap S] [--even] [--limit N]] [--map PACK/FILE] [--spectrogram PACK/FILE ... [--output FOLDER]] [--json]` | lists the recorded sources sample layers may use; fetches and imports FSD50K's CC0 recordings; imports packs the user saved; finds recordings, best first; lists a recording's strikes as takes; prints its time map |
-| `render PROJECT --output FOLDER [--sound ID ...] [--no-page] [--config CONFIG] [--samples LIB ...] [--ffmpeg PATH]` | renders, levels, writes masters, checks and writes the audition page (a new folder); `--sound` renders only those sounds; `--samples` repeats for packs kept in several libraries |
+| `surge [--find WORDS] [--role ROLE] [--character WORDS] [--id ID] [--limit N] [--music-skill DIR] [--json]` | lists the Surge XT patches a `surge` layer can play, with how each measured; `--id` says what one's macros and mod wheel move |
+| `music SONG [--track ID --bars 5-6] [--json]` | prints what a music-production project declares; with `--track` and `--bars`, the written notes of those bars for an `instrument` or `surge` layer |
+| `render PROJECT --output FOLDER [--sound ID ...] [--no-page] [--config CONFIG] [--record-takes] [--music-skill DIR] [--samples LIB ...] [--ffmpeg PATH]` | renders, levels, writes masters, checks and writes the audition page (a new folder); `--sound` renders only those sounds; `--samples` repeats for packs kept in several libraries |
 | `check FOLDER [--traits]` | measures a render again and says what set the level, what would raise it and what the limiter took; `--traits` adds a line per sound |
 | `spectrogram FOLDER [--sound ID] [--all-variants]` | draws each sound's picture (level, loudest moment, spectrogram) into FOLDER/spectrograms, to look at |
 | `audition FOLDER` | writes the audition page again |
@@ -139,8 +165,10 @@ measures well: report measurements as measurements and let the user's ears decid
 | `clean FOLDER --keep RENDER [--exports] [--trash] [--json]` | lists the old renders the kept one no longer needs; `--trash` moves them whole into `FOLDER/.sfx-trash`. A folder holding anything the skill did not write, one newer than the kept version and, without `--exports`, any export stay. `clean FOLDER --downloads` only lists the archives the library holds in full. Nothing is deleted |
 | `doctor [--config CONFIG] [--ffmpeg PATH]` | checks the setup (music-production and FFmpeg are optional) |
 
-Sounds made with this skill carry no conditions when they use only synthesis, the instrument banks it allows and
-recordings under CC0, in the public domain or the user's own: no credit is needed and they may be used for anything.
+Sounds made with this skill carry no conditions when they use only synthesis, Surge XT, the instrument banks it allows and
+recordings under CC0, in the public domain or the user's own: no credit is needed and they may be used for anything. A
+sound that quotes a melody is the exception: the melody keeps whatever rights it has, so it must be the user's own or music
+they may use.
 A sound that layers an imported recording under another licence carries that licence's conditions (credit,
 share-alike, non-commercial); the render, its audition page and each export manifest say which and give the credits.
 Each render records the recordings it used.

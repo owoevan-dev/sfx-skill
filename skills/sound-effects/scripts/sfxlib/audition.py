@@ -8,7 +8,10 @@ and a note make up the feedback, which the page shows as JSON to copy back to th
 browser's local storage where the browser allows it.
 
 A loop's variants play looping (the Web Audio buffer source's own loop, which joins the end to the start with no gap)
-until "stop"; "hear the join" starts two seconds before the end, so the join comes at once."""
+until "stop"; "hear the join" starts two seconds before the end, so the join comes at once.
+
+"Music" takes a file from the listener's own computer and plays it, looping if asked, under the sounds at a level of its
+own. The file is decoded in the page and goes nowhere: it is not embedded, kept or sent, and no master holds any of it."""
 import base64
 import html
 import json
@@ -43,6 +46,7 @@ button { font: inherit; border: 1px solid var(--line); background: var(--card); 
 button:hover { border-color: var(--accent); }
 button.on { background: var(--on); border-color: var(--accent); }
 button.playing { outline: 2px solid var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
 .card h2 { font-size: 1.05rem; margin: 0; }
@@ -67,6 +71,13 @@ input[type=range] { width: 140px; }
     <label><input type="checkbox" id="phone"> As on a phone speaker (cuts below 400 Hz)</label>
     <label>Rapid interval <input type="number" id="interval" min="40" max="1000" step="10" value="150"> ms</label>
     <button id="all">Play every sound once</button>
+  </div>
+  <div class="bar">
+    <label>Music <input type="file" id="musicfile" accept="audio/*,.mp3,.ogg,.oga,.opus,.flac,.wav,.m4a,.aac"></label>
+    <button id="musicplay" disabled>play music</button>
+    <label><input type="checkbox" id="musicloop" checked> loop</label>
+    <label>Music level <input type="range" id="musiclevel" min="-40" max="0" step="1" value="-12"> <span id="musicval"></span></label>
+    <span class="muted small" id="musicnote">To hear the sounds over the game's music, pick a track on this computer. It stays in this page: it is not saved or sent anywhere.</span>
   </div>
   <div class="bar" id="flows"></div>
 </header>
@@ -318,6 +329,77 @@ function showFeedback() {
   }
   document.getElementById('feedback').value = JSON.stringify(out, null, 1);
 }
+// Music to hear the sounds over: a file from this computer, decoded here. It is not kept or sent, and reaches no master.
+const MUSIC_LIMIT_BYTES = 256 * 1024 * 1024;
+const music = { buffer: null, src: null, gain: null, turn: 0 };
+function musicLevel() { return dbToGain(Number(document.getElementById('musiclevel').value)); }
+function showMusic() { document.getElementById('musicplay').textContent = music.src ? 'stop music' : 'play music'; }
+function stopMusic() {
+  const src = music.src;
+  music.src = null;
+  if (src) {
+    src.onended = null;
+    try { src.stop(); } catch (e) { /* already stopped */ }
+  }
+  showMusic();
+}
+function startMusic() {
+  stopMusic();
+  if (!music.buffer) return;
+  if (!music.gain) { music.gain = ctx.createGain(); music.gain.connect(master); }
+  music.gain.gain.value = musicLevel();
+  const src = ctx.createBufferSource();
+  src.buffer = music.buffer;
+  src.loop = document.getElementById('musicloop').checked;
+  src.connect(music.gain);
+  src.onended = () => { if (music.src === src) { music.src = null; showMusic(); } };
+  src.start();
+  music.src = src;
+  showMusic();
+}
+async function loadMusic(file) {
+  const turn = ++music.turn;
+  const note = document.getElementById('musicnote');
+  const button = document.getElementById('musicplay');
+  stopMusic();
+  music.buffer = null;
+  button.disabled = true;
+  if (file.size > MUSIC_LIMIT_BYTES) {
+    note.textContent = file.name + ' is over ' + (MUSIC_LIMIT_BYTES / 1048576) + ' MB, too large to hold in this page. The sounds still play.';
+    return;
+  }
+  note.textContent = 'reading ' + file.name + '...';
+  try {
+    ensureAudio().catch(() => {});                  // the sounds' own decoding goes on beside this
+    const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
+    if (turn !== music.turn) return;                // another file was chosen meanwhile
+    music.buffer = buffer;
+    button.disabled = false;
+    note.textContent = file.name + ', ' + fmt(buffer.duration, 1) + ' s. It stays in this page: it is not saved or sent anywhere.';
+  } catch (e) {
+    if (turn === music.turn) note.textContent = 'This browser could not read ' + file.name + ' as audio. The sounds still play.';
+  }
+}
+function setupMusic() {
+  document.getElementById('musicfile').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (file) loadMusic(file);
+  });
+  document.getElementById('musicplay').addEventListener('click', async () => {
+    if (music.src) { stopMusic(); return; }
+    try { await ensureAudio(); } catch (e) { /* the music does not wait on the sounds */ }
+    startMusic();
+  });
+  const loop = document.getElementById('musicloop');
+  loop.addEventListener('change', () => { if (music.src) music.src.loop = loop.checked; });
+  const level = document.getElementById('musiclevel');
+  const showLevel = () => {
+    document.getElementById('musicval').textContent = level.value + ' dB';
+    if (music.gain) music.gain.gain.value = musicLevel();
+  };
+  level.addEventListener('input', showLevel);
+  showLevel();
+}
 function setup() {
   document.getElementById('title').textContent = DATA.title;
   document.getElementById('about').textContent = DATA.sounds.length + ' sounds, render ' + DATA.render + ', made by ' +
@@ -359,6 +441,7 @@ function setup() {
     if (!done) { text.select(); try { done = document.execCommand('copy'); } catch (e) { done = false; } }
     document.getElementById('copied').textContent = done ? 'copied' : 'select the text below and copy it';
   });
+  setupMusic();
   showFeedback();
 }
 setup();

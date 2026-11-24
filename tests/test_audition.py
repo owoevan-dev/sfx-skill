@@ -98,6 +98,17 @@ class Page(unittest.TestCase):
         self.assertEqual(self.data['sounds'][0]['notes'], 'a note with </script><b>markup</b> in it')
         self.assertEqual(self.data['flows'][0]['sounds'], ['beep', 'hand_made'])
 
+    def test_music_is_picked_from_the_computer_and_goes_nowhere(self):
+        self.assertRegex(self.html, r'<input type="file" id="musicfile"')
+        script = re.search(r'<script>(.*?)</script>', self.html, re.S).group(1)
+        self.assertNotRegex(script, r'fetch\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource|createObjectURL|FileReader')
+        self.assertEqual(len(re.findall(r'localStorage', script)), 2)         # the listener's choices, read and written
+
+    def test_the_feedback_says_nothing_of_the_music(self):
+        script = re.search(r'<script>(.*?)</script>', self.html, re.S).group(1)
+        feedback = script[script.index('function showFeedback'):script.index('function setup')]
+        self.assertNotIn('music', feedback[:feedback.index('// Music')])
+
     def test_the_page_is_listed_in_files_json(self):
         files = json.loads((self.out / 'files.json').read_text(encoding='utf-8'))
         self.assertIn('audition.html', [f['path'] for f in files])
