@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0
+
+- **Read a sound as numbers.** `sfx.py readout RENDER` (or a WAV file) prints each sound's ten octave bands over time from its
+  onset, its steady pitches with note names and its sudden rises, so the agent reads exactly what it used to estimate from a
+  spectrogram. A steady line at a mains frequency is marked, and the main event follows the sound's `peak_at`. It describes and
+  flags nothing; the spectrogram stays for what it leaves open.
+- **Quote a MIDI file.** `sfx.py music theme.mid` lists a Standard MIDI File's tempo, meter and parts, and `--track 2 --bars 1-2`
+  quotes a part's notes for an instrument or Surge layer, as for a music-skill project. Music written in any program can now be
+  quoted.
+- Importing FSD50K's own sets from its Zenodo record now also screens a recording's description for adult content, not only its
+  title and tags.
+- `sfx.py` is split into a module per family of commands, with no change of behaviour.
+
 ## 0.2.0
 
 - **Surge XT layers.** With [music-skill](https://github.com/owoevan-dev/music-skill) installed, a `surge` layer plays one of the

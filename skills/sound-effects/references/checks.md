@@ -51,13 +51,30 @@ check its effect. They are compared with nothing and raise no flag (traits.py gi
 | `active_s`, `attack_ms`, `decay20_ms`, `peak_s` | from the first to the last millisecond within 40 dB of the peak; from its start to the peak; from the peak to the last millisecond within 20 dB of it (edges this skill's choice); the time of the loudest millisecond | how long it speaks, how fast it hits, how long it rings, where it hits hardest |
 | `bands` | shares of the energy in six bands: `sub` 20-60 Hz, `low` 60-150, `low_mid` 150-500, `mid` 500-2000, `high_mid` 2-5 kHz, `high` 5-20 kHz (the file-level `bands` above are three other, wider bands) | where its weight lies |
 
-`python scripts/sfx.py check RENDER --traits` prints them, one line per sound. Look as well as read: `python scripts/sfx.py spectrogram RENDER` draws each sound's picture (its level with the
+`python scripts/sfx.py check RENDER --traits` prints the main ones, one line per sound (`check.json` holds them all). Look as well as read: `python scripts/sfx.py spectrogram RENDER` draws each sound's picture (its level with the
 loudest millisecond marked, and its spectrogram from 20 Hz to 20 kHz on a log scale) into RENDER/spectrograms; open
 the PNG. A click is a thin vertical line, a strike a bright column fading right, a ring a horizontal line, noise a
 smear, weight the bottom rows.
 
 Read them while you design: a punch whose `attack_ms` is long has no snap; a door whose `bands` hold almost nothing
 under 150 Hz has no weight; a bright `centroid_hz` under a dark brief is the first thing to change.
+
+## Readout
+
+`python scripts/sfx.py readout RENDER` (or `readout FILE.wav`) prints what the spectrogram shows, as numbers. A language
+model reads exact values from a table far better than from a picture: turning a chart into a table before reasoning
+over it is what made the difference in Liu et al. (2023, "DePlot", Findings of ACL), and vision-language models miss
+exact spatial detail in simple pictures (Rahmanzadehgervi et al. 2024, "Vision language models are blind", ACCV). So read
+the readout first and open the picture for what it leaves open. It describes and flags nothing; every threshold below is
+this skill's choice.
+
+| Part | What | Reading |
+|---|---|---|
+| bands | ten octave bands at the nominal centres of IEC 61260-1 (31.5 Hz, printed `31`, to 16 kHz), made by this skill's own split of one FFT of the sound (raised-cosine changes a sixth of an octave wide at the geometric midpoints between the centres, adding up to the whole; not an IEC class filter). A cell is the band's loudest millisecond (1 ms RMS) in a slice, in dB under the loudest cell; `.` is more than 60 dB under; `n/a` lies above what the file's sample rate can hold. No band is counted above twice the whole sound's power in its millisecond, which cuts off the split's ringing before a sudden sound out of silence | a one-shot's slices start at its onset (the first millisecond within 40 dB of the loudest, as `active_s`) and double in width: 0-5, 5-10, 10-20 ms and so on, with a `before` slice when something comes earlier. A loop has twelve equal slices. Read an attack in the first rows and a tail in the last: where the low end dies, whether the top outlasts the body |
+| tonal lines | steady pitches: spectral peaks at least 12 dB over the average of each side of the third of an octave around them (at least 8 bins each side, so a steep edge in a recording's spectrum is no pitch), whose instantaneous frequency, averaged over 25 ms, agrees with both bins beside them within a quarter of a bin, as a sinusoid's does and noise's does not (Friedman 1985; Charpentier 1986); joined from frame to frame within 40 cents (McAulay and Quatieri 1986), pieces of one pitch less than 0.15 s apart counted as one line, lasting at least 40 ms. Two windows, of about 85 and 21 ms at any sample rate (4096 and 1024 samples at 48 kHz), so quick glides show too; what both windows see of one pitch, and pieces of one pitch that meet, are one line | the frequency at its loudest frame with its note (A4 = 440 Hz) and cents, its start and end (to about 40 ms), its level in dB under the loudest spectral peak, and both ends when it moves more than 50 cents. At most eight, loudest first. A fast sweep, or a low pitch that glides under noise, may show only in the bands: no line is no proof that there is no pitch |
+| mains frequency | a line whose frames hold the pitch for at least 0.5 s and 80 % of the active part (gaps between pieces do not count), with 80 % of its points within 1.5 % of one multiple of 50 or 60 Hz, up to the eighth (400 or 480 Hz) | hum in a recording, or a drone that was meant: decide from the design. It is kept in the list even when louder partials fill it |
+| events | sudden rises: a millisecond in a band at least 12 dB over that band's loudest millisecond 5 to 25 ms before (relative rises in bands: Klapuri 1999; Bello et al. 2005). A start from silence (the band more than 80 dB under the loudest level in the 5 to 25 ms before) counts in any band; a rise in one band alone must reach 20 dB, since one narrow band swells by chance. Only rises within 40 dB of the loudest band level count. Rises within 30 ms are one event | time, rise and the bands that rose; at most ten, the largest, with the number found when there are more. The main one is the event nearest the sound's `peak_at` when the project declares one, else the one leading into the loudest millisecond. Another event late in a one-shot is a second strike, a click or a noise in a recording: decide which from the design |
+| roll-off | the frequency under which 95 % of the active part's energy between 20 Hz and 20 kHz lies (Peeters et al. 2011) | how far up the sound reaches; a bass-heavy sound can still have a bright attack, which the first rows show |
 
 ## Flags and their thresholds
 
