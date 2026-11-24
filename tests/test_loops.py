@@ -480,11 +480,11 @@ class Ctx {
   decodeAudioData() { return Promise.resolve({ duration: 5.0, getChannelData: () => new Float32Array(16) }); }
 }
 global.document = { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {},
-                    execCommand: () => true };
-global.window = { localStorage: { getItem: () => null, setItem: () => {} }, devicePixelRatio: 1, AudioContext: Ctx };
+                    execCommand: () => true, querySelectorAll: () => [] };
+global.window = { localStorage: { getItem: () => null, setItem: () => {} }, devicePixelRatio: 1, AudioContext: Ctx, addEventListener() {} };
 global.getComputedStyle = () => ({ getPropertyValue: () => '#000' });
 global.atob = s => Buffer.from(s, 'base64').toString('binary');
-global.navigator = {};
+Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true, writable: true });   // not Node's own
 (0, eval)(script);
 function find(node, pred) {
   if (pred(node)) return node;

@@ -2,8 +2,10 @@
 
 Usage: python tools/check_release.py                    every pack of the release answers with its size, the index is
                                                         the one this version names, the dataset's record answers
-       python tools/check_release.py --full DATA LIB    also downloads the packs, imports them into a new library and
-                                                        renders the recorded example from it (about 7.2 GB of disk)
+       python tools/check_release.py --full DATA LIB    instead downloads the packs (the index checked against the sum
+                                                        this version names, every part against the index), imports them
+                                                        into a new library and renders the recorded example from it (about
+                                                        7.2 GB of disk); the first form checks the links, the dataset's too
 
 A version that names no release yet has nothing to check."""
 import argparse
@@ -11,6 +13,7 @@ import hashlib
 import json
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -27,6 +30,17 @@ def size_of(url):
         return int(reply.headers.get('Content-Length') or -1)
 
 
+def dataset_answers():
+    """The dataset's record is there. A refusal of this client (403, 429), which the site gives some shared cloud runners while it
+    answers others, is not a record that is gone, which answers 404 or 410: it is said, and the check goes on."""
+    try:
+        size_of(DATASET)
+    except urllib.error.HTTPError as error:
+        if error.code not in (403, 429):
+            raise
+        print(f'the dataset record refused this runner (HTTP {error.code}); a record that is gone answers 404 or 410')
+
+
 def check_links():
     base = fsd50k.RELEASE_URL.rstrip('/')
     with urllib.request.urlopen(f'{base}/{fsd50k.PACK_INDEX}', timeout=120) as reply:
@@ -38,8 +52,8 @@ def check_links():
         got = size_of(f"{base}/{part['name']}")
         if got != int(part['bytes']):
             raise SystemExit(f"{part['name']}: {got} bytes on the release, {part['bytes']} in the index")
-    size_of(DATASET)
-    print(f'{len(parts)} packs on the release answer with their sizes; the index is the one named; the dataset record answers')
+    dataset_answers()
+    print(f'{len(parts)} packs on the release answer with their sizes; the index is the one named; the dataset record was asked')
 
 
 def check_install(data, library):
@@ -62,9 +76,10 @@ def main():
             raise SystemExit('this version names no release (RELEASE_URL), so the packs a release must carry cannot be checked')
         print('this version names no release yet: nothing to check')
         return 0
-    check_links()
-    if args.full:
+    if args.full:              # its download checks more than the sizes; the links are the job of the first form
         check_install(*args.full)
+    else:
+        check_links()
     return 0
 
 

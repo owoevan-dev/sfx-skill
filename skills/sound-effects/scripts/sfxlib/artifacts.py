@@ -14,6 +14,13 @@ recording is reported. Clicks within
 PEAK_GUARD_MS of the sound's loudest moment are its own attack (an interface tick is one click on purpose) and are
 not reported. The thresholds are this skill's choices.
 
+Stray attacks. In an instrument's own performance the notes are known, so an attack that no note explains can be named: a tick
+left inside a sample passes the click test, since it rings on for tens of milliseconds as a small hit does. Between one note
+start and the next, it is a millisecond whose energy above 3 kHz stands at least STRAY_RISE_DB over the loudest of the
+STRAY_BEFORE_MS before the millisecond ahead of it (so an attack that rises over two milliseconds is still one), within STRAY_TOP_DB of the interval's loudest, more than STRAY_AFTER_MS after the note starts (a
+sample's own attack can come late), and the only such moment of the interval (several are the instrument's own pulses or
+sparkles). These numbers are this skill's choices, set on its own measurement of the notes of the sample banks it may use.
+
 The loudest moment. A sound can say where its main event should fall (`peak_at`, seconds); the check compares that
 with the loudest millisecond of the first variant (the one that keeps the written values) and flags a difference of
 more than PEAK_AT_TOLERANCE_S, this skill's choice: about the time under which two onsets fuse into one event."""
@@ -29,6 +36,11 @@ PEAK_GUARD_MS = 5
 BROADBAND_SHARE = 0.1
 PEAK_AT_TOLERANCE_S = 0.02
 TRAIN_EDGES = 2
+STRAY_RISE_DB = 18.0
+STRAY_BEFORE_MS = 50
+STRAY_TOP_DB = 12.0
+STRAY_AFTER_MS = 250
+STRAY_JOIN_MS = 3                # a rise over this few milliseconds is one attack
 
 
 def per_ms(power, rate=RATE):
@@ -98,6 +110,25 @@ def clicks(x, rate=RATE):
                 i += 3
                 continue
         i += 1
+    return found
+
+
+def stray_attacks(x, note_starts_s, rate=RATE):
+    """Times (s) of attacks in an instrument's performance `x` that no note explains, as described above."""
+    if not len(x) or not len(note_starts_s):
+        return []
+    e = _hf_envelope_db(x, rate)
+    starts = sorted({max(0, int(round(float(s) * 1000))) for s in note_starts_s} & set(range(len(e))))   # a note past the recording's end has none
+    found = []
+    for first, stop in zip(starts, starts[1:] + [len(e)]):
+        top = float(e[first:stop].max())
+        moments = []
+        for i in range(max(first + STRAY_AFTER_MS + 1, STRAY_BEFORE_MS + 1), min(stop, len(e) - 12)):
+            if e[i] >= top - STRAY_TOP_DB and e[i] - float(e[i - 1 - STRAY_BEFORE_MS:i - 1].max()) >= STRAY_RISE_DB:
+                if not moments or i - moments[-1] >= STRAY_JOIN_MS:
+                    moments.append(i)
+        if len(moments) == 1:
+            found.append(round(moments[0] / 1000.0, 3))
     return found
 
 

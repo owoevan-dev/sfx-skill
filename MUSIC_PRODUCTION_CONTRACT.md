@@ -1,11 +1,17 @@
 # What sound-effects uses from music-production
 
-sound-effects needs music-production only for instrument layers (its FluidSynth and sample banks); FFmpeg can come
-from its configuration or from elsewhere (`--ffmpeg`, `SFX_SKILL_FFMPEG`, the PATH: sfxlib/ffmpeg.py), and everything
-else works without it. It uses music-production only through its configuration file and its command line and never
-imports its modules. This list is the whole contract: each item is exercised by
-`tests/test_music_production_contract.py` against the installed copy, so a change on music-production's side shows as
-a failing test. Written against music-production 0.8.0; checked again against 0.9.1 on 2026-11-22.
+sound-effects needs music-production only for instrument layers (its FluidSynth and sample banks), for finding Surge patches
+(`sfx.py surge` reads its catalog) and for recording the takes of Surge layers (its Surge XT); FFmpeg can come from its configuration or from elsewhere (`--ffmpeg`,
+`SFX_SKILL_FFMPEG`, the PATH: sfxlib/ffmpeg.py), and everything else works without it, also a project whose Surge takes
+are already recorded. `sfx.py music` reads a music-production project file and needs nothing else of it. It uses
+music-production only through its configuration file, its command line and the data files named below, and never imports
+its modules. This list is the whole contract. `tests/test_music_production_contract.py` checks it against the installed
+copy where it can: its configuration (FFmpeg with the codecs used, FluidSynth, the banks and their presets), its doctor, a
+project's bars, parts, notes and length against `studio.py validate`, quoted notes played on an instrument layer, and a
+Surge take recorded through its host and played again.
+How a quote names what the performance adds (rubato, swing, legato, controllers) follows music-production's guide and code
+as written down here, and no test renders those against it. Written against music-production 0.8.0; checked again
+against 0.9.1 on 2026-11-22, and the Surge part written against 0.9.2.
 
 ## Finding music-production
 
@@ -20,6 +26,8 @@ the same skills folder); `~/.claude/skills/music-production`. A folder counts wh
 | `fluidsynth.path`, `fluidsynth.sha256` | the FluidSynth program that plays instrument layers (`sfx.py render --config`); the hash goes into each layer's cache key |
 | `soundfont.path`, `.license`, `.sha256` | the default bank (`"soundfont": "default"` in an instrument layer) |
 | `soundfonts.<name>.path`, `.license`, `.sha256` | the named banks; a bank is used only when its licence starts with CC0, University of Iowa, Unlicense or MIT (music-production's soundbanks.md: music rendered with the banks its setup installs needs no credit). `sfx.py banks` lists them all, marking those it may not use |
+| `surge.path`, `.binary`, `.sha256`, `.version`, `.catalog` | the Surge XT plugin (its bundle, and the file inside it checked by hash), and the folder of its 3,008 patches |
+| `pedalboard.path`, `.record_sha256`, `.version` | the folder of the pedalboard package the host loads; each of its files is checked against its `RECORD` before a take is recorded |
 
 The FFmpeg it names must have these encoders, decoders and filters: `pcm_s16le`, `pcm_s24le`, `pcm_f32le`,
 `libvorbis`, `libmp3lame`, `flac`; `vorbis`, `mp3`, `flac`; `ebur128`, `aresample`.
@@ -52,6 +60,45 @@ difference rather than relying on either.
 | Command | Used for | Expected |
 |---|---|---|
 | `studio.py doctor --config <config>` | `sfx.py doctor` reports whether music-production's own setup passes | exit status 0 when it passes |
+| `studio.py validate song.json` | the contract test holds `sfx.py music`'s count of a project against it | exit status 0 and JSON with `bars`, `tracks`, `notes` and `seconds` (the score plus `tail_seconds`) |
+
+## The project file (`sfx.py music`)
+
+A `song.json` of schema `music-production/v1`, read as data.
+
+| Field | Used for |
+|---|---|
+| `clock.bars`, `.meter`, `.tempo`, `.tail_seconds` | bars, quarter notes a bar and seconds along the step tempo map; the score's length, apart from the render's |
+| `clock.rubato` | said, and named when a quote leaves it out; its curve is not applied |
+| `title`, `sections[].id`, `.start_bar` (from 0), `.bars`, `.intent` | printed, with bars counted from 1 |
+| `harmony[].bar` (from 1), `.beat` (quarter notes into the bar), `.symbol`, `.transpose_semitones`, or an older free-form value | printed as declared, a transposed chord beside its symbol |
+| `plan` | printed as written |
+| `tracks[].id`, `.name`, `.role`, `.engine`, `.drums`, `.range`, `.patch.bank` | printed; the engines `drum_synth` and `noise` have no pitch classes, nor does a SoundFont part on a kit's bank (128) or one with `drums` and no `patch` (music-production plays it on the drum channel); with `drums` and a patch off the kit's bank it is played as pitches |
+| `tracks[].notes[].id`, `.on`, `.duration`, `.pitch` | the written notes, in quarter notes |
+| `tracks[].performance.notes.<id>.velocity` | a quoted note's velocity |
+| `.performance.notes.<id>.timing_ms`, `.gate`, `.performance.swing`, `.offset_ms`, `.bend`, `.cc`, `.cc_mode`, `.legato`, `.dynamics`, `tracks[].key_map`, `.reverse` | named when a quote leaves them out: a bend or controller where it reaches the quoted bars (a value set before them too) and the part's engine plays it (Surge XT the mod wheel and sustain pedal; the additive synth expression, brightness and the mod wheel; a SoundFont preset any; the built-in synth, drum machine and noise engine none), and a SoundFont part's legato where it joins quoted notes |
+
+## Surge host (recording a take)
+
+`python <music-production>/scripts/surge_host.py JOB.json`, with the scripts folder as the working directory. It is a GPL-3.0-or-later program of music-production that
+runs as its own process: only files pass between it and this skill. The job, the patch copy and the take it writes are in the
+render's own folder (`surge_work`), and emptied once the take is read; `surge_takes` beside the project holds only the takes and
+their receipts. `JOB.json` holds:
+
+| Field | Value |
+|---|---|
+| `plugin`, `pylib` | `surge.path`, `pedalboard.path` |
+| `patch` | a copy of the checked patch file's bytes, with its tempo-synced delays and LFOs set free for the layer's `bpm` |
+| `out` | the WAV to write, stereo, at `rate`, of `duration` x `rate` frames less `trim` (within 2), or the take is not kept. The host writes 32-bit float; 8-, 16-, 24- and 32-bit PCM are read as well |
+| `rate` | 48000 |
+| `events` | `[hex MIDI, seconds]`: note on and off, pitch bend, CC1; each 0.1 s late, and at one time controls first, then note-offs, then note-ons |
+| `duration`, `trim` | 0.1 s + the last note-off + the layer's `tail`; 4800 frames, which take that lead off again |
+| `macros`, `bend_range` | the patch's macros (`"1"` to `"8"`, 0 to 1); the bend range in semitones |
+
+## Surge catalog
+
+`references/surge-catalog.json`, under `presets.<id>`: `path`, `bytes`, `sha256` (the patch file inside `surge.catalog`), `transpose` (added to each written key), `flags` (`MPE` and
+`silent on a plain note` are not offered), and for listing `name`, `category`, `role`, `source`, `license`, `character`, `measured`, `macros`, `wheel`.
 
 ## Bank files
 
@@ -61,7 +108,7 @@ records: name, program, bank, ...; the sample data is skipped). Every configured
 
 ## Output files
 
-None: instrument layers are rendered by this skill's own FluidSynth command line, not by music-production's renders.
+None but the host's take above: instrument layers are rendered by this skill's own FluidSynth command line, not by music-production's renders.
 
 ## Code copied from music-production (MIT)
 
@@ -69,5 +116,7 @@ None: instrument layers are rendered by this skill's own FluidSynth command line
 |---|---|---|
 | `sfxlib/wav.py` (reader part) | `scripts/musiclib/wavfile.py` | bounded RIFF/WAVE reader with `smpl` loops |
 | `sfxlib/loudness.py` (K-weighting part) | `scripts/musiclib/measure.py` | BS.1770 K-weighting at 48 kHz, momentary and integrated loudness |
+| `sfxlib/surge.py` (`at_tempo`, `board_intact`), from 0.9.2 | `scripts/musiclib/surge.py` | a patch's tempo-synced parameters set free; a package checked against its `RECORD` |
+| `sfxlib/music.py` (`Clock`), from 0.9.2 | `scripts/musiclib/model.py` | seconds along the step tempo map, each tempo held as whole microseconds a quarter note |
 
 Each copied block keeps music-production's MIT notice in its header.

@@ -16,7 +16,8 @@ figures marked as this skill's are its own design or its own measurements.
 7. [Variants](#7-variants)
 8. [Checking while you design](#8-checking-while-you-design)
 9. [A worked example](#9-a-worked-example)
-10. [Sources](#sources)
+10. [Surge XT layers](#10-surge-xt-layers)
+11. [Sources](#sources)
 
 ## 1. From the brief to a palette
 
@@ -156,7 +157,9 @@ floor (not asked of steady sounds such as rain, wind, surf, fire, engines and cr
 sound), and whether its label is the predominant sound (FSD50K's ratings). A recording whose description asks for
 credit, permission or notice, or speaks of commercial use, is flagged as well ('author note'): CC0 puts no condition on
 it, but read the note (`--find` prints it) and respect the author's wish; many such notes only say that no credit is
-needed. `samples --labels` lists the classes they are labelled with, and `--find "metal door" --passing` lists the recordings that pass every screen, the cleanest first, with their titles,
+needed. `samples --labels` lists the classes they are labelled with, and `--find "metal door" --passing` lists the recordings that pass every screen, the best match first (the words in both title and
+labels before either alone) and, within a match, the cleanest, those within 6 dB of each other in an order of the project's own
+(ranges count up to 60 dB, so all above it are equally clean), with their titles,
 labels, peak and range; it matches whole words, `--not WORD`, `--min-seconds` and `--max-seconds` narrow it, and without
 `--passing` a recording that fails is listed with its reasons. Recordings that FSD50K labels as speech, singing or a voice that may hold words, and those whose title or
 tags name adult content, are screened out; people's sounds without words stay (laughter, screams, breathing, coughs), so a bed that must hold
@@ -296,6 +299,54 @@ and given synthesized weight on its measured strikes, water
 magic from bubbles, a swept noise and a rising chord, and the sea on the rocks from noise alone. Its notes say why each
 sound is built as it is.
 
+## 10. Surge XT layers
+
+Surge XT is a free synthesizer that music-production's setup installs. A patch holds oscillators, filters, modulators and
+effects of its own (its manual lists twelve LFOs and eight macros), so one held note can beat, sweep and ring by itself.
+That suits sounds that should feel alive: magic, sci-fi, drones, shimmers. A `surge` layer plays one patch, and it stacks with
+everything else in this guide. Its audio is yours to use: Surge's FAQ says what you make with it needs no licence or
+permission, also when you start from a preset that comes with it.
+
+**Where it helps.** A Surge body brings the most to tonal sounds that ring on: casts, heals and shimmers, notifications,
+rewards and level-ups. For a short interface sound (a click, a menu tone, a confirmation of a tenth of a second) synthesis is
+usually enough, and a full patch crowds it: a Surge body there, where the set's other sounds use one, should be a plain pluck
+or mallet kept dark with a low-pass. Keep transients, noise, chip voices, loop beds and the low end in synthesis or recordings.
+
+**Choosing a patch.** `sfx.py surge --find bell`, `--role pad` and `--character dark,slow` search the patches by name,
+category, designer, role and how a probe note measured. The words describe one note, so record two or three candidates and
+look at them (`sfx.py spectrogram`): which one is right is for the person who listens. Each project sees the patches in an
+order of its own, so that two games do not start from the same ones. `sfx.py surge --id ID` says what the patch's macros and mod
+wheel move.
+
+**Notes and controls.** Write the pitch you want to hear: a patch built to sound an octave off is played on the key that
+gives it, and a written key that would then fall outside MIDI is refused. A layer's `pitch` and `vibrato` do not move a take:
+use the source's `cents` and `bend`. `macros` set its knobs before it plays. `wheel` moves the mod wheel, which many patches route to vibrato,
+brightness or depth. `bend` slides the pitch, for a rise or a fall, but a patch of noise or of fixed pitch may not follow it,
+so check a bent note's spectrogram. A patch often holds its own delay and reverb: give `tail` the time to ring out, and go
+easy with the chain's `room`.
+
+**Takes.** Surge's oscillators, LFOs and noise run freely, so two plays of one note differ. Each is recorded once with
+`render --record-takes --config CONFIG` into `surge_takes` beside the project, and every later render plays that file: the
+sound stays as it was heard, and the project renders without Surge. Keep the folder with the project. Each variant has a
+performance of its own, which is what makes repeats sound alive. Name a `take` when every variant should be the same
+performance, moved only in pitch, time and level. An unnamed take belongs to its sound and its variant, so adding or removing
+other layers records nothing, and neither does changing `cents`, gain, filter, envelope or placement; changing the patch, notes
+or controls, or renaming the sound, asks for a new take. A named take belongs to its performance and number alone, so a renamed
+sound keeps it. Two unnamed layers of one sound may not play the same performance: to double a patch, name a `take` on one of
+them (another number on each for two recordings, the same number for one), or change one velocity.
+
+**Five magic sounds as stacks.** These are this skill's own starting points, built on the stack of section 3 and the meanings
+of section 5. Keep the short transient and the low weight in synthesis, where they are exact, and let Surge carry the
+body and the tail.
+
+| Sound | Surge carries | Around it |
+|---|---|---|
+| A cast | a bright patch with a fast attack, and a bell or mallet patch on two or three rising notes | a noise transient of a few milliseconds and a swept-noise whoosh |
+| A charge | a patch with a clear pitch, `bend` rising about an octave over the charge, and a noisy riser under it | a sine rising an octave beneath; cut soon after the peak, so that what it charges can land |
+| A heal | a bell or chime patch on the rising notes of a major chord, a soft pad held under it | a little high air; no roughness (section 5) |
+| A shimmer | a bright, wide patch on quick rising notes high up, and a rain- or noise-like patch for the glitter | one struck glass or chime recording at the start; low frequencies filtered away |
+| A portal | dark, moving patches on a low note, `bend` climbing until it opens, and an impact patch where it does | a sine dropping in pitch under the impact, and a short burst of low-passed noise |
+
 ## Sources
 
 - Metcalfe, N. (2013). Designer Sounds. *Sound On Sound*, October 2013.
@@ -334,3 +385,4 @@ sound is built as it is.
 - Csound Reference Manual: `paulstretch` (Nasca's Paulstretch method).
 - Giordano, B. L. (2003). Everyday listening: an annotated bibliography. In Rocchesso, D. and Fontana, F. (eds.), *The
   Sounding Object* (on Warren and Verbrugge's study of breaking and bouncing, 1984).
+- Surge Synth Team. *Surge XT User Manual* and *Frequently Asked Questions*, surge-synthesizer.github.io.

@@ -73,6 +73,24 @@ QUOTED_CHARS = 200
 _CREDIT_WORDS = re.compile(r'[Aa]uthor|[Cc]reator|[Cc]redit|[Cc]opyright|©|\([Cc]\)|\b[Bb]y\s+[A-Z]\w+')
 _CC_BY_NAME = re.compile(r'\bCC[-_ ]?BY\b', re.I)
 CLEAN_RANGE_DB = 60.0            # a search ranks ranges up to this (digital silence in a file makes them huge)
+CLEAN_BAND_DB = 6.0              # within a rank of a search, recordings this close in range count as equally clean, in bands
+                                 # going down from the cleanest, so that each project starts from recordings of its own. This
+                                 # skill's choice, measured on the library: over 39 common searches with at least ten passing
+                                 # recordings, two projects then differ in the first result of 29, and the worst of the first
+                                 # five is at most 5.9 dB less clean than in one fixed order
+FULL_MATCHES = 5                 # with fewer recordings holding every word, a search goes on with those holding some
+# The library's classes that name music or an instrument, and the words of a search that ask for them: this skill's own lists. A
+# recording carrying only these classes comes after the others, unless a word asks for music, so that "bow" finds a bow before a
+# violin. A class that is also a sound of the world (Bell, Chime, Cowbell, Wind_chime) is not one of them.
+MUSIC_LABELS = frozenset(('Music', 'Musical_instrument', 'Accordion', 'Acoustic_guitar', 'Bass_drum', 'Bass_guitar', 'Bowed_string_instrument',
+                          'Brass_instrument', 'Crash_cymbal', 'Cymbal', 'Drum', 'Drum_kit', 'Electric_guitar', 'Glockenspiel', 'Gong', 'Guitar',
+                          'Harmonica', 'Harp', 'Hi-hat', 'Keyboard_(musical)', 'Mallet_percussion', 'Marimba_and_xylophone', 'Organ', 'Percussion',
+                          'Piano', 'Plucked_string_instrument', 'Rattle_(instrument)', 'Scratching_(performance_technique)', 'Snare_drum', 'Strum',
+                          'Tabla', 'Tambourine', 'Trumpet', 'Wind_instrument_and_woodwind_instrument'))
+MUSIC_WORDS = frozenset(('music', 'musical', 'instrument', 'song', 'melody', 'accordion', 'banjo', 'bass', 'brass', 'cello', 'clarinet', 'cymbal', 'drum',
+                         'fiddle', 'flute', 'glockenspiel', 'gong', 'guitar', 'harmonica', 'harp', 'hihat', 'kalimba', 'keyboard', 'mallet', 'marimba', 'organ',
+                         'percussion', 'piano', 'saxophone', 'snare', 'strum', 'tabla', 'tambourine', 'trombone', 'trumpet', 'tuba', 'ukulele', 'viola',
+                         'violin', 'woodwind', 'xylophone'))
 DEFAULT_LIBRARY_ENV = 'SFX_SKILL_LIBRARY'
 
 
@@ -598,17 +616,42 @@ def _forms(word):
     return forms
 
 
-def find(index, text, passing=False, exclude=(), min_seconds=None, max_seconds=None):
+def _only_music(entry):
+    """True for a recording whose classes all name music or an instrument."""
+    labels = entry.get('labels') or []
+    return bool(labels) and all(label in MUSIC_LABELS for label in labels)
+
+
+def _banded(rows, project):
+    """`rows` of (rank, cleanliness, recording), best first: by rank; within one rank in bands of CLEAN_BAND_DB going down from its
+    cleanest; within a band in an order of this project's own, the same each time."""
+    best = {}
+    for rank, clean, _ in rows:
+        best[rank] = max(best.get(rank, clean), clean)
+
+    def key(row):
+        rank, clean, entry = row
+        return rank, int((best[rank] - clean) // CLEAN_BAND_DB), hashlib.sha256(f"{project}\0{entry['library']}/{entry['file']}".encode('utf-8')).digest()
+    return [row[2] for row in sorted(rows, key=key)]
+
+
+def find(index, text, passing=False, exclude=(), min_seconds=None, max_seconds=None, project=''):
     """The files that hold every word of `text` (or a regular form of it, as a whole word) in their name, pack id or
     pack title or, for libraries that record them (FSD50K), their title, tags or labels. Best first: those that pass
-    their library's screens, then those whose labels name every word, then the cleanest (the widest range between
-    body and noise floor), a match in both title and labels before one in the title, the labels or only the tags. `passing` keeps only files that passed the screens (files without screens always pass),
-    `exclude` rules out files holding any of its words, and `min_seconds` and `max_seconds` bound the length."""
-    wanted = [_forms(w) for w in _words(text)]
+    their library's screens; then, unless a word asks for music, all but those labelled only as music or instruments; then
+    those whose labels and title name every word, a match in both before one in the title, the labels or only the tags; then
+    the cleanest (the range between body and noise floor) in bands of CLEAN_BAND_DB, in an order of this `project`'s own
+    within each band, so that two games do not start from the same recordings. `passing` keeps only files that passed the
+    screens (files without screens always pass), `exclude` rules out files holding any of its words, and `min_seconds` and
+    `max_seconds` bound the length. When fewer than FULL_MATCHES files hold every word, the list goes on with those holding
+    some of them, most words first, each carrying `matched_words`."""
+    words = _words(text)
+    wanted = [_forms(w) for w in words]
     if not wanted:                                       # no word it can read: nothing matches, rather than everything
         return []
     ruled_out = set().union(*[_forms(w) for e in exclude for w in _words(e)]) if exclude else set()
-    found = []
+    asks_for_music = any(forms & MUSIC_WORDS for forms in wanted)
+    full, some = [], []
     for f in index['files']:
         if passing and f.get('screen'):
             continue
@@ -620,7 +663,8 @@ def find(index, text, passing=False, exclude=(), min_seconds=None, max_seconds=N
         for field in (f['file'], f['library'], pack.get('title', ''), f.get('title', ''), *f.get('tags', []),
                       *f.get('labels', [])):
             held.update(_words(field))
-        if not all(forms & held for forms in wanted):
+        matched = [i for i, forms in enumerate(wanted) if forms & held]
+        if not matched:
             continue
         # a class such as Chicken_and_rooster names two things: leaving out one must not leave out the other
         plain = [label for label in f.get('labels', []) if '_and_' not in label]
@@ -631,11 +675,16 @@ def find(index, text, passing=False, exclude=(), min_seconds=None, max_seconds=N
             continue
         labels = {w for label in f.get('labels', []) for w in _words(label)}
         named = set(_words(f.get('title', ''))) | set(_words(f['file']))
-        in_title, in_labels = all(forms & named for forms in wanted), all(forms & labels for forms in wanted)
+        in_title, in_labels = all(wanted[i] & named for i in matched), all(wanted[i] & labels for i in matched)
         place = 0 if in_title and in_labels else 1 if in_title else 2 if in_labels else 3
-        found.append(((bool(f.get('screen')), place,
-                       -min(float((f.get('measures') or {}).get('range_db') or 0.0), CLEAN_RANGE_DB)), len(found), f))
-    return [row[2] for row in sorted(found, key=lambda row: row[:2])]
+        rank = (bool(f.get('screen')), not asks_for_music and _only_music(f), place)
+        clean = min(float((f.get('measures') or {}).get('range_db') or 0.0), CLEAN_RANGE_DB)
+        if len(matched) == len(wanted):
+            full.append((rank, clean, f))
+        else:
+            some.append(((len(wanted) - len(matched), *rank), clean, dict(f, matched_words=[words[i] for i in matched])))
+    found = _banded(full, project)
+    return found + _banded(some, project) if len(found) < FULL_MATCHES else found
 
 
 def labels(index, passing=False):

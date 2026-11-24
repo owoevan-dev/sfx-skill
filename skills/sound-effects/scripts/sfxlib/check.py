@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import artifacts, loudness, measure, record, traits
+from . import artifacts, loudness, measure, recipes, record, traits
 
 RATE = 48000
 ONSET_FLAG_MS = 1.0                  # ui sounds should start at once (audio feedback budget: 20-70 ms)
@@ -133,6 +133,14 @@ def _finite(value):
     return value
 
 
+def at_recipe_defaults(sound):
+    """True for a sound made by a recipe with every parameter at that recipe's default."""
+    try:
+        return sound.get('params') == recipes.get(sound['recipe']).defaults()
+    except KeyError:                    # a sound of layers, or a recipe this version does not have
+        return False
+
+
 def run(render_dir):
     """Measure the render in render_dir, write check.json there and return it."""
     folder = Path(render_dir)
@@ -163,6 +171,12 @@ def run(render_dir):
                          f"{layer['length_s']:.2f} s, but at this offset, pitch and stretch its recording runs out after "
                          f"{layer['runs_out_s']:.2f} s and it falls silent: start earlier in the recording, shorten the "
                          'layer or use a longer one')
+            for number, layer in enumerate(v.get('layers', []), 1):
+                for at in layer.get('stray_attacks_s', ()):
+                    at = at % (len(x) / RATE) if is_loop else at
+                    flag('stray_attack', sound['id'], name, f"layer {number} ({layer['source']}) holds an attack at {at:.3f} s that none of its "
+                         "notes explains, most likely a tick inside the sample. Look at it (spectrogram) and listen: end or fade the layer before it, "
+                         'or play another note, if it is heard')
             if is_loop and m['half_silent']:
                 flag('loop_halves', sound['id'], name, 'one of its halves is silent: a gap that comes back each time round')
             elif is_loop and m['halves_db'] is not None and abs(m['halves_db']) > HALVES_FLAG_DB:
@@ -249,6 +263,9 @@ def run(render_dir):
                 flag('loop_level', sound['id'], bed['file'], f"this loop ({bed['integrated_lufs']:.1f} LUFS) is within "
                      f'{LOOP_UNDER_DB:.0f} dB of the loudest one-shot ({max(hits):.1f} LUFS, its loudest 200 ms), so it will sit on '
                      'top of the sounds played over it: give it a negative trim_db, or leave it if this loop is meant to lead')
-    report = {'level': resolved['level'], 'files': [_finite(f) for f in files], 'sounds': sounds, 'flags': flags}
+    # notes, not faults: nothing is wrong with these sounds and no flag counts them
+    notes = [{'kind': 'recipe_defaults', 'sound': s['id'], 'message': f"uses this recipe's default parameters ({s['recipe']}): set them for this game, "
+              'or expand it into layers, so that it is its own sound'} for s in resolved['sounds'] if at_recipe_defaults(s)]
+    report = {'level': resolved['level'], 'files': [_finite(f) for f in files], 'sounds': sounds, 'flags': flags, 'notes': notes}
     (folder / 'check.json').write_text(json.dumps(report, indent=1) + '\n', encoding='utf-8', newline='\n')
     return report

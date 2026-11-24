@@ -614,7 +614,7 @@ class Find(unittest.TestCase):
         index = samples.load_index(library)
         self.assertEqual([f['file'] for f in samples.find(index, 'gate')], ['101'])       # title
         self.assertEqual([f['file'] for f in samples.find(index, 'slam')], ['101'])       # label
-        self.assertEqual([f['file'] for f in samples.find(index, 'tag-room')], ['202'])   # tag
+        self.assertEqual([f['file'] for f in samples.find(index, 'tag-room') if 'matched_words' not in f], ['202'])   # tag
         self.assertEqual([f['file'] for f in samples.find(index, 'fsd50k')], ['101', '202'])
         self.assertEqual([f['file'] for f in samples.find(index, 'fsd50k', passing=True)], ['101'])
 

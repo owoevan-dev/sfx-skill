@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from . import (VERSION, RATE, audition, check, dsp, dynamics, instruments, level, licences, loudness, measure, mpbridge,
-               synth, variants, wav)
+               surge, synth, variants, wav)
 from .samples import Library as SampleLibrary, SampleError
 
 
@@ -190,18 +190,53 @@ def _recordings(items, library):
     return [library.provenance(lib, name) for lib, name in used]
 
 
-def render(proj, out_dir, config=None, samples=None, ffmpeg=None, page=True):
+def _within(path, folder):
+    """Whether `path` is `folder` or inside it as the system finds them, through `..` and links: no spelling of the project's take
+    folder lets a render write there, and a folder beside it spelt through it is not taken for it."""
+    path, folder = Path(path).resolve(), Path(folder).resolve()
+    return path == folder or folder in path.parents
+
+
+def _surge_takes(proj, folder, config, record, music_skill):
+    """The project's Surge takes (surge.Provider), every layer's take checked before the render makes its folder; None for a project
+    with no Surge layer."""
+    if not any(layer.get('source', {}).get('type') == 'surge' for sound in proj['sounds'] for layer in sound.get('layers', [])):
+        return None
+    takes = surge.Provider(folder, config, music_skill, record=record)
+    for sound in proj['sounds']:
+        for v in range(sound['variants']):
+            for layer in variants.spec_for(sound, proj['seed'], v)[0]['layers']:
+                if layer.get('source', {}).get('type') == 'surge':
+                    try:
+                        takes.check(layer['source'])
+                    except surge.SurgeError as error:
+                        raise RenderError(f"{sound['id']}: {error}") from None
+    return takes
+
+
+def render(proj, out_dir, config=None, samples=None, ffmpeg=None, page=True, takes=None, record_takes=False, music_skill=None):
     """Render a validated project (project.validate) into out_dir; returns the report. `config` (music-production's
     configuration, a dict) is needed by instrument layers, which are rendered into out_dir/instruments, and by sample
     layers on files other than WAV (its FFmpeg decodes them); `samples` is the sample library's folder, or a list of
-    them (samples.py); page=False leaves out the audition page while iterating (`sfx.py audition` writes it later)."""
+    them (samples.py); page=False leaves out the audition page while iterating (`sfx.py audition` writes it later).
+    `takes` is the folder of the project's Surge takes, and only `record_takes` lets a missing take be played by Surge
+    (surge.py; `music_skill` names the music-production folder if it is not where it is usually found)."""
     started = time.time()
     out = Path(out_dir)
     if out.exists() and any(out.iterdir()):
         raise RenderError(f'{out} already holds files; a render goes into a new folder')
-    (out / 'master').mkdir(parents=True, exist_ok=True)
+    if takes is not None and _within(out, takes):
+        raise RenderError(f"{out} is in the project's {surge.FOLDER}, which holds only takes: render into another folder")
+    surge_takes = _surge_takes(proj, takes, config, record_takes, music_skill)
+    try:
+        (out / 'master').mkdir(parents=True, exist_ok=False)      # the render's claim on the folder: a second one at once stops here
+    except FileExistsError:
+        raise RenderError(f'{out} is being written by another render; a render goes into a new folder') from None
     (out / '.gdignore').write_bytes(b'')               # inside a Godot project the editor would import every file here
     provider = instruments.Provider(config, out / 'instruments') if config else None
+    if surge_takes is not None:
+        surge_takes.work = out / surge.WORK             # a recording's job, patch copy and raw take, emptied once read
+        provider = surge.Players(provider, surge_takes)
     library = None
     if samples:
         try:
@@ -292,13 +327,17 @@ def render(proj, out_dir, config=None, samples=None, ffmpeg=None, page=True):
         resolved['level']['next'] = holds
     if library is not None and _recordings(items, library):
         resolved['recordings'] = _recordings(items, library)
+    if surge_takes is not None:
+        resolved['surge_takes'] = surge_takes.listing()
     _write_json(out / 'resolved.json', resolved)
     report_check = check.run(out)
     if page:
-        audition.build(out)
+        audition.build(out, ffmpeg=ffmpeg)
     report = {'status': 'RENDERED', 'title': proj['title'], 'files': len(items),
               'target_lufs': plan['target_lufs'], 'limited_by': plan['limited_by'],
               'flags': len(report_check['flags']), 'seconds': round(time.time() - started, 2)}
+    if surge_takes is not None:
+        report['surge_takes'] = {'recorded': surge_takes.recorded, 'played': len(surge_takes.used), 'folder_bytes': surge_takes.size()}
     _write_json(out / 'report.json', report)
     _write_json(out / 'files.json', files_record(out))
     return report

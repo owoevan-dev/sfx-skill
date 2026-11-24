@@ -78,10 +78,11 @@ under 150 Hz has no weight; a bright `centroid_hz` under a dark brief is the fir
 | `buried_event` | an event of a loop (a layer of at most 3 s) stands less than 3 dB over the rest of the loop, over its loudest 50 ms in the octave around its own centre of energy | a crow under the wind will not be heard; each event's figure is `over_rest_db` in `resolved.json` |
 | `loop_level` | a loop's integrated loudness is less than 3 dB under the loudest 200 ms of the set's loudest one-shot | the level step matches a loop by its integrated loudness and a one-shot by its loudest 200 ms, so an untrimmed bed reads as loud as the hits and sits on top of them. Give it a negative `trim_db`, or leave it if the loop is meant to lead (the loops of this skill's own test games sat 7 to 21 dB under) |
 | `short_recording` | a sample layer's recording ends at least 10 ms before the layer does, still sounding: its envelope there, times the recording's last 10 ms against its level over the part played, is within 20 dB of full (a recording that has died away by its end leaves no hole) | the layer falls silent there: a hole in a loop, a sound cut short (the offset, pitch and stretch all count) |
+| `stray_attack` | an instrument layer's own performance holds an attack no note explains: between two note starts, the one millisecond whose energy above 3 kHz stands at least 18 dB over the loudest of the 50 ms before it, within 12 dB of that interval's loudest and more than 250 ms after the note started, while the layer still plays it (its envelope at -20 dB or more there) | a tick left inside a sample rings on like a small hit, so the click test passes it and it reads as part of the sound. The flag states a fact about the sample, not about the mix: look at it and listen |
 | `stereo` | left and right correlate below -0.2 | the sound will cancel when summed to mono; independent channels (a spread of 1) wander around 0 by chance, a little either way |
 
 The 1 ms, -40 dB, twice the step, 3 dB, 6 dB, 0.001, 0.5 dB, -0.2, "more than half", 12 dB, 20 ms, 50 ms and 150 ms
-and the 3 dB of `buried_event` and `loop_level` and 20 dB of `loop_halves` are this skill's choices, set to catch faults rather than to grade sounds.
+and the 3 dB of `buried_event` and `loop_level`, 20 dB of `loop_halves` and the thresholds of `stray_attack` are this skill's choices, set to catch faults rather than to grade sounds.
 
 ## The level step
 

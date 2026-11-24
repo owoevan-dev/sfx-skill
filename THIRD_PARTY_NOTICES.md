@@ -4,7 +4,7 @@ Nothing in this list is bundled in the repository, apart from what [Code](#code)
 
 ## Code
 
-A few small helpers (WAV reading and writing, loudness measurement) are copied from the
+A few small helpers (WAV reading and writing, loudness measurement, a Surge patch's tempo and a package check) are copied from the
 [music-production](https://github.com/owoevan-dev/music-skill) skill under its MIT licence:
 [skills/sound-effects/LICENSES/music-production-MIT.txt](skills/sound-effects/LICENSES/music-production-MIT.txt). The files
 that hold them say so.
@@ -16,6 +16,7 @@ that hold them say so.
 | [NumPy](https://numpy.org) | BSD-3-Clause | required; installed from PyPI |
 | [FFmpeg](https://ffmpeg.org) | LGPL or GPL, by build | optional; your own copy, run as a separate program for Ogg, MP3 and FLAC |
 | [music-production](https://github.com/owoevan-dev/music-skill) with FluidSynth | MIT and GPL-3.0-or-later; FluidSynth LGPL-2.1-or-later | optional; run as separate programs for layers on sampled instruments |
+| [Surge XT](https://surge-synthesizer.github.io) with [pedalboard](https://github.com/spotify/pedalboard) | GPL-3.0-or-later and GPL-3.0 | optional; installed by music-production's setup and run by its own separate program for Surge layers. Neither they nor any patch are in this repository. Surge's [FAQ](https://surge-synthesizer.github.io/faq/) says the sounds you make with it are yours |
 
 ## Recordings
 

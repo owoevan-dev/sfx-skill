@@ -18,8 +18,8 @@ work/                      scratch output of tools and tests (not committed, nev
 
 - Python 3.10 or later with NumPy, the same as music-production. No other package.
 - For FLAC, Ogg and MP3 exports and decoding recordings that are not WAV: an FFmpeg (`--ffmpeg`,
-  `SFX_SKILL_FFMPEG`, the one music-production's configuration names, or `ffmpeg` on the PATH). For instrument layers
-  and their tests: an installed music-production skill, its FluidSynth and sample banks (see
+  `SFX_SKILL_FFMPEG`, the one music-production's configuration names, or `ffmpeg` on the PATH). For instrument and Surge
+  layers and their tests: an installed music-production skill, its FluidSynth, sample banks and Surge XT (see
   [MUSIC_PRODUCTION_CONTRACT.md](MUSIC_PRODUCTION_CONTRACT.md)). For sample layers on real recordings: a library
   holding the release's packs (`sfx.py samples --library LIB --download-fsd50k DATA`, 2.9 GB), which the worked
   example and its render test use. Without them those tests are skipped.
@@ -61,7 +61,7 @@ python tools/check_all.py --quick    # without the tests that call FFmpeg or mus
 
 `.github/workflows/tests.yml` runs on every push to main and every pull request: the tests on Ubuntu (Python 3.10, 3.13
 and 3.14), macOS and Windows with FFmpeg and, on one job, Godot; one fixed project rendered on each system and compared
-sample by sample; the audition page opened in Chromium, Firefox and WebKit. `release-check.yml` runs when a release is
+sample by sample; the audition page, holding FLAC, opened in Chromium, Firefox and WebKit, in English and in another language. `release-check.yml` runs when a release is
 published, every week and by hand: the release's packs and the dataset's record answer, the packs download, import and
 render on each system, and instrument layers work on the latest music-production release.
 

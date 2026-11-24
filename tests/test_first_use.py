@@ -102,17 +102,26 @@ class Searching(unittest.TestCase):
     def names(self, *args, **kw):
         return [f['file'] for f in samples.find(self.index(), *args, **kw)]
 
+    def full(self, *args, **kw):
+        return [f['file'] for f in samples.find(self.index(), *args, **kw) if 'matched_words' not in f]
+
     def test_every_word_must_be_there_wherever_it_is(self):
-        self.assertEqual(set(self.names('door creak')), {'1', '3', '4'})
+        self.assertEqual(set(self.full('door creak')), {'1', '3', '4'})
+        some = [f for f in samples.find(self.index(), 'door creak') if 'matched_words' in f]     # three hold both, so those holding one follow
+        self.assertEqual({(f['file'], tuple(f['matched_words'])) for f in some}, {('2', ('door',)), ('5', ('creak',))})
+        self.assertEqual(self.names('door creak')[:3], self.full('door creak'))
 
     def test_the_named_class_comes_first_then_the_cleanest(self):
-        self.assertEqual(self.names('door'), ['2', '4', '1', '3'])
+        names = self.names('door')
+        self.assertEqual(set(names[:2]), {'2', '4'})             # 35 and 30 dB: one band of cleanliness, in the project's own order
+        self.assertEqual(names[2:], ['1', '3'])                  # 20 dB, then a match in the tags only
 
     def test_a_recording_that_fails_a_screen_comes_after_those_that_pass(self):
         self.assertEqual(self.names('creak')[-1], '5')
 
     def test_a_word_or_a_length_can_be_ruled_out(self):
-        self.assertEqual(set(self.names('door creak', exclude=['traffic'])), {'1', '3'})
+        self.assertEqual(set(self.full('door creak', exclude=['traffic'])), {'1', '3'})
+        self.assertNotIn('4', self.names('door creak', exclude=['traffic']))
         self.assertEqual(set(self.names('door', max_seconds=5.0)), {'1', '2'})
         self.assertEqual(set(self.names('door', min_seconds=5.0)), {'3', '4'})
 

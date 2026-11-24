@@ -5,6 +5,7 @@ import os
 import struct
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -211,6 +212,93 @@ class Layer(unittest.TestCase):
         src = spec['layers'][0]['source']
         self.assertAlmostEqual(src['cents'], drawn['pitch_cents'])
         self.assertAlmostEqual(src['notes'][0][2], 0.3 * (1 + drawn['time_pct'] / 100))
+
+
+class TickedBanks:
+    """Stands in for instruments.Provider: a bright struck note; on program 9, with a tick left in the sample 1.25 s in."""
+
+    def __init__(self, config=None, folder=None):
+        pass
+
+    def render(self, source):
+        t = np.arange(int(3.2 * RATE)) / RATE
+        x = sum(np.sin(2 * np.pi * f * t) for f in (3400, 5200, 7900)) / 3 * np.exp(-5 * t)
+        if source.get('program') == 9:
+            k, n = int(1.25 * RATE), int(0.03 * RATE)
+            x[k:k + n] += 0.4 * np.random.default_rng(3).standard_normal(n) * np.exp(-np.arange(n) / (0.01 * RATE))
+        x = 0.5 * x / np.max(np.abs(x))
+        return np.stack([x, x], axis=1)
+
+
+class StrayAttackFlag(unittest.TestCase):
+    """The flag for an attack no note explains, through a render."""
+
+    @staticmethod
+    def note(program=9, **layer):
+        return dict({'source': {'type': 'instrument', 'soundfont': 'vcsl', 'program': program, 'notes': [[0, 84, 2.5, 90]]},
+                     'start': 0.0, 'length': 2.0}, **layer)
+
+    def stray(self, layers, **sound):
+        proj = project.validate({'schema': 'sound-effects/1', 'title': 't', 'sounds': [
+            dict({'id': 'bell', 'category': 'magic', 'variants': 1, 'layers': layers}, **sound)]})
+        self.runs = getattr(self, 'runs', 0) + 1
+        out = helpers.scratch(f'stray_{self._testMethodName}_{self.runs}') / 'render'
+        with mock.patch.object(render.instruments, 'Provider', TickedBanks):
+            render.render(proj, out, config={'stand-in': True}, page=False)
+        self.resolved = json.loads((out / 'resolved.json').read_text(encoding='utf-8'))
+        return [f for f in json.loads((out / 'check.json').read_text(encoding='utf-8'))['flags'] if f['kind'] == 'stray_attack']
+
+    def test_a_tick_the_layer_plays_is_named_at_its_time_in_the_sound(self):
+        found = self.stray([self.note(start=0.1)])
+        self.assertEqual(len(found), 1)
+        self.assertIn('1.350', found[0]['message'])
+        self.assertIn('layer 1', found[0]['message'])
+
+    def test_a_clean_note_raises_nothing_and_records_nothing(self):
+        self.assertEqual(self.stray([self.note(program=12)]), [])
+        self.assertNotIn('stray_attacks_s', self.resolved['sounds'][0]['variants'][0]['layers'][0])
+
+    def test_cents_move_the_tick_and_not_the_grace_after_a_note(self):
+        up = self.stray([self.note(length=0.4, source=dict(self.note()['source'], cents=3600))])     # eight times faster: at 0.156 s
+        self.assertEqual(len(up), 1)
+        self.assertIn('0.156', up[0]['message'])
+        down = self.stray([self.note(length=2.7, source=dict(self.note()['source'], cents=-1200))])  # half speed: at 2.5 s
+        self.assertEqual(len(down), 1)
+        self.assertIn('2.500', down[0]['message'])
+
+    def test_a_layer_that_ends_before_the_tick_is_clean(self):
+        self.assertEqual(self.stray([self.note(length=1.2)]), [])
+
+    def test_a_layer_faded_before_the_tick_is_clean(self):
+        self.assertEqual(self.stray([self.note(env=[[0, 1], [1.0, 1], [1.2, 0.05], [2.0, 0]])]), [])
+
+    def test_an_envelope_that_opens_late_on_a_held_note_is_not_an_attack(self):
+        self.assertEqual(self.stray([self.note(program=12, env=[[0, 0], [0.6, 0], [0.601, 1], [1.9, 1], [2.0, 0]])]), [])
+
+    def test_a_later_variant_is_read_too(self):
+        found = self.stray([self.note()], variants=3, vary={'time_pct': 5})
+        self.assertEqual(sorted(f['file'] for f in found), ['master/bell_01.wav', 'master/bell_02.wav', 'master/bell_03.wav'])
+
+    def test_in_a_loop_it_is_named_where_it_lands_in_the_period(self):
+        bed = {'source': {'type': 'noise', 'color': 'pink'}, 'length': 2.0, 'gain_db': -30}
+        found = self.stray([bed, self.note(start=1.7, length=1.4)], category='ambience', use='loop', loop={'seconds': 2})
+        self.assertEqual(len(found), 1)
+        self.assertIn('0.950', found[0]['message'])
+        self.assertIn('layer 2', found[0]['message'])
+
+    def test_a_surge_layer_is_not_read(self):
+        class Ticked:                    # stands in for the takes a surge layer plays
+            def render(self, source):
+                return TickedBanks().render({'program': 9})
+        for kind, read in (('surge', False), ('instrument', True)):
+            source = {'type': kind, 'patch': 'factory/fx/test', 'notes': [[0, 84, 2.5, 90]]} if kind == 'surge' else self.note()['source']
+            info = {}
+            synth.layer_signal({'source': source, 'length': 2.0}, 1, 0, 2, instruments=Ticked(), info=info)
+            with self.subTest(kind=kind):
+                self.assertEqual(bool(info.get('stray')), read)
+
+    def test_it_is_not_a_crackle(self):
+        self.assertEqual(len(self.stray([self.note()], crackle=True)), 1)
 
 
 @unittest.skipUnless(config_or_none(), "no music-production configuration in tools/local.json (or --quick)")

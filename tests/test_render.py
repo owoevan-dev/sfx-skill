@@ -2,6 +2,7 @@
 import copy
 import json
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -91,6 +92,19 @@ class Flags(unittest.TestCase):
         self.assertTrue(any(f['kind'] == 'onset' and f['sound'] == 'hand_made' for f in check['flags']),
                         check['flags'])
 
+
+
+class TheFolder(unittest.TestCase):
+    def test_a_second_render_into_the_same_folder_at_once_stops(self):
+        out = helpers.scratch('render_claim') / 'render'
+        real = render._surge_takes
+
+        def meanwhile(*args):                    # another render takes the folder while this one checks its takes
+            (out / 'master').mkdir(parents=True)
+            return real(*args)
+        with mock.patch.object(render, '_surge_takes', meanwhile), self.assertRaisesRegex(render.RenderError, 'another render'):
+            render.render(project.validate(test_project.minimal()), out, page=False)
+        self.assertEqual([p.name for p in out.iterdir()], ['master'])
 
 if __name__ == '__main__':
     unittest.main()

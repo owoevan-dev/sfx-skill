@@ -85,6 +85,95 @@ class Clicks(unittest.TestCase):
         self.assertIsNotNone(artifacts.peak_at_finding(x[:, None], 0.005))
 
 
+def struck(seconds=2.6, start=0.0, decay=5.0):
+    """A bright struck note from `start`, dying away."""
+    t = np.arange(int(seconds * RATE)) / RATE
+    x = sum(np.sin(2 * np.pi * f * t) for f in (3400, 5200, 7900)) / 3
+    return x * np.exp(-decay * np.maximum(t - start, 0)) * (t >= start)
+
+
+def with_tick(x, at, amp=0.4, ms=30):
+    """x with a short hit at `at` seconds that rings on for some milliseconds, as a tick left in a sample does."""
+    k, n = int(at * RATE), int(ms * RATE / 1000)
+    y = x.copy()
+    y[k:k + n] += amp * np.random.default_rng(3).standard_normal(n) * np.exp(-np.arange(n) / (0.01 * RATE))
+    return y
+
+
+class StrayAttacks(unittest.TestCase):
+    """An instrument's own performance: an attack with no note there."""
+
+    def test_a_lone_tick_long_after_its_note_is_found(self):
+        found = artifacts.stray_attacks(with_tick(struck(), 1.24)[:, None], [0.0])
+        self.assertEqual(len(found), 1)
+        self.assertAlmostEqual(found[0], 1.24, delta=0.002)
+
+    def test_the_tick_of_a_clean_note_is_not_invented(self):
+        self.assertEqual(artifacts.stray_attacks(struck()[:, None], [0.0]), [])
+
+    def test_a_sample_whose_attack_comes_late_is_not_one(self):
+        self.assertEqual(artifacts.stray_attacks(struck(start=0.095)[:, None], [0.0]), [])
+
+    def test_a_low_pulse_train_is_not_one(self):
+        x = np.zeros(int(2.6 * RATE))
+        for k in range(0, len(x) - 12, 1333):                 # 36 Hz: each period is an edge
+            x[k:k + 12] = 0.4
+        x += 1e-5 * np.random.default_rng(6).standard_normal(len(x))
+        self.assertEqual(artifacts.stray_attacks(x[:, None], [0.0]), [])
+
+    def test_several_after_one_note_are_the_instruments_own(self):
+        x = struck()
+        for at in (0.6, 1.1, 1.7):
+            x = with_tick(x, at)
+        self.assertEqual(artifacts.stray_attacks(x[:, None], [0.0]), [])
+
+    def test_a_tick_just_after_a_later_note_is_that_notes_attack(self):
+        x = struck(seconds=2.6) + struck(seconds=2.6, start=1.1)
+        self.assertEqual(artifacts.stray_attacks(with_tick(x, 1.24)[:, None], [0.0, 1.1]), [])
+        found = artifacts.stray_attacks(with_tick(x, 1.8)[:, None], [0.0, 1.1])
+        self.assertEqual(len(found), 1)
+        self.assertAlmostEqual(found[0], 1.8, delta=0.002)
+
+    def test_each_note_is_judged_on_its_own(self):
+        x = struck(seconds=4.0) + struck(seconds=4.0, start=2.0)
+        found = artifacts.stray_attacks(with_tick(with_tick(x, 1.0), 3.2)[:, None], [0.0, 2.0])
+        self.assertEqual(len(found), 2)
+        self.assertAlmostEqual(found[0], 1.0, delta=0.002)
+        self.assertAlmostEqual(found[1], 3.2, delta=0.002)
+
+    def test_a_quiet_note_is_judged_against_its_own_loudest_moment(self):
+        x = struck(seconds=4.0) + 0.05 * struck(seconds=4.0, start=2.0)
+        found = artifacts.stray_attacks(with_tick(x, 3.2, amp=0.02)[:, None], [0.0, 2.0])
+        self.assertEqual(len(found), 1)
+        self.assertAlmostEqual(found[0], 3.2, delta=0.002)
+
+    def test_a_chord_is_one_start(self):
+        found = artifacts.stray_attacks(with_tick(struck(), 1.24)[:, None], [0.0, 0.0, 0.0])
+        self.assertEqual(len(found), 1)
+
+    def test_a_tick_in_one_channel_or_in_opposite_polarity_is_found(self):
+        x, clean = with_tick(struck(), 1.24), struck()
+        self.assertEqual(len(artifacts.stray_attacks(np.stack([clean, x], axis=1), [0.0])), 1)
+        self.assertEqual(len(artifacts.stray_attacks(np.stack([x, -x], axis=1), [0.0])), 1)
+
+    def test_a_rise_over_two_milliseconds_is_one_attack(self):
+        x = struck()
+        k = int(1.24 * RATE)
+        n = int(0.03 * RATE)
+        burst = 0.4 * np.random.default_rng(3).standard_normal(n) * np.exp(-np.arange(n) / (0.01 * RATE))
+        burst[:40] *= 0.02                                     # the first millisecond holds only the start of it
+        x[k:k + n] += burst
+        self.assertEqual(len(artifacts.stray_attacks(x[:, None], [0.0])), 1)
+
+    def test_a_note_past_the_end_of_the_recording_is_no_error(self):
+        self.assertEqual(artifacts.stray_attacks(struck(seconds=1.0)[:, None], [0.0, 5.0]), [])
+        self.assertEqual(artifacts.stray_attacks(struck(seconds=1.0)[:, None], [5.0]), [])
+
+    def test_nothing_to_judge(self):
+        self.assertEqual(artifacts.stray_attacks(np.zeros((100, 2)), [0.0]), [])
+        self.assertEqual(artifacts.stray_attacks(struck()[:, None], []), [])
+
+
 class Render(unittest.TestCase):
     def render(self, sounds, name):
         proj = project.validate({'schema': 'sound-effects/1', 'title': 't', 'variants': 1, 'sounds': sounds})

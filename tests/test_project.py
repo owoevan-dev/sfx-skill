@@ -27,6 +27,10 @@ def minimal():
                         'chain': {'delay': {'time': 0.05, 'feedback': 0.2, 'mix': 0.2}}}]}
 
 
+def surge_layer(**extra):
+    return dict({'source': {'type': 'surge', 'patch': 'factory/fx/fireworks', 'notes': [[0, 72, 0.2, 100]]}, 'length': 0.5}, **extra)
+
+
 def errors_of(data):
     try:
         project.validate(data)
@@ -109,6 +113,15 @@ class Validate(unittest.TestCase):
         data['schema'] = 'sound-effects/9'
         self.assertTrue(errors_of(data))
 
+
+
+class SurgeLayers(unittest.TestCase):
+    def test_pitch_and_vibrato_are_refused_since_a_take_plays_its_written_notes(self):
+        for extra in ({'pitch': 440}, {'vibrato': {'rate_hz': 6, 'depth_cents': 100}}):
+            data = {'schema': 'sound-effects/1', 'title': 't', 'sounds': [{'id': 'a', 'category': 'magic', 'layers': [surge_layer(**extra)]}]}
+            with self.subTest(extra=list(extra)):
+                self.assertTrue(any('cents or bend' in e for e in errors_of(data)), errors_of(data))
+        self.assertEqual(errors_of({'schema': 'sound-effects/1', 'title': 't', 'sounds': [{'id': 'a', 'category': 'magic', 'layers': [surge_layer()]}]}), [])
 
 if __name__ == '__main__':
     unittest.main()

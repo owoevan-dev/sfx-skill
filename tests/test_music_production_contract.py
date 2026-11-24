@@ -1,5 +1,6 @@
 """The contract with the installed music-production (MUSIC_PRODUCTION_CONTRACT.md), run against the copy and the
 configuration named in tools/local.json. Skipped without that file or under check_all.py --quick."""
+import json
 import os
 import subprocess
 import sys
@@ -62,6 +63,52 @@ class Contract(unittest.TestCase):
         self.assertEqual([r['name'] for r in rows if not r['presets']], [])
         default = [r for r in rows if r['name'] == 'default'][0]
         self.assertIn(0, [program for bank, program, _ in default['presets'] if bank == 0])
+
+    def test_a_surge_take_is_recorded_through_its_host_and_replayed(self):
+        config = json.loads(Path(LOCAL['music_config']).read_text(encoding='utf-8'))
+        if not (config.get('surge') or {}).get('catalog'):
+            self.assertNotIn('surge', helpers.REQUIRED, 'this run needs Surge XT and its setup came out without it')
+            self.skipTest('this music-production setup has no Surge XT with its patches')
+        from sfxlib import surge
+        folder = helpers.scratch('contract_surge') / surge.FOLDER
+        source = {'type': 'surge', 'patch': 'factory/fx/fireworks', 'notes': [[0.0, 72, 0.4, 100]], 'tail': 0.6, 'bpm': 96, 'macros': {'1': 0.5},
+                  'bend': [[0, 0], [0.4, 2]], 'wheel': [[0, 0], [0.4, 1]], 'slot': 'take:1'}
+        played = surge.Provider(folder, config, LOCAL['music_skill'], record=True, work=folder.parent / 'render' / surge.WORK).render(source)
+        self.assertLessEqual(abs(len(played) - 48000), 2)
+        self.assertAlmostEqual(float(abs(played).max()), 0.5, places=3)
+        self.assertTrue((surge.Provider(folder).render(source) == played).all())
+
+    def _piece(self):
+        notes = [{'id': f'lead_{i}', 'on': on, 'duration': 0.5, 'pitch': 60 + i} for i, on in enumerate((0, 1.5, 12.0, 14.5))]
+        song = {'schema': 'music-production/v1', 'title': 'Contract piece', 'clock': {'bars': 8, 'meter': [6, 8], 'tempo': [[0, 120], [1, 60], [13.5, 97]], 'tail_seconds': 2},
+                'sections': [{'id': 'a', 'start_bar': 0, 'bars': 4}, {'id': 'b', 'start_bar': 4, 'bars': 4}],
+                'tracks': [{'id': 'lead', 'role': 'melody', 'engine': 'soundfont', 'program': 0, 'range': [48, 84], 'notes': notes,
+                            'performance': {'notes': {n['id']: {'velocity': 90} for n in notes}}, 'mix': {'level_dbfs': -20}}],
+                'mix': {'chain': 'room'}}
+        path = helpers.scratch('contract_music_' + self.id().rsplit('.', 1)[-1]) / 'song.json'
+        path.write_text(json.dumps(song), encoding='utf-8')
+        return path
+
+    def test_the_music_command_counts_a_project_as_music_production_does(self):
+        from sfxlib import music
+        path = self._piece()
+        proc = mpbridge.run_studio(mpbridge.find_music_skill(LOCAL['music_skill']), ['validate', path], env=helpers.child_env())
+        self.assertEqual(proc.returncode, 0, (proc.stdout + proc.stderr)[-800:])
+        theirs = json.loads(proc.stdout)
+        info = music.describe(music.load(path))
+        self.assertEqual(info['render_seconds'], theirs['seconds'])
+        self.assertEqual((info['bars'], len(info['tracks']), info['tracks'][0]['notes']), (theirs['bars'], theirs['tracks'], theirs['notes']))
+
+    def test_quoted_notes_play_on_an_instrument_layer(self):
+        import numpy as np
+        from sfxlib import music, project, render, wav
+        quoted = music.quote(music.load(self._piece()), 'lead', 5, 5)['notes']
+        self.assertEqual(len(quoted), 2)
+        proj = project.validate({'schema': 'sound-effects/1', 'title': 'quoted theme', 'sounds': [{'id': 'theme', 'category': 'magic', 'variants': 1, 'layers': [
+            {'source': {'type': 'instrument', 'program': 0, 'notes': quoted}, 'start': 0.0, 'length': max(n[0] + n[2] for n in quoted) + 0.2}]}]})
+        folder = helpers.scratch('contract_music_render') / 'render'
+        render.render(proj, folder, config=json.loads(Path(LOCAL['music_config']).read_text(encoding='utf-8')))
+        self.assertGreater(float(np.abs(wav.read(folder / 'master' / 'theme_01.wav')[0]).max()), 0.01)
 
     def test_studio_doctor_passes_with_the_config(self):
         skill = mpbridge.find_music_skill(LOCAL['music_skill'])

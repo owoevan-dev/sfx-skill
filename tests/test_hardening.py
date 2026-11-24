@@ -183,6 +183,30 @@ class TheReleaseCheck(unittest.TestCase):
                 check_release.main()
         self.assertIn('names no release', str(caught.exception))
 
+    def test_a_full_check_downloads_and_leaves_the_links_to_the_other_job(self):
+        import check_release
+        for argv, wanted in ((['--full', 'data', 'library'], ['install']), ([], ['links'])):
+            called = []
+            with mock.patch.object(check_release.fsd50k, 'RELEASE_URL', 'https://example.invalid/release'), \
+                    mock.patch.object(check_release, 'check_links', side_effect=lambda: called.append('links')), \
+                    mock.patch.object(check_release, 'check_install', side_effect=lambda *a: called.append('install')), \
+                    mock.patch.object(sys, 'argv', ['check_release.py'] + argv):
+                check_release.main()
+            with self.subTest(argv=argv):
+                self.assertEqual(called, wanted)        # the download checks the index and every part by their sums
+
+    def test_a_dataset_record_that_refuses_the_runner_is_not_a_missing_one(self):
+        import urllib.error
+        import check_release
+        refused = lambda code: urllib.error.HTTPError(check_release.DATASET, code, 'refused', {}, None)
+        for code in (403, 429):                         # a site refusing a shared cloud runner: said, and the check goes on
+            with self.subTest(code=code), mock.patch.object(check_release, 'size_of', side_effect=refused(code)):
+                check_release.dataset_answers()
+        for code in (404, 410, 500):                    # a record that is gone, or a site that fails
+            with self.subTest(code=code), mock.patch.object(check_release, 'size_of', side_effect=refused(code)), \
+                    self.assertRaises(urllib.error.HTTPError):
+                check_release.dataset_answers()
+
 
 class TheDocumentsSayWhatHappens(unittest.TestCase):
     SKILL = helpers.REPO / 'skills' / 'sound-effects'
