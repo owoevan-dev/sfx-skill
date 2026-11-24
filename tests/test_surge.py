@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -291,6 +292,19 @@ class Variation(unittest.TestCase):
         self.assertEqual(slots[3][0], slots[0][0])
         self.assertNotEqual(slots[3][0], slots[3][1])                 # two layers on one patch are two performances
 
+    def test_another_phrase_on_the_same_patch_coming_or_going_leaves_a_take_where_it_is(self):
+        high, low = copied(), copied()
+        high['source']['notes'] = [[0, 72, 0.1, 100]]
+        low['source']['notes'] = [[0, 60, 0.1, 100]]
+        keys = []
+        for layers in ([high, low], [low], [low, high]):
+            sound = project_with(copied(), variants_count=2)['sounds'][0]
+            sound['layers'] = json.loads(json.dumps(layers))
+            spec, _ = variants.layer_spec(sound, 7, 1)
+            keys.append([surge.key_of(surge.performance(l['source'])) for l in spec['layers'] if l['source']['notes'][0][1] == 60])
+        self.assertEqual(keys[0], keys[1])
+        self.assertEqual(keys[0], keys[2])
+
     def test_a_named_take_is_one_performance_for_every_variant(self):
         a, _ = self.spec(0, take=2)
         b, drawn = self.spec(2, take=2, bend=[[0.1, 1]])
@@ -507,9 +521,17 @@ class Takes(unittest.TestCase):
 
     def test_a_render_into_the_take_folder_is_refused(self):
         self.folder.mkdir()
-        for out in (self.folder, self.folder / 'render_1'):
-            with self.subTest(out=out.name), self.assertRaisesRegex(render.RenderError, 'holds only takes'):
+        (self.folder.parent / 'build').mkdir()
+        around = self.folder.parent / 'build' / '..' / surge.FOLDER                 # the same folder, spelt through another
+        for out in (self.folder, self.folder / 'render_1', around, around / 'render_1'):
+            with self.subTest(out=str(out)), self.assertRaisesRegex(render.RenderError, 'holds only takes'):
                 render.render(project_with(copied()), out, takes=self.folder)
+        self.assertEqual(list(self.folder.iterdir()), [])
+
+    def test_a_render_beside_the_take_folder_spelt_through_it_renders(self):
+        self.folder.mkdir()
+        render.render(project_with({'source': {'type': 'noise', 'color': 'pink'}, 'length': 0.1}), self.folder / '..' / 'render_1', takes=self.folder, page=False)
+        self.assertTrue((self.folder.parent / 'render_1' / 'master').is_dir())
         self.assertEqual(list(self.folder.iterdir()), [])
 
     def test_a_take_shorter_than_its_performance_is_refused_on_replay(self):
@@ -810,6 +832,19 @@ class Finding(unittest.TestCase):
         self.assertEqual(surge.status(self.fake.config, self.fake.skill), 'OK (5 of its 7 patches can play a layer; 2 are MPE or silent)')
         self.assertIn('not in this configuration', surge.status({}, self.fake.skill))
         self.assertIn('not found', surge.status(None, None))
+
+    def test_doctor_counts_only_the_patches_its_patch_folder_holds(self):
+        (self.fake.patches / self.fake.PATCHES['factory/fx/plain'][0]).unlink()
+        self.assertEqual(surge.status(self.fake.config, self.fake.skill),
+                         "OK (4 of its 7 patches can play a layer; 2 are MPE or silent; 1 is missing from its patch folder, which music-production's "
+                         "bootstrap.py brings back)")
+        for key in ('factory/fx/synced', 'factory/fx/up', 'factory/fx/down', 'designer/atmospheres/glow'):
+            (self.fake.patches / self.fake.PATCHES[key][0]).unlink()
+        self.assertEqual(surge.status(self.fake.config, self.fake.skill),
+                         "none of its patches that can play a layer is in its patch folder: run music-production's bootstrap.py again")
+        shutil.rmtree(self.fake.patches)
+        self.assertEqual(surge.status(self.fake.config, self.fake.skill),
+                         "the patch folder this configuration names is missing: run music-production's bootstrap.py again")
 
 
 class Rendering(unittest.TestCase):

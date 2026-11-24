@@ -11,7 +11,7 @@ import copy
 
 import numpy as np
 
-from . import curves, dsp, recipes, synth
+from . import curves, dsp, recipes, surge, synth
 
 
 def _u(project_seed, sound_id, variant, name):
@@ -68,7 +68,7 @@ def layer_spec(sound, project_seed, variant):
     if scatter > 0:
         seconds = sound['loop']['seconds']
         drawn['scatter_s'] = []
-    on_patch = {}
+    played = {}
     for i, layer in enumerate(layers):
         g = _u(project_seed, sound['id'], variant, f'gain_db:{i}') * gain_amount if gain_amount > 0 else 0.0
         drawn['gain_db'].append(g)
@@ -76,8 +76,9 @@ def layer_spec(sound, project_seed, variant):
         if src.get('type') == 'surge':                  # which performance this is: a named take, or this variant's own
             if 'take' in src:
                 src['slot'] = f"take:{int(src['take'])}"
-            else:                                       # the sound's n-th layer on this patch: other layers coming or going leave it be
-                n = on_patch[src['patch']] = on_patch.get(src['patch'], -1) + 1
+            else:                                       # the sound's n-th layer playing this same performance: a layer playing
+                same = surge.key_of(dict(surge.performance(src), slot=None))        # anything else, coming or going, leaves it be
+                n = played[same] = played.get(same, -1) + 1
                 src['slot'] = f"{sound['id']}/{src['patch']}/{n}/{variant}"
         if src.get('type') == 'sample' and isinstance(src.get('file'), list):
             take = src['file'][variant % len(src['file'])]

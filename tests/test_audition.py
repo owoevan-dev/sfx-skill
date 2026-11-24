@@ -46,7 +46,8 @@ ids['data'] = { textContent: dataText };
 global.document = { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {},
                     execCommand: () => true, querySelectorAll: () => [] };
 global.writes = [];
-global.window = { localStorage: { getItem: () => null, setItem: (k, v) => { global.writes.push(k); if (!k.endsWith(':language')) global.saved = v; } }, devicePixelRatio: 1 };
+global.window = { localStorage: { getItem: () => null, setItem: (k, v) => { global.writes.push(k); if (!k.endsWith(':language')) global.saved = v; } }, devicePixelRatio: 1,
+                  addEventListener() {} };
 global.getComputedStyle = () => ({ getPropertyValue: () => '#000' });
 global.atob = s => Buffer.from(s, 'base64').toString('binary');
 // Node has a navigator of its own, which an assignment does not replace
@@ -71,6 +72,76 @@ ids['lang'].value = 'ja';
 ids['lang'].listeners['change'].forEach(f => f());
 result.language_writes = global.writes.slice(before);
 console.log(JSON.stringify(result));
+"""
+
+TWO_WINDOWS = r"""
+// The page open twice on one browser's storage, each window in a context of its own; a write fires 'storage' in the other
+// window only, as a browser does. Window B opens first and is stale when A saves a verdict and a note; then B writes its
+// general feedback and moves a level.
+const fs = require('fs');
+const vm = require('vm');
+const html = fs.readFileSync(process.argv[2], 'utf8');
+const dataText = html.split('<script type="application/json" id="data">')[1].split('</script>')[0];
+const script = html.split('<script>')[1].split('</script>')[0];
+const store = new Map();
+const windows = [];
+function open() {
+  const ids = {};
+  class El {
+    constructor(tag) {
+      this.tag = tag; this.children = []; this.attrs = {}; this.textContent = ''; this.value = '';
+      this.listeners = {}; this.clientWidth = 300; this.clientHeight = 48;
+      const set = new Set();
+      this.classList = { add: c => set.add(c), remove: c => set.delete(c), toggle: (c, on) => { if (on) set.add(c); else set.delete(c); } };
+    }
+    setAttribute(k, v) { this.attrs[k] = v; if (k === 'id') ids[v] = this; if (k === 'value') this.value = v; }
+    appendChild(c) { this.children.push(c); return c; }
+    addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }
+    getContext() { return { clearRect() {}, fillRect() {} }; }
+    select() {}
+  }
+  for (const m of html.split('<script')[0].matchAll(/\sid="([^"]+)"/g)) {
+    const e = new El('div');
+    e.value = m[1] === 'master' ? '-6' : (m[1] === 'interval' ? '150' : '');
+    ids[m[1]] = e;
+  }
+  ids['data'] = { textContent: dataText };
+  const me = { ids, heard: {} };
+  const win = { devicePixelRatio: 1, addEventListener: (t, f) => (me.heard[t] = me.heard[t] || []).push(f),
+                localStorage: { getItem: k => (store.has(k) ? store.get(k) : null),
+                                setItem: (k, v) => { store.set(k, String(v)); if (process.argv[3] === 'quiet') return;   // a browser that tells no other window
+                                                     for (const w of windows) if (w !== me) (w.heard.storage || []).forEach(f => f({ key: k })); } } };
+  const context = { window: win, navigator: { languages: [] }, console, setTimeout, clearTimeout, atob: s => Buffer.from(s, 'base64').toString('binary'),
+                    getComputedStyle: () => ({ getPropertyValue: () => '#000' }),
+                    document: { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {}, execCommand: () => true,
+                                querySelectorAll: () => [] } };
+  vm.createContext(context);
+  vm.runInContext(script, context);
+  windows.push(me);
+  return me;
+}
+function find(node, pred) {
+  if (pred(node)) return node;
+  for (const c of node.children || []) { const f = find(c, pred); if (f) return f; }
+  return null;
+}
+const fire = (el, type) => el.listeners[type].forEach(f => f());
+const b = open();
+const a = open();
+const cardA = a.ids['cards'].children[0];
+fire(find(cardA, n => n.tag === 'button' && n.textContent.startsWith('keep')), 'click');
+const noteA = find(cardA, n => n.tag === 'textarea');
+noteA.value = 'trim the ring';
+fire(noteA, 'input');
+const bSees = JSON.parse(b.ids['feedback'].value);
+b.ids['general'].value = 'balance the set';
+fire(b.ids['general'], 'input');
+const afterGeneral = JSON.parse(store.get([...store.keys()].find(k => !k.endsWith(':language'))));
+const slider = find(b.ids['cards'].children[0], n => n.tag === 'input' && n.attrs.type === 'range');
+slider.value = '-3';
+fire(slider, 'input');
+const key = [...store.keys()].find(k => !k.endsWith(':language'));
+console.log(JSON.stringify({ b_sees: bSees, after_general: afterGeneral, saved: JSON.parse(store.get(key)), b_copies: JSON.parse(b.ids['feedback'].value) }));
 """
 
 
@@ -111,7 +182,8 @@ class Page(unittest.TestCase):
         self.assertRegex(self.html, r'<input type="file" id="musicfile"')
         script = re.search(r'<script>(.*?)</script>', self.html, re.S).group(1)
         self.assertNotRegex(script, r'fetch\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource|createObjectURL|FileReader')
-        self.assertEqual(len(re.findall(r'localStorage', script)), 4)         # the listener's choices and language, each read and written
+        self.assertEqual(len(re.findall(r'localStorage', script)), 5)         # the listener's choices (read, read again before a write, written)
+                                                                              # and language (read, written)
 
     def test_the_feedback_says_nothing_of_the_music(self):
         script = re.search(r'<script>(.*?)</script>', self.html, re.S).group(1)
@@ -166,6 +238,34 @@ class Page(unittest.TestCase):
         result = json.loads(proc.stdout.strip().splitlines()[-1])
         self.assertEqual(result['verdict_after_click'], 'keep')
         self.assertEqual(result['saved_sounds'], ['constructor'])
+
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def two_windows(self, quiet=False):
+        harness = self.base / 'two_windows.js'
+        harness.write_text(TWO_WINDOWS, encoding='utf-8')
+        proc = subprocess.run(['node', str(harness), str(self.out / 'audition.html')] + (['quiet'] if quiet else []), capture_output=True, text=True,
+                              encoding='utf-8', timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        result = json.loads(proc.stdout.strip().splitlines()[-1])
+        first = next(iter(result['saved']['sounds']))
+        for saved in (result['after_general'], result['saved']):
+            self.assertEqual(saved['sounds'][first]['verdict'], 'keep')
+            self.assertEqual(saved['sounds'][first]['note'], 'trim the ring')
+            self.assertEqual(saved['general'], 'balance the set')
+        self.assertEqual(result['saved']['sounds'][first]['gain_db'], -3)
+        self.assertEqual(result['b_copies']['sounds'][first]['verdict'], 'keep')    # what window B copies holds window A's choice
+        self.assertEqual(result['b_copies']['general'], 'balance the set')
+        return result, first
+
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_two_windows_editing_different_things_keep_each_others_feedback(self):
+        result, first = self.two_windows()
+        self.assertEqual(result['b_sees']['sounds'][first]['note'], 'trim the ring')   # window B's feedback follows A's as A saves
+
+    @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
+    def test_two_windows_keep_each_others_feedback_where_no_window_is_told_of_the_other(self):
+        result, first = self.two_windows(quiet=True)
+        self.assertEqual(result['b_sees']['sounds'][first]['note'], '')               # nothing told B, which still wrote over nothing
 
     @unittest.skipIf(shutil.which('node') is None, 'node is not installed')
     def test_a_language_change_writes_only_the_language(self):

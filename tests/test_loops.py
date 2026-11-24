@@ -481,7 +481,7 @@ class Ctx {
 }
 global.document = { getElementById: id => ids[id] || null, createElement: t => new El(t), documentElement: {},
                     execCommand: () => true, querySelectorAll: () => [] };
-global.window = { localStorage: { getItem: () => null, setItem: () => {} }, devicePixelRatio: 1, AudioContext: Ctx };
+global.window = { localStorage: { getItem: () => null, setItem: () => {} }, devicePixelRatio: 1, AudioContext: Ctx, addEventListener() {} };
 global.getComputedStyle = () => ({ getPropertyValue: () => '#000' });
 global.atob = s => Buffer.from(s, 'base64').toString('binary');
 Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true, writable: true });   // not Node's own

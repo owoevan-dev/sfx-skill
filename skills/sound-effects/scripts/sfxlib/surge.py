@@ -308,8 +308,16 @@ def status(config, skill):
         presets = load_catalog(skill)
     except SurgeError as error:
         return str(error)
-    playable = sum(1 for entry in presets.values() if not refused(entry))
-    return f'OK ({playable} of its {len(presets)} patches can play a layer; {len(presets) - playable} are MPE or silent)'
+    patches = Path(config['surge']['catalog'])
+    if not patches.is_dir():
+        return "the patch folder this configuration names is missing: run music-production's bootstrap.py again"
+    usable = [entry for entry in presets.values() if not refused(entry)]
+    playable = sum(1 for entry in usable if (patches / entry['path']).is_file())         # a patch is read, and checked, when it records
+    if not playable:
+        return "none of its patches that can play a layer is in its patch folder: run music-production's bootstrap.py again"
+    missing = len(usable) - playable
+    gone = f"; {missing} {'is' if missing == 1 else 'are'} missing from its patch folder, which music-production's bootstrap.py brings back" if missing else ''
+    return f'OK ({playable} of its {len(presets)} patches can play a layer; {len(presets) - len(usable)} are MPE or silent{gone})'
 
 
 def _write(path, data):

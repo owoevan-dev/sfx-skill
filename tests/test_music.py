@@ -262,6 +262,20 @@ class HostileFiles(unittest.TestCase):
         tracemalloc.stop()
         self.assertLess(peak, 8 * 2 ** 20)
 
+    def test_a_file_too_large_is_refused_before_its_pieces_are_joined(self):
+        import tracemalloc
+        path = folder() / 'large.json'
+        path.write_bytes(b' ' * (4 * 2 ** 20 + 1))
+        with mock.patch.object(music, 'MAX_FILE_BYTES', 4 * 2 ** 20), mock.patch.object(music, 'CHUNK', 2 ** 16):
+            tracemalloc.start()
+            try:
+                with self.assertRaisesRegex(music.MusicError, 'more than'):
+                    music.load(path)
+                peak = tracemalloc.get_traced_memory()[1]
+            finally:
+                tracemalloc.stop()
+        self.assertLess(peak, 6 * 2 ** 20)                  # what was read, and not a joined copy of it as well
+
     def test_more_tracks_or_notes_than_a_project_holds_are_refused(self):
         many = piece(tracks=[part(f't{i}', [(0, 1, 60)]) for i in range(65)])
         with self.assertRaisesRegex(music.MusicError, '64'):
@@ -369,7 +383,74 @@ class Quoting(unittest.TestCase):
         song['tracks'][0]['performance']['cc'] = [[0, 1, 90]]
         self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's mod wheel"])
         song['tracks'][0]['performance']['cc'] = [[0, 11, 90]]
-        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's controllers"])
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's controller CC11"])
+
+    def test_controllers_are_named_only_where_the_engine_hears_them_in_the_bars(self):
+        song = piece()
+        lead = song['tracks'][0]
+        lead.update(engine='surge', surge={'preset': 'factory/pads/bright'})
+        lead['performance']['cc'] = [[0, 74, 100], [8, 1, 90]]          # brightness in bar 1, which Surge XT is not sent; the wheel in bar 3
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
+        self.assertEqual(music.quote(song, 'lead', 3, 3)['leaves_out'], ["this part's mod wheel"])
+
+    def test_a_pedal_or_wheel_held_into_the_bars_is_named_and_one_let_go_before_them_is_not(self):
+        song = piece()
+        song['tracks'][0]['performance']['cc'] = [[0, 64, 127], [0, 1, 50]]
+        self.assertEqual(music.quote(song, 'lead', 3, 3)['leaves_out'], ["this part's sustain pedal", "this part's mod wheel"])
+        song['tracks'][0]['performance']['cc'] = [[0, 64, 127], [3, 64, 0], [0, 1, 50], [3, 1, 0]]
+        self.assertEqual(music.quote(song, 'lead', 3, 3)['leaves_out'], [])
+
+    def test_each_engine_names_the_controllers_it_plays(self):
+        song = piece()
+        lead = song['tracks'][0]
+        lead['performance']['cc'] = [[4, 11, 60], [4, 74, 66], [4, 7, 90], [4, 1, 32]]
+        lead['engine'] = 'additive'                     # expression, brightness and the wheel as vibrato, here 74 and 1 at their rest
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's controller CC11"])
+        lead['performance']['cc'].append([6, 1, 0])
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's mod wheel", "this part's controller CC11"])
+        lead['engine'] = 'synth'                        # none
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], [])
+        lead['engine'] = 'soundfont'                    # any its preset answers
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's mod wheel", "this part's controllers CC7, CC11 and CC74"])
+        lead['performance']['cc'] = [[8, 7, 90]]        # set only after the bars
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], [])
+
+    def test_a_ramp_is_read_between_its_points(self):
+        song = piece()
+        lead = song['tracks'][0]
+        lead.update(engine='additive')
+        lead['performance']['cc'] = [[0, 11, 100], [16, 11, 40]]      # 100 is its rest: the ramp leaves it at once
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ["this part's controller CC11"])
+        lead['performance']['cc_mode'] = 'step'                      # held at 100 until beat 16
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
+
+    def test_a_bend_is_named_only_where_it_reaches_the_bars(self):
+        song = piece()
+        song['tracks'][0]['performance']['bend'] = [[8, 0], [8.5, 1], [9, 0]]
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
+        self.assertEqual(music.quote(song, 'lead', 3, 3)['leaves_out'], ["this part's pitch bend"])
+        song['tracks'][0]['performance']['bend'] = [[2, 1]]                 # jumps there and stays
+        self.assertEqual(music.quote(song, 'lead', 3, 3)['leaves_out'], ["this part's pitch bend"])
+
+    def test_a_slur_that_joins_quoted_notes_is_named_and_the_written_notes_stay(self):
+        song = piece(tracks=[part('lead', [(0, 1, 60), (1, 1, 62), (3, 1, 70)])])
+        song['tracks'][0]['performance'].update(legato={'max_interval': 5, 'glide_ms': 25, 'gap_ms': 40, 'max_notes': 4}, bend_range=5)
+        q = music.quote(song, 'lead', 1, 1)
+        self.assertEqual([n[1] for n in q['notes']], [60, 62, 70])
+        self.assertEqual(q['leaves_out'], ["this part's slurs (1 of these notes glides on from the note before it, with no attack of its own)"])
+        song['tracks'][0]['performance']['legato']['mode'] = 'crossfade'
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ["this part's crossfade legato"])
+        del song['tracks'][0]['performance']['legato']['mode']
+        song['tracks'][0]['performance']['notes']['lead_0']['gate'] = 0.5          # played short, the two no longer meet
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], ['per-note gate'])
+        song['tracks'][0]['engine'] = 'synth'                                       # legato is a SoundFont part's
+        del song['tracks'][0]['performance']['notes']['lead_0']['gate']
+        self.assertEqual(music.quote(song, 'lead', 1, 1)['leaves_out'], [])
+
+    def test_a_dynamics_curve_is_named(self):
+        song = piece()
+        song['tracks'][0]['performance']['dynamics'] = [[0, 40], [16, 100]]
+        self.assertEqual(music.quote(song, 'lead', 2, 2)['leaves_out'], ["this part's dynamics curve, which sets its loudness in place of velocity"])
 
     def test_the_piece_s_rubato_is_named(self):
         q = music.quote(piece(clock={'bars': 4, 'meter': [4, 4], 'tempo': [[0, 120]], 'rubato': {'final_ratio': 0.6, 'final_beats': 4}}), 'lead', 2, 2)

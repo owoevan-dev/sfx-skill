@@ -73,7 +73,7 @@ A `song.json` of schema `music-production/v1`, read as data.
 | `tracks[].id`, `.name`, `.role`, `.engine`, `.drums`, `.range` | printed; `drums` and the engines `drum_synth` and `noise` have no pitch classes |
 | `tracks[].notes[].id`, `.on`, `.duration`, `.pitch` | the written notes, in quarter notes |
 | `tracks[].performance.notes.<id>.velocity` | a quoted note's velocity |
-| `.performance.notes.<id>.timing_ms`, `.gate`, `.performance.swing`, `.offset_ms`, `.bend`, `tracks[].key_map` | named when a quote leaves them out |
+| `.performance.notes.<id>.timing_ms`, `.gate`, `.performance.swing`, `.offset_ms`, `.bend`, `.cc`, `.cc_mode`, `.legato`, `.dynamics`, `tracks[].key_map`, `.reverse` | named when a quote leaves them out: a bend or controller where it reaches the quoted bars (a value set before them too) and the part's engine plays it (Surge XT the mod wheel and sustain pedal; the additive synth expression, brightness and the mod wheel; a SoundFont preset any; the built-in synth, drum machine and noise engine none), and a SoundFont part's legato where it joins quoted notes |
 
 ## Surge host (recording a take)
 
@@ -86,7 +86,7 @@ their receipts. `JOB.json` holds:
 |---|---|
 | `plugin`, `pylib` | `surge.path`, `pedalboard.path` |
 | `patch` | a copy of the checked patch file's bytes, with its tempo-synced delays and LFOs set free for the layer's `bpm` |
-| `out` | the WAV to write: 32-bit float, stereo, at `rate`, of `duration` x `rate` frames less `trim` (within 2), or the take is not kept |
+| `out` | the WAV to write, stereo, at `rate`, of `duration` x `rate` frames less `trim` (within 2), or the take is not kept. The host writes 32-bit float; 8-, 16-, 24- and 32-bit PCM are read as well |
 | `rate` | 48000 |
 | `events` | `[hex MIDI, seconds]`: note on and off, pitch bend, CC1; each 0.1 s late, and at one time controls first, then note-offs, then note-ons |
 | `duration`, `trim` | 0.1 s + the last note-off + the layer's `tail`; 4800 frames, which take that lead off again |

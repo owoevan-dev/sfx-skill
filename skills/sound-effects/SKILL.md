@@ -111,7 +111,7 @@ Loops: a sound with `"use": "loop"` (the ambience recipes make them) is one peri
 masters carry the loop in their `smpl` chunk. A longer loop repeats less often; the page shows each loop's integrated
 loudness, loudness range and how its halves differ, which tell you whether a swell inside it will be heard every time
 round. The level step brings a loop to the one-shots' loudness, so a bed needs a negative `trim_db` to sit under them (the
-check flags one within 3 dB of the loudest one-shot). Audition the length that ships, since the page holds it whole (about 13 MB for 48 stereo seconds as WAV; with FFmpeg the page holds FLAC, smaller by as much as the sound compresses): one variant of
+check flags one within 3 dB of the loudest one-shot). Audition the length that ships, since the page holds it whole (about 13 MB for 48 stereo seconds as WAV; with FFmpeg the page holds a clip as FLAC where that is smaller, by as much as the sound compresses): one variant of
 a long loop keeps the page small.
 
 ## The game's music
@@ -124,8 +124,9 @@ can quote it. Which notes to use and where a sound sits are your choice: nothing
   out no key: if no harmony is declared it says so.
 - `--track flute --bars 1-2` prints those bars' written notes, ready to paste as the `notes` of an `instrument` or `surge`
   layer, so that a pickup or a level-up can quote the game's theme. Time 0 is the start of the first bar, a note running past
-  the last bar is cut there, and it names what the performance adds that the written notes leave out (swing, gate,
-  per-note timing, rubato). Quote only music that is the user's own or that they may use this way.
+  the last bar is cut there, and it names what the performance adds to those bars that the written notes leave out (swing,
+  gate, per-note timing, rubato, slurs, a bend, or a pedal or controller the part's engine plays). Quote only music that is
+  the user's own or that they may use this way.
 - On the audition page, **Music** loads a file from the user's computer and loops it at its own level under the sounds. The
   file stays in the browser: it is not embedded in the page or sent anywhere, and nothing of it reaches the masters.
 
@@ -164,7 +165,7 @@ measures well: report measurements as measurements and let the user's ears decid
 | `render PROJECT --output FOLDER [--sound ID ...] [--no-page] [--config CONFIG] [--record-takes] [--music-skill DIR] [--samples LIB ...] [--ffmpeg PATH]` | renders, levels, writes masters, checks and writes the audition page (a new folder); `--sound` renders only those sounds; `--samples` repeats for packs kept in several libraries |
 | `check FOLDER [--traits]` | measures a render again and says what set the level, what would raise it and what the limiter took; `--traits` adds a line per sound |
 | `spectrogram FOLDER [--sound ID] [--all-variants]` | draws each sound's picture (level, loudest moment, spectrogram) into FOLDER/spectrograms, to look at |
-| `audition FOLDER [--ffmpeg PATH] [--config CONFIG]` | writes the audition page again (as FLAC when it finds an FFmpeg) |
+| `audition FOLDER [--ffmpeg PATH] [--config CONFIG]` | writes the audition page again (with an FFmpeg it finds, each clip as FLAC where that decodes to the same samples and is smaller than the WAV) |
 | `export FOLDER --target godot --output NEW [--formats wav,ogg] [--config CONFIG] [--res-path res://sfx]` | writes a render's files for an engine (godot, unity, unreal, roblox, web, generic) with a manifest (a new folder) |
 | `clean FOLDER --keep RENDER [--exports] [--trash] [--json]` | lists the old renders the kept one no longer needs; `--trash` moves them whole into `FOLDER/.sfx-trash`. A folder holding anything the skill did not write, one newer than the kept version and, without `--exports`, any export stay. `clean FOLDER --downloads` only lists the archives the library holds in full. Nothing is deleted |
 | `doctor [--config CONFIG] [--ffmpeg PATH] [--library LIB]` | checks the setup (music-production, FFmpeg and the library are optional) |

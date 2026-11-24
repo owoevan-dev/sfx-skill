@@ -128,10 +128,24 @@ function loadState() {
   } catch (e) { /* storage may be unavailable */ }
   return { sounds: sounds, general: '' };
 }
-function saveState() {
+// One change, written into the feedback as it was saved last, by this window or another open on this page, so that what the
+// other window wrote stays; where nothing can be read back, into this window's own. `id` null is the general feedback.
+function saveState(id, field, value) {
+  let base = state;
+  try { if (window.localStorage.getItem(STORE) !== null) base = loadState(); } catch (e) { /* storage may be unavailable */ }
+  if (id === null) base.general = value;
+  else {
+    const was = own(base.sounds, id) && base.sounds[id] && typeof base.sounds[id] === 'object' ? base.sounds[id] : {};
+    const now = { verdict: was.verdict || '', note: was.note || '', gain_db: was.gain_db || 0 };
+    now[field] = value;
+    base.sounds[id] = now;
+  }
+  state = base;
   try { window.localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* not kept */ }
   showFeedback();
 }
+// another window on this page saved: the feedback this one shows and copies is that now
+window.addEventListener('storage', e => { if (e.key === STORE || e.key === null) { state = loadState(); showFeedback(); } });
 // the language chosen before on this page, else the first of the browser's languages the page speaks, else English
 function pickLanguage() {
   let chosen = null;
@@ -335,7 +349,7 @@ function buildCard(s) {
     st.gain_db = Number(slider.value);
     if (loops[s.id]) loops[s.id].gain.gain.value = dbToGain(st.gain_db);
     showGain();
-    saveState();
+    saveState(s.id, 'gain_db', st.gain_db);
   });
   showGain();
   gainRow.appendChild(slider);
@@ -350,7 +364,7 @@ function buildCard(s) {
     b.addEventListener('click', () => {
       st.verdict = st.verdict === name ? '' : name;
       for (const k in buttons) buttons[k].classList.toggle('on', st.verdict === k);
-      saveState();
+      saveState(s.id, 'verdict', st.verdict);
     });
     if (st.verdict === name) b.classList.add('on');
     verdicts.appendChild(b);
@@ -358,7 +372,7 @@ function buildCard(s) {
   card.appendChild(verdicts);
   const note = el('textarea', { rows: '2', placeholder: t('note') });
   note.value = st.note || '';
-  note.addEventListener('input', () => { st.note = note.value; saveState(); });
+  note.addEventListener('input', () => { st.note = note.value; saveState(s.id, 'note', st.note); });
   card.appendChild(note);
   for (const flag of s.flags) card.appendChild(el('div', { class: 'flag' }, flag));
   return card;
@@ -495,7 +509,7 @@ function setup() {
   showMaster();
   const general = document.getElementById('general');
   general.value = state.general || '';
-  general.addEventListener('input', () => { state.general = general.value; saveState(); });
+  general.addEventListener('input', () => { saveState(null, 'general', general.value); });
   document.getElementById('copy').addEventListener('click', async () => {
     const text = document.getElementById('feedback');
     let done = false;

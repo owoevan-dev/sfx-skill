@@ -27,6 +27,15 @@ TRACK_ID = re.compile('[a-z][a-z0-9_]{0,47}')     # music-production's track ids
 NOTE_ID_CHARS = 120                     # and its longest note id
 SUSTAIN = 64                            # the controller of the sustain pedal, which holds notes past their written ends
 MOD_WHEEL = 1
+EXPRESSION = 11
+BRIGHTNESS = 74
+PEDALS = range(64, 70)                  # switch controllers, which step whatever a part's cc_mode says
+# The controllers each engine plays, each with the value it rests at until the part sets it, as music-production renders a part:
+# Surge XT is sent the mod wheel and the sustain pedal; the additive synth reads expression, brightness and the mod wheel (its
+# vibrato); the built-in synthesizer, the drum machine and the noise engine read none. A SoundFont preset may answer any.
+HEARD = {'surge': {MOD_WHEEL: 0, SUSTAIN: 0}, 'additive': {MOD_WHEEL: 32, EXPRESSION: 100, BRIGHTNESS: 66},
+         'synth': {}, 'drum_synth': {}, 'noise': {}}
+AT_REST = {MOD_WHEEL: 0, SUSTAIN: 0}    # on a SoundFont part, whose preset decides where its other controllers rest
 MAX_TRACKS = 64                         # music-production's limits on a project
 MAX_NOTES_IN_PROJECT = 500_000
 CHUNK = 2 ** 20                         # a file is read this much at a time, so a small one takes a small buffer
@@ -131,11 +140,12 @@ def load(path):
                     break
                 chunks.append(chunk)
                 size += len(chunk)
-        data = b''.join(chunks)
     except OSError as error:
         raise MusicError(f'cannot read {path}: {error}') from error
-    if len(data) > MAX_FILE_BYTES:
+    if size > MAX_FILE_BYTES:                            # before the pieces are joined, which would hold them twice
         raise MusicError(f'{path} holds more than {MAX_FILE_BYTES:,} bytes, more than a music-production project holds')
+    data = b''.join(chunks)
+    del chunks
     try:
         song = json.loads(data)
     except (ValueError, RecursionError) as error:
@@ -367,8 +377,111 @@ def parse_bars(text):
     return first, last
 
 
-def _left_out(song, track, picked):
-    """What the render plays beyond the written notes of this selection."""
+def _real(value, default):
+    """A number the performance gives, else `default`: music-production validates a project, and this only reads one."""
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else default
+
+
+def _during(points, start, stop, rest, ramp):
+    """The values a control takes from beat `start` up to `stop`, as music-production plays its [beat, value] points (in order):
+    `rest` until the first point, which it may jump to, then each held to the next or, `ramp`, moving straight to it, the last
+    held. A ramp passes only between its ends, so the value at `start`, at each point inside and, ramping, on the way to `stop`
+    bound them all."""
+    def at(beat, on):
+        before = [p for p in points if (p[0] <= beat + ON_THE_LINE if on else p[0] < beat - ON_THE_LINE)]
+        if not before:
+            return rest
+        (b0, v0), after = before[-1], points[len(before):]
+        if not ramp or not after:
+            return v0
+        b1, v1 = after[0]
+        return v0 + (v1 - v0) * (beat - b0) / (b1 - b0) if b1 > b0 else v1
+    return [at(start, True)] + [v for b, v in points if start + ON_THE_LINE < b < stop - ON_THE_LINE] + ([at(stop, False)] if ramp else [])
+
+
+def _pairs(items):
+    """The [x, y] pairs of a list in the project, as (float, float), leaving out what is not one."""
+    return [(float(p[0]), float(p[1])) for p in (items if isinstance(items, list) else [])
+            if isinstance(p, list) and len(p) == 2 and _real(p[0], None) is not None and _real(p[1], None) is not None]
+
+
+def _controls(track, performance, start, stop):
+    """The bend and the controllers that reach beats `start` to `stop`, a value set before them too, as the part's engine hears them."""
+    out = []
+    bend = sorted(_pairs(performance.get('bend')), key=lambda p: p[0])         # of two points on one beat the later written holds
+    if bend and any(abs(v) > 1e-9 for v in _during(bend, start, stop, 0.0, True)):
+        out.append("this part's pitch bend")
+    engine = track.get('engine')
+    heard = HEARD.get(engine)                                                   # None: any controller, as a SoundFont preset may answer
+    ramp = performance.get('cc_mode', 'linear' if engine == 'additive' else 'step') != 'step'
+    by = {}
+    for c in performance.get('cc') if isinstance(performance.get('cc'), list) else []:
+        if isinstance(c, list) and len(c) == 3 and all(_real(x, None) is not None for x in c):
+            by.setdefault(int(c[1]), []).append((float(c[0]), float(c[2])))
+    pedal, wheel, others = False, False, []
+    for control in sorted(by):
+        if heard is not None and control not in heard:
+            continue
+        points = sorted(by[control])
+        rest = (AT_REST if heard is None else heard).get(control)
+        if rest is None:                       # a SoundFont controller rests where its preset puts it: any value set before the bars end holds in them
+            if points[0][0] < stop - ON_THE_LINE:
+                others.append(control)
+            continue
+        values = _during(points, start, stop, rest, ramp and control not in PEDALS)
+        if control == SUSTAIN:
+            pedal = pedal or max(values) >= 64
+        elif any(abs(v - rest) > 1e-9 for v in values):
+            wheel = wheel or control == MOD_WHEEL
+            if control != MOD_WHEEL:
+                others.append(control)
+    out += ["this part's sustain pedal"] * pedal + ["this part's mod wheel"] * wheel
+    if others:
+        out.append(f"this part's controller{'s' if len(others) > 1 else ''} " + _and([f'CC{c}' for c in others]))
+    return out
+
+
+def _slurs(track, performance, every, picked, clock):
+    """What a SoundFont part's legato (music-production's performance.legato) does to the selected notes, grouping the part's notes
+    as it does by their played times: per-note timing and gate (swing moves a note's start and end alike, and is left aside)."""
+    legato = performance.get('legato')
+    if track.get('engine') != 'soundfont' or not isinstance(legato, dict):
+        return []
+    played = performance.get('notes') if isinstance(performance.get('notes'), dict) else {}
+    notes = []
+    for on, duration, pitch, note_id in every:
+        entry = played.get(note_id) if isinstance(played.get(note_id), dict) else {}
+        begin = clock.seconds(on) + _real(entry.get('timing_ms'), 0.0) / 1000
+        notes.append((begin, begin + (clock.seconds(on + duration) - clock.seconds(on)) * _real(entry.get('gate'), 1.0), pitch, note_id))
+    notes.sort(key=lambda n: (n[0], n[2]))
+    chosen = {note[3] for note in picked}
+    gap = _real(legato.get('gap_ms'), 40.0) / 1000
+    if legato.get('mode') == 'crossfade':   # a note that follows its neighbour, not struck with others, enters from the bank's legato recording
+        span = _real(legato.get('max_interval'), 12.0)
+        onsets = {}
+        for n in notes:
+            onsets[n[0]] = onsets.get(n[0], 0) + 1
+        enters = any(b[3] in chosen and b[0] - a[1] <= gap and b[2] != a[2] and abs(b[2] - a[2]) <= span and onsets[b[0]] == 1
+                     for a, b in zip(notes, notes[1:]))
+        return ["this part's crossfade legato"] if enters else []
+    span, most = _real(legato.get('max_interval'), 5.0), _real(legato.get('max_notes'), 4.0)
+    group, joined = [], 0
+    for note in notes:
+        if group and note[0] - group[-1][1] <= gap and note[2] != group[-1][2] and abs(note[2] - group[0][2]) <= span and len(group) < most:
+            group.append(note)
+            joined += note[3] in chosen
+        else:
+            group = [note]
+    if not joined:
+        return []
+    one = joined == 1
+    return [f"this part's slurs ({joined} of these notes {'glides' if one else 'glide'} on from the note before {'it' if one else 'them'}, "
+            f"with no attack of {'its' if one else 'their'} own)"]
+
+
+def _left_out(song, track, picked, every, clock, start, stop):
+    """What the render plays beyond the written notes of this selection, from beat `start` up to `stop`: what reaches these bars,
+    a controller set before them too, and what the part's engine plays."""
     performance = track.get('performance') if isinstance(track.get('performance'), dict) else {}
     played = performance.get('notes') if isinstance(performance.get('notes'), dict) else {}
     entries = [played.get(note[3]) or {} for note in picked]
@@ -388,16 +501,10 @@ def _left_out(song, track, picked):
         out.append('per-note timing')
     if any(entry.get('gate', 1) != 1 for entry in entries):
         out.append('per-note gate')
-    if performance.get('bend'):
-        out.append("this part's pitch bend")
-    cc = [c for c in (performance.get('cc') if isinstance(performance.get('cc'), list) else [])
-          if isinstance(c, list) and len(c) == 3 and isinstance(c[2], (int, float)) and not isinstance(c[2], bool)]
-    if any(c[1] == SUSTAIN and c[2] >= 64 for c in cc):
-        out.append("this part's sustain pedal")
-    if any(c[1] == MOD_WHEEL and c[2] > 0 for c in cc):
-        out.append("this part's mod wheel")
-    if any(c[1] not in (SUSTAIN, MOD_WHEEL) for c in cc):
-        out.append("this part's controllers")
+    out += _slurs(track, performance, every, picked, clock)
+    if track.get('engine') == 'soundfont' and isinstance(performance.get('dynamics'), list) and performance['dynamics']:
+        out.append("this part's dynamics curve, which sets its loudness in place of velocity")
+    out += _controls(track, performance, start, stop)
     if mapped:
         out.append("this part's key map")
     return out
@@ -440,7 +547,7 @@ def quote(song, track_id, first, last):
         notes.append([round(at, 4), pitch, max(0.0001, round(clock.seconds(min(ends, stop)) - zero - at, 4)), velocity])
     rang_in = sum(1 for note in every if note[0] < start - ON_THE_LINE and note[0] + note[1] > start + ON_THE_LINE)
     return {'track': track_id, 'bars': [first, last], 'start_s': round(zero, 4), 'length_s': round(length, 4), 'notes': notes, 'cut': cut,
-            'rang_in': rang_in, 'leaves_out': _left_out(song, track, picked), 'drums': not _pitched(track)}
+            'rang_in': rang_in, 'leaves_out': _left_out(song, track, picked, every, clock, start, stop), 'drums': not _pitched(track)}
 
 
 def quote_lines(q):

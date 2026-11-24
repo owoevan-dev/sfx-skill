@@ -14,7 +14,9 @@
 - **Music on the audition page.** A track picked on your computer loops under the sounds at its own level. It stays in the page.
 - **The page in your language.** English, Traditional and Simplified Chinese, Japanese and Korean, from the browser's language, with a
   menu. The feedback is the same in every language.
-- **A smaller page.** With FFmpeg, the page holds FLAC instead of WAV: the same samples in less than half the size on a typical set.
+- **A smaller page.** With FFmpeg, the page holds each clip as FLAC where that decodes to the same samples and is smaller than the WAV
+  (a very short clip stays WAV): about half the size for a game's set of sounds.
+- The audition page open in two windows keeps both windows' feedback: each change is written into what was saved last.
 - **Search.** Recordings about as clean as each other come in an order of the project's own, so two games start from different
   recordings. When fewer than five recordings hold every word, the list goes on with those holding some of them, marked (in `--json`,
   `files` and `matched` still hold only recordings with every word, and the others are in `some_words`). Recordings labelled only as

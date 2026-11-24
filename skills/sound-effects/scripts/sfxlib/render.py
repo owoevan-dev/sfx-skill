@@ -190,6 +190,13 @@ def _recordings(items, library):
     return [library.provenance(lib, name) for lib, name in used]
 
 
+def _within(path, folder):
+    """Whether `path` is `folder` or inside it as the system finds them, through `..` and links: no spelling of the project's take
+    folder lets a render write there, and a folder beside it spelt through it is not taken for it."""
+    path, folder = Path(path).resolve(), Path(folder).resolve()
+    return path == folder or folder in path.parents
+
+
 def _surge_takes(proj, folder, config, record, music_skill):
     """The project's Surge takes (surge.Provider), every layer's take checked before the render makes its folder; None for a project
     with no Surge layer."""
@@ -218,7 +225,7 @@ def render(proj, out_dir, config=None, samples=None, ffmpeg=None, page=True, tak
     out = Path(out_dir)
     if out.exists() and any(out.iterdir()):
         raise RenderError(f'{out} already holds files; a render goes into a new folder')
-    if takes is not None and (out.absolute() == Path(takes).absolute() or Path(takes).absolute() in out.absolute().parents):
+    if takes is not None and _within(out, takes):
         raise RenderError(f"{out} is in the project's {surge.FOLDER}, which holds only takes: render into another folder")
     surge_takes = _surge_takes(proj, takes, config, record_takes, music_skill)
     try:
