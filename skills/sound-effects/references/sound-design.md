@@ -305,6 +305,11 @@ That suits sounds that should feel alive: magic, sci-fi, drones, shimmers. A `su
 everything else in this guide. Its audio is yours to use: Surge's FAQ says what you make with it needs no licence or
 permission, also when you start from a preset that comes with it.
 
+**Where it helps.** A Surge body brings the most to tonal sounds that ring on: casts, heals and shimmers, notifications,
+rewards and level-ups. For a short interface sound (a click, a menu tone, a confirmation of a tenth of a second) synthesis is
+usually enough, and a full patch crowds it: a Surge body there, where the set's other sounds use one, should be a plain pluck
+or mallet kept dark with a low-pass. Keep transients, noise, chip voices, loop beds and the low end in synthesis or recordings.
+
 **Choosing a patch.** `sfx.py surge --find bell`, `--role pad` and `--character dark,slow` search the patches by name,
 category, designer, role and how a probe note measured. The words describe one note, so record two or three candidates and
 look at them (`sfx.py spectrogram`): which one is right is for the person who listens. Each project sees the patches in an
@@ -323,8 +328,9 @@ easy with the chain's `room`.
 sound stays as it was heard, and the project renders without Surge. Keep the folder with the project. Each variant has a
 performance of its own, which is what makes repeats sound alive. Name a `take` when every variant should be the same
 performance, moved only in pitch, time and level. A take belongs to its sound, its variant and its place among the
-sound's layers on the same patch, so adding or removing other layers records nothing, and neither does changing `cents`, gain,
-filter, envelope or placement; changing the patch, notes or controls, or renaming the sound, asks for a new take.
+sound's layers that play the same performance, so adding or removing a layer that plays anything else records nothing, and
+neither does changing `cents`, gain, filter, envelope or placement; changing the patch, notes or controls, or renaming the
+sound, asks for a new take.
 
 **Five magic sounds as stacks.** These are this skill's own starting points, built on the stack of section 3 and the meanings
 of section 5. Keep the short transient and the low weight in synthesis, where they are exact, and let Surge carry the

@@ -43,9 +43,11 @@ Run the commands from the game's project folder, by the full path of this skill'
    the list holds what is hard to synthesize (doors, footsteps, metal, engines, water, animals), say so once, with the
    list: recommend the library (what it takes is under **Recordings** below) and mention that the user can hand you a
    folder or zip of sounds they already have. A game of only interface or chip sounds needs neither, so do not ask.
-   If the list holds magic or sci-fi sounds and `doctor` shows no Surge XT, say that once too: the music-production skill's
-   setup adds it (about 0.5 GB), and it suits sounds that should move and ring by themselves. Install it only if they
-   agree; without it these sounds are made from the other layers.
+   If the list holds magic, sci-fi or tonal cues that ring on (notifications, rewards, level-ups), or the user wants the
+   game's music too, and `doctor` shows no Surge XT, say that once too: the music-production skill's setup adds it (about
+   0.5 GB), it suits sounds that should move and ring by themselves, and the same skill writes music. Install it only if
+   they agree; without it these sounds are made from the other layers. A set of only short interface sounds, chip sounds
+   or recordings does not need it, so do not ask.
 3. **Design the sounds** in the project file ([project-format.md](references/project-format.md)), one per event:
    - **A recipe**, when one is close. `python scripts/sfx.py recipes --category impact` lists them and `--name
      impact.punch` prints a recipe's parameters and rules ([ui-sounds.md](references/ui-sounds.md),
@@ -75,7 +77,9 @@ Run the commands from the game's project folder, by the full path of this skill'
      3. Trim with `offset`, take noise out (filters, envelopes, `denoise`), change size, weight and distance, stack the
         recording with synthesis and give each variant its own take ([sound-design.md](references/sound-design.md),
         section 6).
-   - **Surge XT**, for sounds that should move and ring by themselves: magic, sci-fi, drones, shimmers. `python
+   - **Surge XT**, for sounds that should move and ring by themselves: magic, sci-fi, drones, shimmers, and tonal cues that
+     ring on, such as notifications and rewards. For a short interface sound synthesis is usually enough; a Surge body
+     there should be a plain patch kept dark with a low-pass, since a full one crowds a short cue. `python
      scripts/sfx.py surge --find bell --character bright` lists patches and `--id ID` says what each one's macros move. A
      `surge` layer plays one ([sound-design.md](references/sound-design.md), section 10). Two plays of a note differ, so each
      take is recorded once, by `render --record-takes --config CONFIG`, into `surge_takes` beside the project: keep that
