@@ -102,8 +102,10 @@ class ReadoutCommand(unittest.TestCase):
         data = struct.pack('<' + 'h' * channels * frames, *([1000] * channels * frames))
         fmt = struct.pack('<HHIIHH', 1, channels, 48000, 48000 * channels * 2, channels * 2, 16)
         body = b'WAVE' + b'fmt ' + struct.pack('<I', len(fmt)) + fmt + b'data' + struct.pack('<I', len(data)) + data
-        master = next((copy / 'master').glob('beep_*.wav'))
-        master.write_bytes(b'RIFF' + struct.pack('<I', len(body)) + body)
+        masters = sorted((copy / 'master').glob('beep_*.wav'))         # every variant: the readout reads the first, and
+        self.assertTrue(masters)                                       # a directory lists its files in no fixed order
+        for master in masters:
+            master.write_bytes(b'RIFF' + struct.pack('<I', len(body)) + body)
         proc = run('readout', copy, '--sound', 'beep', '--json')
         self.assertEqual(proc.returncode, 1)
         self.assertIn('readout:', proc.stdout)

@@ -7,9 +7,9 @@ when it is valid UTF-8, else as Latin-1) and the end of a track (FF 2F). Every o
 patterns) and SMPTE divisions are refused in a sentence, as are a file over MAX_BYTES and a chunk that runs past the end.
 
 A part is one track's notes on one channel. Channel 10 is General MIDI's percussion: its numbers are the keys of a kit.
-A part's program is the last its own track sets on its channel by its first note (where its track has set none by then,
-the one its channel has from the other tracks); its pedal and bend are its own track's and those of a track without notes
-(a setup track). The title is the first track's name, else the file's.
+A part's program changes, pedal and bend come from its own track and from setup tracks (tracks without notes), in track
+order at one tick; where those set no program by its first note, it opens on the one its channel has from the other
+tracks. The title is the first track's name, else the file's.
 A note-off ends the earliest note still open on its key and channel (so a note-on and a note-off of one key at one tick end the old
 note, not the new one), a note still sounding when its key is struck again ends there, and a note left open at the end of its
 track ends there.
@@ -251,9 +251,9 @@ def _bars(meters, ppq, last):
 
 def _parts(tracks):
     """Tracks that share a channel are often separate instruments (on two ports, FF 21, or a channel reused), so a part
-    keeps its own track's program and pedal. A part whose track has set no program by its first note opens on the one its
-    channel has from the other tracks then; a setup track without notes adds its controllers, in track order at one tick
-    as a player takes them."""
+    takes its program changes and controllers from its own track and from setup tracks (those without notes), in track
+    order at one tick as a player takes them. A part whose own and setup tracks set no program by its first note opens on
+    the one its channel has from the other tracks then, and lists their later changes."""
     parts = []
     for index, tr in enumerate(tracks, start=1):
         channels = sorted({n[4] for n in tr['notes']})
@@ -261,15 +261,16 @@ def _parts(tracks):
             notes = sorted(n for n in tr['notes'] if n[4] == channel)
             first = notes[0][0]
             pid = str(index) if len(channels) == 1 else f'{index}.{channel + 1}'
-            own = [(t, p) for t, ch, p in tr['programs'] if ch == channel]
-            rest = sorted(((t, p) for j, other in enumerate(tracks, start=1) if j != index
-                           for t, ch, p in other['programs'] if ch == channel), key=lambda c: c[0])    # stable: track order
-            program = next((p for t, p in reversed(own) if t <= first), None)
+            sources = [other for j, other in enumerate(tracks, start=1) if j == index or not other['notes']]
+            mine = sorted(((t, p) for other in sources for t, ch, p in other['programs'] if ch == channel),
+                          key=lambda c: c[0])                                                  # stable: track order
+            rest = sorted(((t, p) for j, other in enumerate(tracks, start=1) if j != index and other['notes']
+                           for t, ch, p in other['programs'] if ch == channel), key=lambda c: c[0])
+            program = next((p for t, p in reversed(mine) if t <= first), None)
             if program is None:
                 program = next((p for t, p in reversed(rest) if t <= first), None)
-            later = [(t, p) for t, p in (own or rest) if t > first]
-            controls = [e for j, other in enumerate(tracks, start=1) if j == index or not other['notes']
-                        for e in other['controls'].get(channel, [])]
+            later = [(t, p) for t, p in (mine or rest) if t > first]
+            controls = [e for other in sources for e in other['controls'].get(channel, [])]
             parts.append({'id': pid, 'track': index, 'channel': channel + 1, 'name': tr['name'], 'program': program,
                           'later_programs': later, 'notes': notes, 'drums': channel == DRUM_CHANNEL, 'controls': controls})
     return parts

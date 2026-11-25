@@ -292,6 +292,26 @@ class ReviewCases4(Files):
         part = next(p for p in song['parts'] if p['id'] == '3')
         self.assertEqual((part['program'], part['later_programs']), (0x28, [(8 * PPQ, 0x30)]))
 
+
+class ReviewCases5(Files):
+    """Cases from the fifth review of 0.3."""
+
+    def test_a_setup_tracks_later_change_counts_beside_the_parts_own_opening(self):
+        melody = track([(0, b'\xc0\x00'), (0, b'\x90\x3c\x64'), (PPQ, b'\x80\x3c\x00'), (3 * PPQ, b'\x90\x40\x64'),
+                        (PPQ, b'\x80\x40\x00')])
+        setup = track([(3 * PPQ, b'\xc0\x28')])
+        song = midifile.load(self.write(smf([track([(0, meter(4, 2))]), melody, setup]), 'setup-later-own'))
+        part = next(p for p in song['parts'] if p['id'] == '2')
+        self.assertEqual((part['program'], part['later_programs']), (0, [(3 * PPQ, 0x28)]))
+
+    def test_a_staff_that_sets_no_program_takes_the_other_staffs(self):
+        right = track([(0, b'\xc0\x28'), (0, b'\x90\x48\x64'), (PPQ, b'\x80\x48\x00'), (7 * PPQ, b'\xc0\x30'),
+                       (0, b'\x90\x4a\x64'), (PPQ, b'\x80\x4a\x00')])
+        left = track([(0, b'\x90\x30\x64'), (PPQ, b'\x80\x30\x00'), (7 * PPQ, b'\x90\x32\x64'), (PPQ, b'\x80\x32\x00')])
+        song = midifile.load(self.write(smf([track([(0, meter(4, 2))]), right, left]), 'staves'))
+        part = next(p for p in song['parts'] if p['id'] == '3')
+        self.assertEqual((part['program'], part['later_programs']), (0x28, [(8 * PPQ, 0x30)]))
+
     def test_the_title_is_the_first_tracks_name_else_the_files(self):
         horn = track([(0, name('horn')), (0, b'\x90\x48\x64'), (PPQ, b'\x80\x48\x00')])
         song = midifile.load(self.write(smf([track([(0, tempo(100))]), horn]), 'composition'))

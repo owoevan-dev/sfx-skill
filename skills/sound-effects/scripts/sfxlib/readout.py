@@ -44,6 +44,7 @@ JOIN_CENTS = 40.0
 GAP_FRAMES = 1                      # a line survives this many frames without a peak
 JOIN_GAP_S = 0.15                   # pieces of one pitch closer than this in time are one line
 GAP_CENTS = 15.0                    # ... when they agree this closely across a gap (40 cents where they touch)
+AGREE_SHARE = 0.8                   # lines that overlap are one where this share of their common frames agree
 IF_FRAMES = 5                       # frames the instantaneous frequency is averaged over (25 ms at a 5 ms hop)
 MIN_LINE_S = 0.04
 GLIDE_CENTS = 50.0                  # a line moving further than this prints both of its ends
@@ -343,7 +344,8 @@ def _union(a, b):
 def _join(lines, hop, rate):
     """Lines of one pitch that overlap or meet end to start (within JOIN_GAP_S, at frequencies within JOIN_CENTS where they
     touch, GAP_CENTS across a gap) become one: what both windows see of a pitch, and a glide that one window loses and the
-    other picks up, is one line."""
+    other picks up, is one line. Lines that overlap must agree within JOIN_CENTS over AGREE_SHARE of the frames they share,
+    so a pitch held in one channel and a glide leaving it in the other stay two."""
     gap = max(1, int(round(JOIN_GAP_S * rate / hop)))
     out = []
     for points in sorted((sorted(p) for p in lines), key=lambda p: p[0][0]):
@@ -356,7 +358,8 @@ def _join(lines, hop, rate):
                 nearest = min(here, key=lambda f: abs(f - points[0][0]))
                 meet = here[nearest]
             near = JOIN_CENTS if points[0][0] - prev[-1][0] <= 2 else GAP_CENTS
-            if abs(_cents(points[0][1], meet)) <= near:
+            shared = [abs(_cents(hz, here[f])) <= JOIN_CENTS for f, hz, _ in points if f in here]
+            if abs(_cents(points[0][1], meet)) <= near and (not shared or sum(shared) >= AGREE_SHARE * len(shared)):
                 prev[:] = _union(prev, points)
                 break
         else:

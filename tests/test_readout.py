@@ -359,5 +359,19 @@ class ReviewCases4(unittest.TestCase):
         self.assertEqual([e['time_s'] for e in r['events'] if e['main']], [0.995], r['events'])
 
 
+class ReviewCases5(unittest.TestCase):
+    """Cases from the fifth review of 0.3."""
+
+    def test_a_pitch_held_in_one_channel_keeps_its_line_when_the_other_glides_away(self):
+        t = np.arange(int(1.5 * RATE)) / RATE
+        hz = np.where(t < 0.25, 440.0, np.where(t < 1.0, 440.0 * 2 ** ((t - 0.25) / 0.75), 880.0))
+        x = np.stack([0.4 * np.sin(2 * np.pi * 440 * t), 0.4 * np.sin(2 * np.pi * np.cumsum(hz) / RATE)], axis=1)
+        r = readout.readout(x * np.minimum(1, np.minimum(t, 1.5 - t) / 0.005)[:, None], RATE)
+        held = [line for line in r['lines'] if abs(line['low_hz'] - 440) < 10 and abs(line['high_hz'] - 440) < 10
+                and line['end_s'] - line['start_s'] > 1.2]
+        self.assertEqual(len(held), 1, r['lines'])
+        self.assertTrue(any(line['high_hz'] > 860 and line['low_hz'] < 460 for line in r['lines']), r['lines'])
+
+
 if __name__ == '__main__':
     unittest.main()
