@@ -33,8 +33,9 @@ Run the commands from the game's project folder, by the full path of this skill'
 `scripts/sfx.py`), so that renders land in the project and never inside the skill.
 
 1. **Setup.** `python scripts/sfx.py doctor` passes (Python and NumPy; without NumPy it prints the command that installs
-   them) and shows whether FFmpeg, a sample library (`--library LIB` for one elsewhere) and Surge XT are there. With `--config <music-production configuration>`
-   it also checks music-production's own setup and that Surge XT can play. It looks for music-production beside this skill
+   them) and shows whether FFmpeg and a sample library (`--library LIB` for one elsewhere) are there and whether it finds
+   music-production, which brings Surge XT. With `--config <music-production configuration>` it also checks
+   music-production's own setup and whether Surge XT can play; without it, it says so. It looks for music-production beside this skill
    and in `~/.claude/skills`; installed as a plugin, music-production sits in a folder of its own, so when it is among your
    skills but `doctor` does not find it, find that folder (the one holding `scripts/studio.py`, under your plugins folder)
    and pass it as `--music-skill DIR` to `doctor`, `surge` and `render`, before suggesting an install.
@@ -47,7 +48,7 @@ Run the commands from the game's project folder, by the full path of this skill'
    list: recommend the library (what it takes is under **Recordings** below) and mention that the user can hand you a
    folder or zip of sounds they already have. A game of only interface or chip sounds needs neither, so do not ask.
    If the list holds magic, sci-fi or tonal cues that ring on (notifications, rewards, level-ups), or the user wants the
-   game's music too, and `doctor` shows no Surge XT, say that once too: the music-production skill's setup adds it (about
+   game's music too, and `doctor` finds no music-production or, given `--config`, no Surge XT, say that once too: the music-production skill's setup adds it (about
    0.5 GB), it suits sounds that should move and ring by themselves, and the same skill writes music. Install it only if
    they agree; without it these sounds are made from the other layers. A set of only short interface sounds, chip sounds
    or recordings does not need it, so do not ask.

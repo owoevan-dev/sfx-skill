@@ -417,6 +417,12 @@ class SliceCells(unittest.TestCase):
         self.assertEqual(before['label'], 'before')
         self.assertTrue(all(v is None for v in before['db']), before['db'])
 
+    def test_a_short_loop_labels_its_slices_in_milliseconds(self):
+        r = readout.readout(tone(1000, 0.06, 0.3), RATE, loop=True)    # twelve slices of 5 ms
+        labels = [s['label'] for s in r['bands']['slices']]
+        self.assertTrue(all(label.endswith(' ms') for label in labels), labels)
+        self.assertEqual(len(set(labels)), len(labels), labels)
+
     def test_the_loudest_cell_reads_0_db_even_for_noise(self):
         rng = np.random.default_rng(5)                                # its loudest millisecond stands over any slice's power
         r = readout.readout(faded(rng.standard_normal(RATE) * 0.2), RATE)

@@ -8,9 +8,10 @@ language models are blind", ACCV). The spectrogram stays as a second look for wh
   split (one FFT of the whole sound, each band a raised-cosine window on log frequency between the geometric midpoints of
   its neighbours, so the ten add up to the sound; not an IEC class filter). A cell is the band's power over a slice of
   time (its energy in the slice over the slice's length, one measurement per slice), in dB under the loudest cell of the
-  whole table; a brief sound inside a long slice is averaged down there, and shows among the events when it meets their
-  thresholds. A one-shot's slices start at its onset (the first millisecond within 40 dB of its loudest) and double in
-  width, fine where an attack lives and coarse where a tail does (this skill's choice); a loop has twelve equal slices.
+  whole table; a brief sound inside a long slice is averaged down there, and can still be found as an event when it meets
+  the events' thresholds (at most ten events print, with the number found). A one-shot's slices start at its onset (the
+  first millisecond within 40 dB of its loudest) and double in width, fine where an attack lives and coarse where a tail
+  does (this skill's choice); a loop has twelve equal slices.
 - Tonal lines: spectral peaks at least 12 dB over the average of each side of the third of an octave around them (at least
   8 bins each side), whose instantaneous frequency agrees with both neighbouring bins' (Friedman 1985; Charpentier 1986),
   joined from frame to frame within 40 cents (McAulay and Quatieri 1986); a level from a parabola through the three values
@@ -143,7 +144,9 @@ def _slices(total_ms, onset_ms, loop):
     if loop:
         edges = np.linspace(0, total_ms, LOOP_SLICES + 1)
         cuts = sorted({int(round(e)) for e in edges})
-        return [(f'{a / 1000:.2f}-{b / 1000:.2f} s', a, b) for a, b in zip(cuts[:-1], cuts[1:]) if b > a]
+        short = total_ms < 1000                                  # a short loop counts in milliseconds, as a one-shot's attack
+        return [(f'{a}-{b} ms' if short else f'{a / 1000:.2f}-{b / 1000:.2f} s', a, b)
+                for a, b in zip(cuts[:-1], cuts[1:]) if b > a]
     out = []
     if onset_ms > BEFORE_MS:
         out.append(('before', 0, onset_ms))

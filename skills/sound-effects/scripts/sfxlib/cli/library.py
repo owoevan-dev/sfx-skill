@@ -1,5 +1,6 @@
 """The samples command: the sample library, its search, time maps, strikes and imports."""
 import json
+import sys
 import textwrap
 from pathlib import Path
 
@@ -174,6 +175,10 @@ def cmd_samples(args):
         print(f'library: {lib}')
         return status
     if not args.map and not args.events and not args.spectrogram and not (lib / samples.INDEX).is_file():
+        if args.json:                    # a caller reading JSON gets an empty library's; the person gets the setup on stderr
+            print(json.dumps({} if args.labels else {'packs': {}, 'files': [], 'matched': 0, 'some_words': []}, indent=1))
+            print(f'samples: no library at {lib}; sfx.py samples without --json says how to fill one', file=sys.stderr)
+            return 0
         print('A sample library holds the recordings sample layers play. Fill it in either way:')
         print(f'  FSD50K ({fsd50k.PAGE}): {fsd50k.RELEASE_RECORDINGS:,} screened CC0 recordings in 190 labelled classes, from '
               "this project's release. Fetch and import (ask the person first: a 2.9 GB download, 4.3 GB once imported, about 7.2 GB until the "
