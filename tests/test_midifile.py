@@ -266,5 +266,38 @@ class ReviewCases3(Files):
         self.assertEqual(song['parts'][0]['name'], 'Flûte')
 
 
+class ReviewCases4(Files):
+    """Cases from the fourth review of 0.3."""
+
+    def test_a_setup_reset_before_a_pedal_at_one_tick_leaves_it_down(self):
+        setup = track([(0, b'\xb0\x79\x00')])                         # Reset All Controllers, then the piano's pedal
+        piano = track([(0, b'\xb0\x40\x7f'), (0, b'\x90\x3c\x64'), (2 * PPQ, b'\x80\x3c\x00'),
+                       (2 * PPQ, b'\x90\x3e\x64'), (2 * PPQ, b'\x80\x3e\x00')])
+        song = midifile.load(self.write(smf([track([(0, meter(4, 2))]), setup, piano]), 'reset-then-pedal'))
+        self.assertEqual(midifile.quote(song, '3', 1, 1)['controls'], ['sustain pedal'])
+
+    def test_a_track_whose_own_program_comes_later_opens_on_its_channels(self):
+        setup = track([(0, b'\xc0\x28')])
+        melody = track([(PPQ // 2, b'\x90\x48\x64'), (PPQ, b'\x80\x48\x00'),
+                        (PPQ * 5 // 2, b'\xc0\x30'), (0, b'\x90\x4a\x64'), (PPQ, b'\x80\x4a\x00')])
+        song = midifile.load(self.write(smf([track([(0, meter(4, 2))]), setup, melody]), 'later-own'))
+        part = next(p for p in song['parts'] if p['id'] == '3')
+        self.assertEqual(part['program'], 0x28)
+        self.assertEqual(part['later_programs'], [(4 * PPQ, 0x30)])
+
+    def test_a_setup_tracks_later_change_is_listed_for_a_part_that_sets_none(self):
+        setup = track([(0, b'\xc0\x28'), (8 * PPQ, b'\xc0\x30')])
+        melody = track([(0, b'\x90\x48\x64'), (PPQ, b'\x80\x48\x00'), (11 * PPQ, b'\x90\x4a\x64'), (PPQ, b'\x80\x4a\x00')])
+        song = midifile.load(self.write(smf([track([(0, meter(4, 2))]), setup, melody]), 'setup-later'))
+        part = next(p for p in song['parts'] if p['id'] == '3')
+        self.assertEqual((part['program'], part['later_programs']), (0x28, [(8 * PPQ, 0x30)]))
+
+    def test_the_title_is_the_first_tracks_name_else_the_files(self):
+        horn = track([(0, name('horn')), (0, b'\x90\x48\x64'), (PPQ, b'\x80\x48\x00')])
+        song = midifile.load(self.write(smf([track([(0, tempo(100))]), horn]), 'composition'))
+        self.assertEqual(song['title'], 'composition')
+        self.assertEqual(song['parts'][0]['name'], 'horn')
+
+
 if __name__ == '__main__':
     unittest.main()

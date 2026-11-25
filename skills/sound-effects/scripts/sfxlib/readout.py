@@ -288,7 +288,8 @@ def _tracks(found, frames, hop, rate, floor):
 
 def tonal_lines(x, rate):
     """The tracked tonal lines, loudest first, each a dict (times in seconds from the file's start; levels in dB under the
-    loudest spectral peak, tonal or not, of the long window). Two windows: a long one (N_FFT) resolves low and close pitches, a short one (SHORT_FFT, from
+    loudest spectral peak, tonal or not: the long window's loudest bin or the loudest pitch, a short-window peak scaled as
+    a steady pitch's would read in the long window). Two windows: a long one (N_FFT) resolves low and close pitches, a short one (SHORT_FFT, from
     SHORT_FROM_HZ up) follows glides too quick for the long one; a short-window line that a long-window line already holds
     is dropped."""
     x = _channels(x)
@@ -382,7 +383,7 @@ def events(env, peak_ms, loop=False, peak_at_ms=None):
     """The events (dicts: time in seconds from the file's start, the largest rise in dB, the bands that rose) and how many
     were found. The main one is the event nearest peak_at_ms when the project declares it, else the last to start before
     the loudest millisecond (or within LEAD_MS after it) with no silence (MERGE_MS with no band within EVENT_RANGE_DB of the
-    loudest) between them; a loop counts round its join, where rises on both sides within MERGE_MS are one event."""
+    loudest) between them. A loop counts both round its join, where rises on both sides within MERGE_MS are one event."""
     if env.size == 0 or not np.any(env > 0):
         return [], 0
     level = 10 * np.log10(env + TINY)
@@ -420,7 +421,12 @@ def events(env, peak_ms, loop=False, peak_at_ms=None):
         groups[-1]['rise'] = max(groups[-1]['rise'], first['rise'])     # where it starts before the join
         groups[-1]['bands'] |= first['bands']
     if peak_at_ms is not None:                                   # the moment the project says the sound peaks
-        main = min(range(len(groups)), key=lambda i: abs(groups[i]['start'] - peak_at_ms))
+
+        def off(g):                                             # round a loop's join, as the peak_at check measures it
+            d = abs(g['start'] - peak_at_ms)
+            return min(d % total, total - d % total) if loop else d
+
+        main = min(range(len(groups)), key=lambda i: off(groups[i]))
     else:                                                       # else the event that leads into the loudest millisecond: its
         quiet = ~(level >= floor).any(axis=0)                   # attack reaches back to the last silence, MERGE_MS in which no
         limit = total - 1 if loop else peak_ms                  # band comes within EVENT_RANGE_DB of the loudest (round a loop)

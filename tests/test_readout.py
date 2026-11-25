@@ -345,5 +345,19 @@ class ReviewCases3(unittest.TestCase):
         self.assertLess(line['db'], -20)
 
 
+class ReviewCases4(unittest.TestCase):
+    """Cases from the fourth review of 0.3."""
+
+    def test_a_loop_matches_peak_at_round_its_join(self):
+        x = 0.001 * np.random.default_rng(7).standard_normal(RATE)
+        burst = np.sin(2 * np.pi * 1000 * np.arange(int(0.03 * RATE)) / RATE)
+        x[int(0.4 * RATE):int(0.43 * RATE)] += 0.2 * burst                          # a quieter hit at 0.4 s
+        hit = np.zeros(RATE)
+        hit[:len(burst)] = 0.5 * burst
+        x += np.roll(hit, int(0.995 * RATE))                                         # the main hit, across the join
+        r = readout.readout(x, RATE, loop=True, peak_at=0.003)
+        self.assertEqual([e['time_s'] for e in r['events'] if e['main']], [0.995], r['events'])
+
+
 if __name__ == '__main__':
     unittest.main()
