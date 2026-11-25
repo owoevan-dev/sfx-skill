@@ -118,20 +118,29 @@ def band_weights(freqs):
     return np.array([rises[k] * (1.0 - rises[k + 1]) for k in range(len(CENTRES))])
 
 
-def band_envelopes(x, rate, loop=False):
-    """Each band's power per millisecond (bands x ms), all channels together. A one-shot is padded so that the bands'
-    ringing does not wrap round onto its start; a loop is split as the circle it is."""
+def band_envelopes(x, rate, loop=False, per_channel=False):
+    """Each band's power per millisecond (bands x ms), all channels together, or each channel's (channels x bands x ms)
+    with per_channel. A one-shot is padded so that the bands' ringing does not wrap round onto its start; a loop is split
+    as the circle it is."""
     x = _channels(x)
     n = len(x)
     nfft = n if loop else 1 << int(math.ceil(math.log2(n + rate)))
     freqs = np.fft.rfftfreq(nfft, 1 / rate)
     weights = band_weights(freqs)
-    out = np.zeros((len(CENTRES), len(_per_ms(np.zeros(n), rate))))
+    each = np.zeros((x.shape[1], len(CENTRES), len(_per_ms(np.zeros(n), rate))))
     for c in range(x.shape[1]):
         spec = np.fft.rfft(x[:, c], nfft)
         for b in range(len(CENTRES)):
             y = np.fft.irfft(spec * weights[b], nfft)[:n]
-            out[b] += _per_ms(y * y, rate)
+            each[c, b] = _per_ms(y * y, rate)
+    return each if per_channel else _summed(each)
+
+
+def _summed(each):
+    """The channels' band powers added in channel order (the order the readout has always used)."""
+    out = np.zeros(each.shape[1:])
+    for c in range(each.shape[0]):
+        out += each[c]
     return out
 
 
@@ -392,9 +401,9 @@ def mains_line(line, active_s):
     return False
 
 
-def events(env, peak_ms, loop=False, peak_at_ms=None):
+def events(env, peak_ms, loop=False, peak_at_ms=None, cap=EVENTS_SHOWN):
     """The events (dicts: time in seconds from the file's start, the largest rise in dB, the bands that rose) and how many
-    were found. The main one is the event nearest peak_at_ms when the project declares it, else the last to start before
+    were found: at most `cap`, the main one and then the largest rises, in time order (every one with cap None). The main one is the event nearest peak_at_ms when the project declares it, else the last to start before
     the loudest millisecond (or within LEAD_MS after it) with no silence (MERGE_MS with no band within EVENT_RANGE_DB of the
     loudest) between them. A loop counts both round its join, where rises on both sides within MERGE_MS are one event."""
     if env.size == 0 or not np.any(env > 0):
@@ -454,7 +463,8 @@ def events(env, peak_ms, loop=False, peak_at_ms=None):
 
         leading = [i for i, g in enumerate(groups) if -LEAD_MS <= ahead(g) <= reach]
         main = min(leading, key=lambda i: ahead(groups[i])) if leading else None    # none: a swell, or silence between
-    keep = sorted(range(len(groups)), key=lambda i: (main is None or i != main, -groups[i]['rise']))[:EVENTS_SHOWN]
+    keep = sorted(range(len(groups)), key=lambda i: (main is None or i != main, -groups[i]['rise']))
+    keep = keep[:cap] if cap is not None else keep
     out = []
     for i in sorted(keep, key=lambda i: groups[i]['start']):
         g = groups[i]
@@ -480,54 +490,93 @@ def rolloff_hz(x, rate, share=ROLLOFF_SHARE):
     return round(float(freqs[keep][np.searchsorted(cum, share * cum[-1])]), 1)
 
 
-def readout(x, rate, loop=False, peak_at=None):
-    """The readout of one sound as a dict (see the module's docstring)."""
-    x = _channels(x)
-    raw = _per_ms((x * x).sum(axis=1), rate) if len(x) else np.zeros(0)
-    out = {'seconds': round(len(x) / rate, 3), 'loop': bool(loop)}
-    if raw.size == 0 or not np.any(raw > 0):
+class Analysis:
+    """One sound read once: what the overview and every view take from it. It holds audio and numbers only, never a path,
+    a render folder or a project, so that another skill can use it as it is. Times are milliseconds from the file's start.
+
+    x, rate, loop, peak_at: the input (x as frames x channels). raw: the whole sound's power per millisecond; silent: no
+    power at all. For a sound that is not silent: peak_ms, onset_ms (the first millisecond within ONSET_DB of the loudest;
+    0 for a loop), last_ms, active_s; channel_env, each channel's band powers per millisecond (channels x bands x ms); env,
+    their sum, no band above twice the sound's power in its millisecond (the split rings before a sudden sound, and that is
+    cut off); counts, the samples in each millisecond; lines, every tonal line, loudest first, with its frame-by-frame
+    frequencies (`hzs`), the time its frames hold (`covered_s`) and its mains label; rolloff_hz. `events_all` lists every
+    event, the main one marked."""
+
+    def __init__(self, x, rate, loop=False, peak_at=None):
+        self.x, self.rate, self.loop, self.peak_at = _channels(x), rate, bool(loop), peak_at
+        x = self.x
+        self.raw = _per_ms((x * x).sum(axis=1), rate) if len(x) else np.zeros(0)
+        self.silent = self.raw.size == 0 or not np.any(self.raw > 0)
+        if self.silent:
+            return
+        raw = self.raw
+        self.peak_ms = int(np.argmax(raw))
+        loud = raw >= raw[self.peak_ms] * 10 ** (-ONSET_DB / 10)
+        self.onset_ms = 0 if loop else int(np.argmax(loud))
+        self.last_ms = len(raw) - 1 if loop else int(len(raw) - 1 - np.argmax(loud[::-1]))
+        self.active_s = (self.last_ms + 1 - self.onset_ms) / 1000
+        self.channel_env = band_envelopes(x, rate, loop, per_channel=True)
+        self.env = np.minimum(_summed(self.channel_env), 2 * raw[None, :])
+        self.counts = np.diff(_ms_edges(len(x), rate)).astype(float)
+        self.lines = tonal_lines(x, rate)
+        for line in self.lines:
+            line['mains'] = mains_line(line, self.active_s)
+        self.rolloff_hz = rolloff_hz(x[_sample(self.onset_ms, rate):_sample(self.last_ms + 1, rate)], rate)
+        self._events_all = None
+
+    @property
+    def peak_at_ms(self):
+        return None if self.peak_at is None else int(round(self.peak_at * 1000))
+
+    @property
+    def events_all(self):
+        if self._events_all is None:
+            self._events_all = events(self.env, self.peak_ms, self.loop, self.peak_at_ms, cap=None)[0]
+        return self._events_all
+
+
+def analyse(x, rate, loop=False, peak_at=None):
+    """The one reading of a sound that the overview and the views share (see Analysis)."""
+    return Analysis(x, rate, loop, peak_at)
+
+
+def view_overview(a):
+    """The overview of an Analysis as a dict: bands over time, up to LINES_SHOWN lines, up to EVENTS_SHOWN events, the
+    roll-off (see the module's docstring)."""
+    out = {'seconds': round(len(a.x) / a.rate, 3), 'loop': a.loop}
+    if a.silent:
         out.update(silent=True, onset_s=None, peak_s=None, rolloff_hz=None, bands=None, lines=[], events=[])
         return out
-    peak_ms = int(np.argmax(raw))
-    loud = raw >= raw[peak_ms] * 10 ** (-ONSET_DB / 10)
-    onset_ms = 0 if loop else int(np.argmax(loud))
-    last_ms = len(raw) - 1 if loop else int(len(raw) - 1 - np.argmax(loud[::-1]))
-    env = band_envelopes(x, rate, loop)
-    env = np.minimum(env, 2 * raw[None, :])                     # no band holds more than the sound in that millisecond: the
-                                                                 # split rings before a sudden sound, and that is cut off here
-    counts = np.diff(_ms_edges(len(x), rate)).astype(float)     # samples in each millisecond
-    energy = env * counts[None, :]                               # each band's energy in each millisecond
-    slices = _slices(len(raw), onset_ms, loop)
-    power = [energy[:, a:b].sum(axis=1) / max(float(counts[a:b].sum()), 1.0) for _, a, b in slices]
-    above = np.array([c / math.sqrt(2) >= rate / 2 for c in CENTRES])   # a band wholly above what the file can hold
+    energy = a.env * a.counts[None, :]                           # each band's energy in each millisecond
+    slices = _slices(len(a.raw), a.onset_ms, a.loop)
+    power = [energy[:, lo:hi].sum(axis=1) / max(float(a.counts[lo:hi].sum()), 1.0) for _, lo, hi in slices]
+    above = np.array([c / math.sqrt(2) >= a.rate / 2 for c in CENTRES])   # a band wholly above what the file can hold
     top = max(float(p[~above].max()) for p in power)             # the loudest cell that prints: a band's power over a slice
     least = 10 ** (-FLOOR_DB / 10)
     rows = []
-    for (label, a, b), cells in zip(slices, power):
+    for (label, lo, hi), cells in zip(slices, power):
         ratio = cells / top if top > 0 else np.zeros_like(cells)  # a cell with no energy stays under the floor
-        rows.append({'label': label, 'from_ms': int(a), 'to_ms': int(b),
+        rows.append({'label': label, 'from_ms': int(lo), 'to_ms': int(hi),
                      'db': ['n/a' if gone else (int(round(10 * math.log10(q))) if q >= least else None)
                             for q, gone in zip(ratio, above)]})
-    active_s = (last_ms + 1 - onset_ms) / 1000
-    lines = tonal_lines(x, rate)
-    for line in lines:
-        line['mains'] = mains_line(line, active_s)
-    found = events(env, peak_ms, loop, None if peak_at is None else int(round(peak_at * 1000)))
-    shown = lines[:LINES_SHOWN]
-    hum = [line for line in lines[LINES_SHOWN:] if line['mains']]
+    shown = a.lines[:LINES_SHOWN]
+    hum = [line for line in a.lines[LINES_SHOWN:] if line['mains']]
     if hum and not any(line['mains'] for line in shown):         # a hum is never hidden behind louder partials
         shown = shown[:LINES_SHOWN - 1] + hum[:1]
-    for line in lines:
-        line.pop('hzs', None)
-        line.pop('covered_s', None)
-    segment = x[_sample(onset_ms, rate):_sample(last_ms + 1, rate)]
-    out.update(silent=False, onset_s=round(onset_ms / 1000, 3), peak_s=round(peak_ms / 1000, 3),
-               active_s=round(active_s, 3), rolloff_hz=rolloff_hz(segment, rate),
+    shown = [{k: v for k, v in line.items() if k not in ('hzs', 'covered_s')} for line in shown]
+    found = events(a.env, a.peak_ms, a.loop, a.peak_at_ms)
+    out.update(silent=False, onset_s=round(a.onset_ms / 1000, 3), peak_s=round(a.peak_ms / 1000, 3),
+               active_s=round(a.active_s, 3), rolloff_hz=a.rolloff_hz,
                bands={'centres_hz': list(CENTRES), 'labels': list(LABELS), 'slices': rows},
-               lines=shown, lines_found=len(lines),
+               lines=shown, lines_found=len(a.lines),
                events=found[0], events_found=found[1],
-               main_by='peak_at' if peak_at is not None else 'loudest')
+               main_by='peak_at' if a.peak_at is not None else 'loudest')
     return out
+
+
+def readout(x, rate, loop=False, peak_at=None):
+    """The readout of one sound as a dict: the overview of its Analysis (see the module's docstring)."""
+    return view_overview(analyse(x, rate, loop, peak_at))
 
 
 def _khz(hz):

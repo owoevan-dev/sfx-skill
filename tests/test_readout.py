@@ -430,5 +430,34 @@ class SliceCells(unittest.TestCase):
         self.assertEqual(max(cells), 0)
 
 
+class Core(unittest.TestCase):
+    """The one reading every view shares: audio and numbers in, nothing about files."""
+
+    def test_the_analysis_keeps_every_event_while_the_overview_shows_ten(self):
+        ping = faded(tone(3000, 0.01, 0.5), 1)
+        x = np.zeros(int(2.6 * RATE))
+        for k in range(12):
+            start = int((0.05 + 0.2 * k) * RATE)
+            x[start:start + len(ping)] += ping
+        a = readout.analyse(x, RATE)
+        self.assertEqual(len(a.events_all), 12)
+        self.assertEqual(len(readout.view_overview(a)['events']), readout.EVENTS_SHOWN)
+
+    def test_each_channel_keeps_its_own_bands(self):
+        left, right = faded(tone(250, 0.5, 0.4)), faded(tone(4000, 0.5, 0.4))
+        a = readout.analyse(np.stack([left, right], axis=1), RATE)
+        low, high = readout.LABELS.index('250'), readout.LABELS.index('4k')
+        self.assertGreater(a.channel_env[0, low].sum(), 1000 * a.channel_env[0, high].sum())
+        self.assertGreater(a.channel_env[1, high].sum(), 1000 * a.channel_env[1, low].sum())
+        both = readout.band_envelopes(np.stack([left, right], axis=1), RATE)
+        self.assertTrue(np.allclose(a.channel_env.sum(axis=0), both))
+
+    def test_the_overview_leaves_the_lines_frame_data_in_the_analysis(self):
+        a = readout.analyse(faded(tone(440, 0.5)), RATE)
+        r = readout.view_overview(a)
+        self.assertNotIn('hzs', r['lines'][0])
+        self.assertIn('hzs', a.lines[0])
+
+
 if __name__ == '__main__':
     unittest.main()
