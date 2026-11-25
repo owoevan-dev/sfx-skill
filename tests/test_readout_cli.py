@@ -93,6 +93,22 @@ class ReadoutCommand(unittest.TestCase):
         self.assertIn('readout:', proc.stdout)
         self.assertNotIn('Traceback', proc.stdout + proc.stderr)
 
+    def test_a_master_the_reader_does_not_take_is_refused_in_a_sentence(self):
+        import shutil
+        copy = self.base / 'render_changed'
+        if not copy.exists():
+            shutil.copytree(self.render, copy)
+        channels, frames = 6, 4800
+        data = struct.pack('<' + 'h' * channels * frames, *([1000] * channels * frames))
+        fmt = struct.pack('<HHIIHH', 1, channels, 48000, 48000 * channels * 2, channels * 2, 16)
+        body = b'WAVE' + b'fmt ' + struct.pack('<I', len(fmt)) + fmt + b'data' + struct.pack('<I', len(data)) + data
+        master = next((copy / 'master').glob('beep_*.wav'))
+        master.write_bytes(b'RIFF' + struct.pack('<I', len(body)) + body)
+        proc = run('readout', copy, '--sound', 'beep', '--json')
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn('readout:', proc.stdout)
+        self.assertNotIn('Traceback', proc.stdout + proc.stderr)
+
     def test_something_else_is_refused_in_a_sentence(self):
         proc = run('readout', self.base / 'project.json')
         self.assertEqual(proc.returncode, 1)

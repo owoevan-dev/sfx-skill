@@ -269,5 +269,34 @@ class ReviewCases(unittest.TestCase):
         self.assertIn('12 found', '\n'.join(readout.text(r, 'pings')))
 
 
+class ReviewCases2(unittest.TestCase):
+    """Cases from the second review of 0.3."""
+
+    def test_a_swell_has_no_main_event_and_a_late_click_is_not_one(self):
+        t = np.arange(2 * RATE) / RATE
+        x = 0.5 * np.sin(2 * np.pi * 500 * t) * np.sin(np.pi * t / 2) ** 2          # swells to its loudest at 1 s
+        x[int(1.4 * RATE):int(1.4 * RATE) + 24] += 0.05
+        r = readout.readout(faded(x), RATE)
+        self.assertFalse(any(e['main'] for e in r['events']), r['events'])
+        self.assertIn('none does', '\n'.join(readout.text(r, 'swell')))
+
+    def test_a_siren_that_comes_back_shows_its_range(self):
+        t = np.arange(2 * RATE) / RATE
+        hz = 440 * 2 ** np.clip(np.sin(np.pi * t / 2), 0, 1)                         # 440 up to 880 and back
+        x = 0.5 * np.sin(2 * np.pi * np.cumsum(hz) / RATE)
+        r = readout.readout(faded(x), RATE)
+        line = max(r['lines'], key=lambda line: line['high_hz'] - line['low_hz'])
+        self.assertGreater(line['high_hz'], 800)
+        self.assertLess(line['low_hz'], 480)
+        self.assertIn('ranges', '\n'.join(readout.text(r, 'siren')))
+
+    def test_a_loop_shorter_than_the_history_wraps_round(self):
+        x = 0.4 * np.sin(2 * np.pi * 1000 * np.arange(960) / RATE)                    # 20 ms, 20 whole cycles
+        self.assertEqual(readout.readout(x, RATE, loop=True)['events'], [])
+
+    def test_a_file_of_no_frames_is_silence(self):
+        self.assertTrue(readout.readout(np.zeros((0, 2)), RATE)['silent'])
+
+
 if __name__ == '__main__':
     unittest.main()

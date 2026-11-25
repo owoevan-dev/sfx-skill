@@ -237,7 +237,11 @@ def cmd_readout(args):
     found = []
     for name, src, loop, peak_at in jobs:
         if target.is_dir():
-            data, rate = record.master(target, src), record.RATE
+            try:
+                data, rate = record.master(target, src), record.RATE
+            except ValueError as error:                 # a master changed into a layout the reader does not take
+                print(f'readout: {src}: {error}')
+                return 1
         else:
             try:
                 data, info = wav.read(src)

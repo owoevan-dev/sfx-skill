@@ -218,5 +218,27 @@ class ReviewCases(Files):
         self.assertEqual(midifile.quote(song, '1', 2, 2)['controls'], [])
 
 
+class ReviewCases2(Files):
+    """Cases from the second review of 0.3."""
+
+    def test_a_setup_track_sets_the_program_and_pedal_of_its_channel(self):
+        setup = track([(0, b'\xc0\x28'), (0, b'\xb0\x40\x7f'), (6 * PPQ, b'\xb0\x40\x00')])
+        notes = track([(4 * PPQ, b'\x90\x3c\x64'), (PPQ, b'\x80\x3c\x00')])
+        song = midifile.load(self.write(smf([track([(0, meter(4, 2))]), setup, notes]), 'setup'))
+        part = next(p for p in song['parts'] if p['id'] == '3')
+        self.assertEqual(part['program'], 0x28)
+        self.assertEqual(midifile.quote(song, '3', 2, 2)['controls'], ['sustain pedal'])
+
+    def test_a_pedal_lifted_at_the_first_tick_of_the_bars_or_reset_is_not_held(self):
+        lifted = track([(0, b'\xb0\x40\x7f'), (0, b'\x90\x3c\x64'), (PPQ, b'\x80\x3c\x00'), (3 * PPQ, b'\xb0\x40\x00'),
+                        (0, b'\x90\x3e\x64'), (PPQ, b'\x80\x3e\x00')])
+        song = midifile.load(self.write(smf([lifted], fmt=0), 'lifted-at-bar'))
+        self.assertEqual(midifile.quote(song, '1', 2, 2)['controls'], [])
+        reset = track([(0, b'\xb0\x40\x7f'), (0, b'\xe0\x00\x50'), (0, b'\x90\x3c\x64'), (PPQ, b'\x80\x3c\x00'),
+                       (PPQ, b'\xb0\x79\x00'), (2 * PPQ, b'\x90\x3e\x64'), (PPQ, b'\x80\x3e\x00')])
+        song = midifile.load(self.write(smf([reset], fmt=0), 'reset'))
+        self.assertEqual(midifile.quote(song, '1', 2, 2)['controls'], [])
+
+
 if __name__ == '__main__':
     unittest.main()

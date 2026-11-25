@@ -24,6 +24,7 @@ MAX_TRACK_CHUNKS = 256
 DEFAULT_TEMPO_US = 500_000              # 120 quarter notes a minute, the format's default
 DRUM_CHANNEL = 9                        # channel 10, counted from 1
 SUSTAIN = 64
+RESET_ALL = 121
 TEMPO_SHOWN = 16
 SUFFIXES = ('.mid', '.midi', '.smf')
 
@@ -121,6 +122,8 @@ def _track(data, pos, end, index):
             programs.append((tick, channel, a))
         elif kind == 0xB0 and a == SUSTAIN:
             controls.setdefault(channel, []).append(('sustain pedal', tick, b >= 64))
+        elif kind == 0xB0 and a == RESET_ALL:                   # Reset All Controllers: the pedal up, the bend centred
+            controls.setdefault(channel, []).extend([('sustain pedal', tick, False), ('pitch bend', tick, False)])
         elif kind == 0xE0:
             controls.setdefault(channel, []).append(('pitch bend', tick, (a | (b << 7)) != 8192))
     for (channel, key), waiting in open_notes.items():
@@ -130,8 +133,8 @@ def _track(data, pos, end, index):
 
 
 def _one_at_a_time(notes):
-    """One note at a time on a key and channel: a note still sounding when its key is struck again ends there, a second note-on
-    at the same tick is dropped, and a note with no length is dropped."""
+    """One note at a time on a key and channel: a note still sounding when its key is struck again ends there; of two note-ons
+    at the same tick the one held longer is kept (the key sounds until its last release); a note with no length is dropped."""
     out, last = [], {}
     for on, off, key, velocity, channel in sorted(notes, key=lambda n: (n[4], n[2], n[0], -n[1])):
         prev = last.get((channel, key))
@@ -236,13 +239,20 @@ def _bars(meters, ppq, last):
 
 
 def _parts(tracks):
+    programs = {}                                               # every track's program changes and controllers count for their
+    controls = {}                                               # channel: a separate setup track addresses the same instrument
+    for tr in tracks:
+        for t, ch, p in tr['programs']:
+            programs.setdefault(ch, []).append((t, p))
+        for ch, events in tr['controls'].items():
+            controls.setdefault(ch, []).extend(events)
     parts = []
     for index, tr in enumerate(tracks, start=1):
         channels = sorted({n[4] for n in tr['notes']})
         for channel in channels:
             notes = sorted(n for n in tr['notes'] if n[4] == channel)
             pid = str(index) if len(channels) == 1 else f'{index}.{channel + 1}'
-            changes = [(t, p) for t, ch, p in tr['programs'] if ch == channel]       # in file order
+            changes = sorted(programs.get(channel, []), key=lambda c: c[0])         # stable: file order within a tick
             program = None
             for t, p in changes:
                 if t <= notes[0][0]:
@@ -250,7 +260,7 @@ def _parts(tracks):
             later = [(t, p) for t, p in changes if t > notes[0][0]]
             parts.append({'id': pid, 'track': index, 'channel': channel + 1, 'name': tr['name'], 'program': program,
                           'later_programs': later, 'notes': notes, 'drums': channel == DRUM_CHANNEL,
-                          'controls': tr['controls'].get(channel, [])})
+                          'controls': controls.get(channel, [])})
     return parts
 
 
@@ -368,9 +378,9 @@ def _in_effect(events, kind, start, stop):
     for k, tick, on in sorted((e for e in events if e[0] == kind), key=lambda e: e[1]):
         if tick >= stop:
             break
-        if tick < start:
+        if tick <= start:                                        # at the bars' first tick it has already changed
             state = on
-        elif on:
+        elif state or on:
             return True
     return state
 

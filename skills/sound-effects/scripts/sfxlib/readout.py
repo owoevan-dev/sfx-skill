@@ -69,6 +69,8 @@ TINY = 1e-20
 
 def _channels(x):
     x = np.nan_to_num(np.asarray(x, dtype=np.float64))
+    if len(x) == 0:
+        return np.zeros((0, 1))
     return x.reshape(len(x), -1)
 
 
@@ -315,7 +317,8 @@ def tonal_lines(x, rate):
         hzs = [q[1] for q in points]
         out.append({'hz': round(loud[1], 1), 'note': note_name(loud[1]), 'start_s': round(start, 3), 'end_s': round(end, 3),
                     'db': round(min(0.0, loud[2] - top), 1) + 0.0, 'median_hz': round(float(np.median(hzs)), 1),
-                    'from_hz': round(hzs[0], 1), 'to_hz': round(hzs[-1], 1), 'hzs': hzs,
+                    'from_hz': round(hzs[0], 1), 'to_hz': round(hzs[-1], 1), 'low_hz': round(min(hzs), 1),
+                    'high_hz': round(max(hzs), 1), 'hzs': hzs,
                     'covered_s': round(len(points) * hop / rate, 3)})
     out.sort(key=lambda line: -line['db'])
     return out
@@ -378,7 +381,10 @@ def events(env, peak_ms, loop=False, peak_at_ms=None):
     floor = level.max() - EVENT_RANGE_DB
     near, far = RISE_FROM_MS
     width = far - near + 1
-    lead = level[:, -far:] if loop and level.shape[1] > far else np.full((level.shape[0], far), -np.inf)
+    if loop:                                                    # a loop's start follows its own end, wrapped as often as needed
+        lead = np.tile(level, (1, -(-far // level.shape[1])))[:, -far:]
+    else:
+        lead = np.full((level.shape[0], far), -np.inf)
     padded = np.concatenate([lead, level], axis=1)                    # a loop's start follows its own end
     windows = np.lib.stride_tricks.sliding_window_view(padded, width, axis=1)    # bands x (T + near) x width
     before = windows[:, :level.shape[1], :].max(axis=2)                          # ms t looks at t-25 ... t-5
@@ -404,8 +410,8 @@ def events(env, peak_ms, loop=False, peak_at_ms=None):
         main = min(range(len(groups)), key=lambda i: abs(groups[i]['start'] - peak_at_ms))
     else:                                                       # else the event that leads into the loudest millisecond
         leading = [i for i, g in enumerate(groups) if g['start'] <= peak_ms + LEAD_MS]
-        main = leading[-1] if leading else 0
-    keep = sorted(range(len(groups)), key=lambda i: (i != main, -groups[i]['rise']))[:EVENTS_SHOWN]
+        main = leading[-1] if leading else None                  # a swell has no rise that leads into its loudest moment
+    keep = sorted(range(len(groups)), key=lambda i: (main is None or i != main, -groups[i]['rise']))[:EVENTS_SHOWN]
     out = []
     for i in sorted(keep, key=lambda i: groups[i]['start']):
         g = groups[i]
@@ -504,6 +510,8 @@ def text(r, name):
             s = f'    {line["hz"]:g} Hz {line["note"]:<6} {line["start_s"]:.3f}-{line["end_s"]:.3f} s  {line["db"]:g} dB'
             if abs(_cents(line['to_hz'], line['from_hz'])) > GLIDE_CENTS:
                 s += f'  moves {line["from_hz"]:g} -> {line["to_hz"]:g} Hz'
+            if abs(_cents(line['high_hz'], line['low_hz'])) > GLIDE_CENTS:
+                s += f'  ranges {line["low_hz"]:g}-{line["high_hz"]:g} Hz'
             if line.get('mains'):
                 s += '  at a mains frequency: hum in a recording, or a drone that was meant'
             out.append(s)
@@ -511,6 +519,8 @@ def text(r, name):
         out.append('  tonal lines: none (noise, clicks or a sound without steady pitches)')
     if r['events']:
         how = 'nearest the declared peak_at' if r.get('main_by') == 'peak_at' else 'leading into the loudest millisecond'
+        if not any(e['main'] for e in r['events']):
+            how += ', and none does: the sound swells into it'
         more = f'; {r["events_found"]} found, the {len(r["events"])} largest shown' if r.get('events_found', 0) > len(r['events']) else ''
         out.append(f'  events (time from file start, rise over the 5-25 ms before, bands that rose; main: the one {how}{more})')
         for e in r['events']:
