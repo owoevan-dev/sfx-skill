@@ -211,8 +211,34 @@ def cmd_spectrogram(args):
     return 0
 
 
+def _zoom_options(args):
+    """(zoom?, hz range or None, error or None) from the readout's arguments."""
+    zoom = args.from_s is not None or args.to_s is not None
+    if zoom and (args.from_s is None or args.to_s is None):
+        return zoom, None, 'zoom in with both --from and --to'
+    if not zoom and (args.slice_ms is not None or args.hz or args.channel or args.page != 1 or args.bands != 'octave'):
+        return zoom, None, '--slice-ms, --bands, --hz, --channel and --page go with --from and --to'
+    hz = None
+    if args.hz:
+        try:
+            low, high = (float(v) for v in args.hz.split('-', 1))
+        except ValueError:
+            return zoom, None, f'--hz takes LOW-HIGH in Hz, such as 500-4000, not {args.hz!r}'
+        hz = (low, high)
+    if args.page < 1:
+        return zoom, None, '--page counts from 1'
+    return zoom, hz, None
+
+
 def cmd_readout(args):
     target = Path(args.target)
+    zoom, hz, problem = _zoom_options(args)
+    if problem:
+        print(f'readout: {problem}')
+        return 1
+    if args.variant is not None and (args.all_variants or args.variant < 1):
+        print('readout: --variant takes one variant, numbered from 1, instead of --all-variants')
+        return 1
     jobs = []
     if target.is_dir():
         if not (target / 'resolved.json').is_file():
@@ -222,9 +248,14 @@ def cmd_readout(args):
         for snd in resolved['sounds']:
             if args.sound and snd['id'] not in args.sound:
                 continue
-            chosen = snd['variants'] if args.all_variants else snd['variants'][:1]
-            for n, v in enumerate(chosen, start=1):
-                name = f"{snd['id']}, variant {n}" if args.all_variants else snd['id']
+            if args.variant is not None:
+                if args.variant > len(snd['variants']):
+                    continue
+                chosen = [(args.variant, snd['variants'][args.variant - 1])]
+            else:
+                chosen = list(enumerate(snd['variants'] if args.all_variants else snd['variants'][:1], start=1))
+            for n, v in chosen:
+                name = f"{snd['id']}, variant {n}" if args.all_variants or args.variant is not None else snd['id']
                 jobs.append((name, v['file'], snd.get('use') == 'loop', snd.get('peak_at')))
     elif target.suffix.lower() == '.wav' and target.is_file():
         jobs.append((target.name, target, None, None))
@@ -251,15 +282,36 @@ def cmd_readout(args):
             rate = info['rate']
             whole = [len(data)] if len(data) else []
             loop = args.loop or any(start == 0 and end in whole for start, end in info.get('loops', []))
-        result = readout.readout(data, rate, loop=bool(loop), peak_at=peak_at)
+        analysis = readout.analyse(data, rate, loop=bool(loop), peak_at=peak_at)
+        if zoom:
+            try:
+                result = readout.view_zoom(analysis, args.from_s, args.to_s, bands=args.bands, hz=hz, channel=args.channel,
+                                           slice_ms=args.slice_ms)
+            except ValueError as error:
+                print(f'readout: {name}: {error}')
+                return 1
+        else:
+            result = readout.view_overview(analysis)
         if args.json:
             found.append({'sound': name, **result})
+        elif zoom:
+            pages = readout.text_zoom(result, name)
+            if args.page > len(pages):
+                print(f'readout: {name} fills {len(pages)} page{"s" if len(pages) > 1 else ""} at these settings')
+                return 1
+            print('\n'.join(pages[args.page - 1]))
+            print()
         else:
             print('\n'.join(readout.text(result, name)))
             print()
     if args.json:
         print(json.dumps(found, indent=1, allow_nan=False))
+    elif zoom:
+        print('Cells: each band\'s power over each slice; a narrow low band reads coarser than the slices, shown by ^. '
+              'Events and tonal lines are every one in the window.')
     else:
         print('Cells: each octave band\'s power over each slice, in dB under the loudest cell. Tonal lines are steady '
               'pitches; events are sudden rises. The spectrogram command draws the same sound as a picture.')
+        print('Look closer: --from S --to S zooms in on a window (finer slices, every line and event in it; --bands third, '
+              '--hz LOW-HIGH, --channel left|right; --variant N reads another variant).')
     return 0

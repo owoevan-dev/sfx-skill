@@ -68,6 +68,15 @@ EVENTS_SHOWN = 10
 ROLLOFF_SHARE = 0.95
 NOTE_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 TINY = 1e-20
+THIRD_CENTRES = (20.0, 25.0, 31.5, 40.0, 50.0, 63.0, 80.0, 100.0, 125.0, 160.0, 200.0, 250.0, 315.0, 400.0, 500.0, 630.0,
+                 800.0, 1000.0, 1250.0, 1600.0, 2000.0, 2500.0, 3150.0, 4000.0, 5000.0, 6300.0, 8000.0, 10000.0, 12500.0,
+                 16000.0, 20000.0)          # IEC 61260-1's nominal third-octave centres
+THIRD_LABELS = ('20', '25', '31', '40', '50', '63', '80', '100', '125', '160', '200', '250', '315', '400', '500', '630', '800',
+                '1k', '1.25k', '1.6k', '2k', '2.5k', '3.15k', '4k', '5k', '6.3k', '8k', '10k', '12.5k', '16k', '20k')
+ZOOM_SLICES_MS = (1, 2, 5, 10, 20, 50, 100)   # a zoom's slice: the finest of these that gives at most ZOOM_ROWS rows
+ZOOM_ROWS = 40
+PAGE_LINES = 25                     # a page of a view holds at most this many lines ...
+PAGE_CHARS = 2500                   # ... and characters, and says how to see the rest
 
 
 def _channels(x):
@@ -103,22 +112,22 @@ def _per_ms(power, rate):
     return out
 
 
-def band_weights(freqs):
-    """The ten bands' weights over these frequencies: raised-cosine changes CROSS_OCT wide at the geometric midpoints between
-    the centres, so the weights add up to 1 at every frequency (the lowest band takes everything under it, the highest
-    everything over it)."""
+def band_weights(freqs, centres=CENTRES, cross=CROSS_OCT):
+    """The bands' weights over these frequencies (the ten octave bands unless other centres are given): raised-cosine
+    changes `cross` octaves wide at the geometric midpoints between the centres, so the weights add up to 1 at every
+    frequency (the lowest band takes everything under it, the highest everything over it)."""
     u = np.log2(np.maximum(freqs, 1e-9))
     rises = [np.ones_like(u)]
-    half = CROSS_OCT / 2
-    for a, b in zip(CENTRES[:-1], CENTRES[1:]):
+    half = cross / 2
+    for a, b in zip(centres[:-1], centres[1:]):
         d = u - math.log2(math.sqrt(a * b))
         rise = np.clip((d + half) / (2 * half), 0.0, 1.0)
         rises.append(0.5 - 0.5 * np.cos(np.pi * rise))
     rises.append(np.zeros_like(u))
-    return np.array([rises[k] * (1.0 - rises[k + 1]) for k in range(len(CENTRES))])
+    return np.array([rises[k] * (1.0 - rises[k + 1]) for k in range(len(centres))])
 
 
-def band_envelopes(x, rate, loop=False, per_channel=False):
+def band_envelopes(x, rate, loop=False, per_channel=False, centres=CENTRES, cross=CROSS_OCT):
     """Each band's power per millisecond (bands x ms), all channels together, or each channel's (channels x bands x ms)
     with per_channel. A one-shot is padded so that the bands' ringing does not wrap round onto its start; a loop is split
     as the circle it is."""
@@ -126,11 +135,11 @@ def band_envelopes(x, rate, loop=False, per_channel=False):
     n = len(x)
     nfft = n if loop else 1 << int(math.ceil(math.log2(n + rate)))
     freqs = np.fft.rfftfreq(nfft, 1 / rate)
-    weights = band_weights(freqs)
-    each = np.zeros((x.shape[1], len(CENTRES), len(_per_ms(np.zeros(n), rate))))
+    weights = band_weights(freqs, centres, cross)
+    each = np.zeros((x.shape[1], len(centres), len(_per_ms(np.zeros(n), rate))))
     for c in range(x.shape[1]):
         spec = np.fft.rfft(x[:, c], nfft)
-        for b in range(len(CENTRES)):
+        for b in range(len(centres)):
             y = np.fft.irfft(spec * weights[b], nfft)[:n]
             each[c, b] = _per_ms(y * y, rate)
     return each if per_channel else _summed(each)
@@ -523,6 +532,7 @@ class Analysis:
             line['mains'] = mains_line(line, self.active_s)
         self.rolloff_hz = rolloff_hz(x[_sample(self.onset_ms, rate):_sample(self.last_ms + 1, rate)], rate)
         self._events_all = None
+        self._third = None
 
     @property
     def peak_at_ms(self):
@@ -533,6 +543,21 @@ class Analysis:
         if self._events_all is None:
             self._events_all = events(self.env, self.peak_ms, self.loop, self.peak_at_ms, cap=None)[0]
         return self._events_all
+
+    def band_set(self, kind='octave'):
+        """(labels, centres, each channel's band powers per millisecond) of the octave or the third-octave bands."""
+        if kind == 'octave':
+            return LABELS, CENTRES, self.channel_env
+        if kind != 'third':
+            raise ValueError(f"bands are 'octave' or 'third', not {kind!r}")
+        if self._third is None:
+            self._third = band_envelopes(self.x, self.rate, self.loop, per_channel=True, centres=THIRD_CENTRES,
+                                         cross=CROSS_OCT / 3)
+        return THIRD_LABELS, THIRD_CENTRES, self._third
+
+    def channel_power(self, c):
+        """One channel's power per millisecond."""
+        return _per_ms(self.x[:, c] ** 2, self.rate)
 
 
 def analyse(x, rate, loop=False, peak_at=None):
@@ -577,6 +602,138 @@ def view_overview(a):
 def readout(x, rate, loop=False, peak_at=None):
     """The readout of one sound as a dict: the overview of its Analysis (see the module's docstring)."""
     return view_overview(analyse(x, rate, loop, peak_at))
+
+
+def _resolve_ms(centre, kind):
+    """About two periods of a band's width: a slice finer than this cannot separate what happens inside that band."""
+    width = centre * ((2 ** 0.5 - 2 ** -0.5) if kind == 'octave' else (2 ** (1 / 6) - 2 ** (-1 / 6)))
+    return 2000.0 / width
+
+
+def view_zoom(a, start_s, end_s, bands='octave', hz=None, channel=None, slice_ms=None):
+    """Layer 1: the window from start_s to end_s (seconds from the file's start; a loop's window may run past its end, round
+    its join) in equal slices (the finest of ZOOM_SLICES_MS that gives at most ZOOM_ROWS rows, or slice_ms), in the octave or
+    third-octave bands (those whose centre lies in hz, a (low, high) pair, when given), of both channels or of one ('left',
+    'right'). A cell is the band's power over its slice, in dB under the loudest cell this slicing gives anywhere in the
+    sound. A band too narrow to separate events as fine as the slices spans several rows: its value stands in the first and
+    '^' in the rest. Every line and every event in the window is listed."""
+    if a.silent:
+        return {'zoom': True, 'silent': True, 'seconds': round(len(a.x) / a.rate, 3)}
+    labels, centres, each = a.band_set(bands)
+    if channel is None:
+        env, raw = _summed(each), a.raw
+    else:
+        if channel not in ('left', 'right'):
+            raise ValueError(f"a channel is 'left' or 'right', not {channel!r}")
+        if each.shape[0] < 2:
+            raise ValueError('the sound has one channel')
+        c = 0 if channel == 'left' else 1
+        env, raw = each[c], a.channel_power(c)
+    env = np.minimum(env, 2 * raw[None, :])                     # as in the overview: the split's ringing cut off
+    total = env.shape[1]
+    lo, hi = int(round(start_s * 1000)), int(round(end_s * 1000))
+    if not a.loop:
+        lo, hi = max(lo, 0), min(hi, total)
+    elif lo < 0 or lo >= total or hi - lo > total:
+        raise ValueError(f'a loop window starts inside its {total / 1000:g} s and lasts at most that long')
+    if hi <= lo:
+        raise ValueError('the window is empty: --to must come after --from, inside the sound')
+    width = int(slice_ms) if slice_ms else next((w for w in ZOOM_SLICES_MS if -(-(hi - lo) // w) <= ZOOM_ROWS),
+                                                ZOOM_SLICES_MS[-1])
+    if width < 1:
+        raise ValueError('a slice is at least 1 ms')
+    keep = [i for i, f in enumerate(centres) if hz is None or hz[0] <= f <= hz[1]]
+    if not keep:
+        raise ValueError('no band has its centre in that range')
+    reps = 2 if a.loop else 1                                     # a loop's window may run on round its join
+    cum_e = np.concatenate([np.zeros((env.shape[0], 1)), np.cumsum(np.tile(env * a.counts[None, :], (1, reps)), axis=1)],
+                           axis=1)
+    cum_n = np.concatenate([[0.0], np.cumsum(np.tile(a.counts, reps))])
+
+    def power(s, e):                                              # each band's power from millisecond s to e
+        return (cum_e[:, e] - cum_e[:, s]) / max(float(cum_n[e] - cum_n[s]), 1.0)
+
+    above = np.array([f * 2 ** (-0.5 if bands == 'octave' else -1 / 6) >= a.rate / 2 for f in centres])
+    edges = list(range(lo, hi, width)) + [hi]
+    cells = [power(s, e) for s, e in zip(edges[:-1], edges[1:])]
+    grid = [power(s, min(s + width, total)) for s in range(0, total, width)]
+    top = max(float(np.max(p[~above])) for p in grid + cells)     # the loudest cell this slicing gives anywhere
+    least = 10 ** (-FLOOR_DB / 10)
+    spans = [max(1, math.ceil(_resolve_ms(f, bands) / width)) for f in centres]
+    rows, heads = [], {}
+    for r, (s, e) in enumerate(zip(edges[:-1], edges[1:])):
+        db = []
+        for i in keep:
+            if above[i]:
+                db.append('n/a')
+            elif r % spans[i]:                                   # inside a cell the band cannot read finer
+                db.append('^' if isinstance(heads[i], int) else heads[i])
+            else:
+                q = power(s, edges[min(r + spans[i], len(edges) - 1)])[i] / top if top > 0 else 0.0
+                heads[i] = int(round(10 * math.log10(q))) if q >= least else None
+                db.append(heads[i])
+        rows.append({'label': f'{s / 1000:.3f}-{e / 1000:.3f} s', 'from_ms': s, 'to_ms': e, 'db': db})
+    start, end, length = lo / 1000, hi / 1000, total / 1000
+
+    def inside(t0, t1):                                           # overlaps the window, round the join for a loop
+        return (t0 < end and t1 > start) or (a.loop and t0 + length < end and t1 + length > start)
+
+    lines = [{k: v for k, v in line.items() if k not in ('hzs', 'covered_s')} for line in a.lines
+             if inside(line['start_s'], line['end_s'])]
+    found = [e for e in a.events_all if inside(e['time_s'], e['time_s'] + 1e-9)]
+    coarse = {labels[i]: spans[i] * width for i in keep if spans[i] > 1 and not above[i]}
+    return {'zoom': True, 'silent': False, 'seconds': round(len(a.x) / a.rate, 3), 'loop': a.loop, 'from_s': start,
+            'to_s': end, 'slice_ms': width, 'kind': bands, 'channel': channel or 'both',
+            'bands': {'labels': [labels[i] for i in keep], 'centres_hz': [centres[i] for i in keep], 'slices': rows},
+            'coarse_ms': coarse, 'lines': lines, 'events': found}
+
+
+def text_zoom(z, name):
+    """The zoom as pages of lines, each within PAGE_LINES and PAGE_CHARS; every page but the last ends with how to see the
+    next."""
+    if z.get('silent'):
+        return [[f'{name}: {z["seconds"]} s of silence']]
+    labels = z['bands']['labels']
+    col = max(5, max(len(label) for label in labels) + 1)
+    where = 'both channels' if z['channel'] == 'both' else f'the {z["channel"]} channel'
+    head = [f'{name}: {z["from_s"]:g}-{z["to_s"]:g} s in slices of {z["slice_ms"]} ms, {z["kind"]} bands, {where}'
+            + (", past the loop's end round its join" if z['loop'] and z['to_s'] > z['seconds'] else '')]
+    intro = [f'  events in the window: {len(z["events"])}' + ('' if z['events'] else ' (none)')]
+    for e in z['events']:
+        rise = 'from silence' if e['rise_db'] is None else f'+{e["rise_db"]:g} dB'
+        intro.append(f'    {e["time_s"]:.3f} s  {"main " if e["main"] else "     "} {rise} in {" ".join(e["bands"])}')
+    intro.append(f'  tonal lines sounding in the window: {len(z["lines"])}' + ('' if z['lines'] else ' (none)'))
+    intro += [f'    {line["hz"]:g} Hz {line["note"]:<6} {line["start_s"]:.3f}-{line["end_s"]:.3f} s  {line["db"]:g} dB'
+              for line in z['lines']]
+    if z['coarse_ms']:
+        intro.append('  read coarser, as the band cannot separate finer: ' +
+                     ', '.join(f'{band} over {ms} ms' for band, ms in z['coarse_ms'].items()))
+    table = ['  bands (dB under the loudest cell this slicing gives anywhere in the sound; . is more than 60 dB under; ^: '
+             'the value above holds for this row too)',
+             '  ' + 'time from file start'.ljust(22) + ''.join(f'{label:>{col}}' for label in labels)]
+    rows = ['  ' + row['label'].ljust(22) + ''.join(f'{"." if v is None else v:>{col}}' for v in row['db'])
+            for row in z['bands']['slices']]
+    return _pages(head, intro + table + rows, len(intro) + len(table), table)
+
+
+def _pages(head, body, table_at=None, table=()):
+    """Body lines cut into pages, each starting with head and, but for the last, ending with how to see the next page; a
+    page that starts among the table's rows (body lines from table_at on) repeats the table's heading first."""
+    note = '  page 99 of 99: --page 99 goes on'                    # room kept for that line
+
+    def fits(lines):
+        page = head + lines + [note]
+        return len(page) <= PAGE_LINES and len('\n'.join(page)) <= PAGE_CHARS
+
+    chunks, current = [], []
+    for k, line in enumerate(body):
+        if current and not fits(current + [line]):
+            chunks.append(current)
+            current = list(table) if table_at is not None and k >= table_at else []
+        current.append(line)
+    chunks.append(current)
+    return [head + chunk + ([f'  page {k} of {len(chunks)}: --page {k + 1} goes on'] if k < len(chunks) else [])
+            for k, chunk in enumerate(chunks, start=1)]
 
 
 def _khz(hz):

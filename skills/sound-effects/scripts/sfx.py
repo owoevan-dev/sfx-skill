@@ -152,8 +152,18 @@ def build_parser():
     ro.add_argument('target', help='a render folder, or a WAV file')
     ro.add_argument('--sound', action='append', help='only this sound id (repeatable)')
     ro.add_argument('--all-variants', action='store_true', help='every variant, not only the first')
+    ro.add_argument('--variant', type=int, help='this variant (1, 2, ...) instead of the first')
     ro.add_argument('--loop', action='store_true', help='with a WAV file: read it as a loop (twelve equal slices); a WAV whose '
                     'smpl chunk loops the whole file is read as one anyway')
+    ro.add_argument('--from', dest='from_s', type=float, metavar='S',
+                    help='zoom in: the window from this second of the file (with --to); every line and event in it is listed')
+    ro.add_argument('--to', dest='to_s', type=float, metavar='S', help='zoom in: ... to this second')
+    ro.add_argument('--slice-ms', type=int, help='zoom: slices of this many ms (default: the finest of 1, 2, 5, 10, 20, 50 '
+                    'and 100 that gives at most 40 rows)')
+    ro.add_argument('--bands', choices=('octave', 'third'), default='octave', help='zoom: octave or third-octave bands')
+    ro.add_argument('--hz', metavar='LOW-HIGH', help='zoom: only the bands whose centre lies in this range, such as 500-4000')
+    ro.add_argument('--channel', choices=('left', 'right'), help='zoom: one channel of a stereo sound')
+    ro.add_argument('--page', type=int, default=1, help='zoom: the page to print when the window fills more than one')
     ro.add_argument('--json', action='store_true', help='print JSON')
     ro.set_defaults(func=cmd_readout)
 

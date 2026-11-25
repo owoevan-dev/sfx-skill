@@ -117,6 +117,47 @@ class ReadoutCommand(unittest.TestCase):
         self.assertIn('neither a render folder nor a WAV file', proc.stdout)
         self.assertEqual(run('readout', self.render, '--sound', 'nothing').returncode, 1)
 
+    def test_a_window_is_zoomed_with_its_options(self):
+        proc = run('readout', self.render, '--sound', 'beep', '--from', '0', '--to', '0.1')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn('in slices of', proc.stdout)
+        self.assertIn('events in the window', proc.stdout)
+        rows = json.loads(run('readout', self.render, '--sound', 'beep', '--from', '0', '--to', '0.1', '--bands', 'third',
+                              '--hz', '500-2000', '--json').stdout)
+        self.assertTrue(rows[0]['zoom'])
+        self.assertEqual(rows[0]['bands']['labels'], ['500', '630', '800', '1k', '1.25k', '1.6k', '2k'])
+
+    def test_a_long_zoom_pages_and_a_page_past_the_last_is_refused(self):
+        args = ('readout', self.render, '--sound', 'air', '--from', '0', '--to', '2', '--bands', 'third')
+        first, second = run(*args), run(*args, '--page', '2')
+        self.assertIn('--page 2', first.stdout)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertNotEqual(first.stdout, second.stdout)
+        late = run(*args, '--page', '99')
+        self.assertEqual(late.returncode, 1)
+        self.assertIn('pages at these settings', late.stdout)
+
+    def test_zoom_options_are_checked_in_a_sentence(self):
+        self.assertIn('both --from and --to', run('readout', self.render, '--to', '0.1').stdout)
+        self.assertIn('go with --from and --to', run('readout', self.render, '--bands', 'third').stdout)
+        self.assertIn('window is empty', run('readout', self.render, '--sound', 'beep', '--from', '0.3', '--to', '0.2').stdout)
+        self.assertIn('LOW-HIGH', run('readout', self.render, '--from', '0', '--to', '0.1', '--hz', 'lots').stdout)
+
+    def test_a_variant_is_read_by_its_number(self):
+        base = helpers.scratch('readout-cli-variants')
+        project = base / 'project.json'
+        sound = dict(PROJECT['sounds'][0], vary={'pitch_cents': 400})      # variants a few semitones apart
+        project.write_text(json.dumps(dict(PROJECT, sounds=[sound])), encoding='utf-8')
+        proc = run('render', project, '--output', base / 'render_1', '--no-page')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        rows = json.loads(run('readout', base / 'render_1', '--variant', '2', '--json').stdout)
+        both = json.loads(run('readout', base / 'render_1', '--all-variants', '--json').stdout)
+        self.assertEqual([r['sound'] for r in rows], ['beep, variant 2'])
+        self.assertNotEqual(both[0]['lines'], both[1]['lines'])
+        self.assertEqual(rows[0], both[1])
+        self.assertEqual(run('readout', self.render, '--variant', '9').returncode, 1)
+        self.assertEqual(run('readout', self.render, '--variant', '2', '--all-variants').returncode, 1)
+
 
 class MidiCommand(unittest.TestCase):
     def test_a_midi_file_is_listed_and_quoted(self):
