@@ -240,7 +240,178 @@ def _zoom_options(args):
     return zoom, hz, None
 
 
+def _readout_jobs(target, args):
+    """(jobs, problem): each job (key, name, file, loop, peak_at) of a render folder (key: sound id and variant number)
+    or of a WAV file (key None)."""
+    jobs = []
+    if target.is_dir():
+        if not (target / 'resolved.json').is_file():
+            return [], f'{target} is not a render folder (no resolved.json)'
+        for snd in record.load(target)['sounds']:
+            if args.sound and snd['id'] not in args.sound:
+                continue
+            if args.variant is not None:
+                if args.variant > len(snd['variants']):
+                    continue
+                chosen = [(args.variant, snd['variants'][args.variant - 1])]
+            else:
+                chosen = list(enumerate(snd['variants'] if args.all_variants else snd['variants'][:1], start=1))
+            for n, v in chosen:
+                name = f"{snd['id']}, variant {n}" if args.all_variants or args.variant is not None else snd['id']
+                jobs.append(((snd['id'], n), name, v['file'], snd.get('use') == 'loop', snd.get('peak_at')))
+    elif target.suffix.lower() == '.wav' and target.is_file():
+        if args.variant is not None:
+            return [], "--variant picks a variant of a render folder's sound; a WAV file is one sound"
+        jobs.append((None, target.name, target, None, None))
+    else:
+        return [], f'{target} is neither a render folder nor a WAV file'
+    return jobs, None
+
+
+def _readout_sound(target, src, loop, peak_at, args):
+    """(Analysis, problem) of one job."""
+    if target.is_dir():
+        try:
+            data, rate = record.master(target, src), record.RATE
+        except ValueError as error:                     # a master changed into a layout the reader does not take
+            return None, f'{src}: {error}'
+    else:
+        try:
+            data, info = wav.read(src)
+        except ValueError as error:                     # a layout or encoding the reader does not take, or a damaged file
+            return None, f'{src}: {error}'
+        rate = info['rate']
+        whole = [len(data)] if len(data) else []
+        loop = args.loop or any(start == 0 and end in whole for start, end in info.get('loops', []))
+    return readout.analyse(data, rate, loop=bool(loop), peak_at=peak_at), None
+
+
+def _view_problem(args):
+    """The sentence that refuses a view's options, or None."""
+    if args.against is not None and args.view != 'compare':
+        return '--against goes with --view compare'
+    if args.view == 'compare' and args.against is None:
+        return '--view compare needs --against OTHER, the render folder or WAV file to read this one against'
+    if (args.from_s is not None or args.to_s is not None or args.slice_ms is not None or args.hz is not None
+            or args.channel or args.bands != 'octave'):
+        return 'a view reads the whole sound; --from, --to, --slice-ms, --bands, --hz and --channel go with a zoom'
+    if args.json and args.page != 1:
+        return '--page goes with the printed text; JSON holds every view whole'
+    if args.page < 1:
+        return '--page counts from 1'
+    if args.variant is not None and (args.all_variants or args.variant < 1):
+        return '--variant takes one variant, numbered from 1, instead of --all-variants'
+    return None
+
+
+def _readout_view(args):
+    """`readout ... --view NAME`: a layer-2 view of each sound."""
+    problem = _view_problem(args)
+    if problem:
+        print(f'readout: {problem}')
+        return 1
+    if args.view == 'compare':
+        return _readout_compare(args)
+    return _readout_each(args, readout.view_decay, readout.text_decay)
+
+
+def _readout_each(args, view, text):
+    """A view of each sound of a render folder or of a WAV file, paged, or JSON."""
+    target = Path(args.target)
+    jobs, problem = _readout_jobs(target, args)
+    if problem:
+        print(f'readout: {problem}')
+        return 1
+    if not jobs:
+        print('readout: no sound matched')
+        return 1
+    found, shown = [], 0
+    for _, name, src, loop, peak_at in jobs:
+        analysis, problem = _readout_sound(target, src, loop, peak_at, args)
+        if problem:
+            print(f'readout: {problem}')
+            return 1
+        result = view(analysis)
+        if args.json:
+            found.append({'sound': name, **result})
+            continue
+        pages = text(result, name)
+        if args.page > len(pages):
+            print(f'readout: {name} fills {len(pages)} page{"s" if len(pages) > 1 else ""}')
+            print()
+            continue
+        print('\n'.join(pages[args.page - 1]))
+        print()
+        shown += 1
+    if args.json:
+        print(json.dumps(found, indent=1, allow_nan=False))
+        return 0
+    return 0 if shown else 1
+
+
+def _readout_compare(args):
+    """`readout THIS --view compare --against OTHER`: each sound of this render against the same sound and variant of the
+    other (two WAV files directly), what only one side has listed."""
+    this, other = Path(args.target), Path(args.against)
+    mine, problem = _readout_jobs(this, args)
+    theirs, other_problem = (None, None) if problem else _readout_jobs(other, args)
+    if problem or other_problem:
+        print(f'readout: {problem or other_problem}')
+        return 1
+    if this.is_dir() != other.is_dir():
+        print('readout: compare two render folders or two WAV files')
+        return 1
+    if not mine:
+        print('readout: no sound matched')
+        return 1
+    this_name, other_name = (this.name, other.name) if this.name != other.name else (str(this), str(other))
+    left = {job[0]: job for job in theirs}
+    found, shown, only_here = [], 0, []
+    for key, name, src, loop, peak_at in mine:
+        match = left.pop(key, None)
+        if match is None:
+            only_here.append(name)
+            continue
+        here, problem = _readout_sound(this, src, loop, peak_at, args)
+        there, other_problem = (None, None) if problem else _readout_sound(other, match[2], match[3], match[4], args)
+        if problem or other_problem:
+            print(f'readout: {problem or other_problem}')
+            return 1
+        try:
+            result = readout.view_compare(here, there)
+        except ValueError as error:                     # a loop against a one-shot
+            if args.json:
+                found.append({'sound': name, 'compare': True, 'error': str(error)})
+            else:
+                print(f'readout: {name}: {error}')
+                print()
+            continue
+        if args.json:
+            found.append({'sound': name, **result})
+            continue
+        pages = readout.text_compare(result, name, this_name, other_name)
+        if args.page > len(pages):
+            print(f'readout: {name} fills {len(pages)} page{"s" if len(pages) > 1 else ""}')
+            print()
+            continue
+        print('\n'.join(pages[args.page - 1]))
+        print()
+        shown += 1
+    only_there = [job[1] for job in left.values()]
+    for names, where in ((only_here, this_name), (only_there, other_name)):
+        if names and args.json:
+            found += [{'sound': name, 'compare': True, 'error': f'only in {where}'} for name in names]
+        elif names:
+            print(f'readout: only in {where}: {", ".join(names)}')
+    if args.json:
+        print(json.dumps(found, indent=1, allow_nan=False))
+        return 0 if any('error' not in row for row in found) else 1
+    return 0 if shown else 1
+
+
 def cmd_readout(args):
+    if args.view or args.against is not None:
+        return _readout_view(args)
     target = Path(args.target)
     zoom, hz, problem = _zoom_options(args)
     if problem:
@@ -255,53 +426,19 @@ def cmd_readout(args):
         except ValueError as error:
             print(f'readout: {error}')
             return 1
-    jobs = []
-    if target.is_dir():
-        if not (target / 'resolved.json').is_file():
-            print(f'readout: {target} is not a render folder (no resolved.json)')
-            return 1
-        resolved = record.load(target)
-        for snd in resolved['sounds']:
-            if args.sound and snd['id'] not in args.sound:
-                continue
-            if args.variant is not None:
-                if args.variant > len(snd['variants']):
-                    continue
-                chosen = [(args.variant, snd['variants'][args.variant - 1])]
-            else:
-                chosen = list(enumerate(snd['variants'] if args.all_variants else snd['variants'][:1], start=1))
-            for n, v in chosen:
-                name = f"{snd['id']}, variant {n}" if args.all_variants or args.variant is not None else snd['id']
-                jobs.append((name, v['file'], snd.get('use') == 'loop', snd.get('peak_at')))
-    elif target.suffix.lower() == '.wav' and target.is_file():
-        if args.variant is not None:
-            print("readout: --variant picks a variant of a render folder's sound; a WAV file is one sound")
-            return 1
-        jobs.append((target.name, target, None, None))
-    else:
-        print(f'readout: {target} is neither a render folder nor a WAV file')
+    jobs, problem = _readout_jobs(target, args)
+    if problem:
+        print(f'readout: {problem}')
         return 1
     if not jobs:
         print('readout: no sound matched')
         return 1
     found, shown = [], 0
-    for name, src, loop, peak_at in jobs:
-        if target.is_dir():
-            try:
-                data, rate = record.master(target, src), record.RATE
-            except ValueError as error:                 # a master changed into a layout the reader does not take
-                print(f'readout: {src}: {error}')
-                return 1
-        else:
-            try:
-                data, info = wav.read(src)
-            except ValueError as error:                 # a layout or encoding the reader does not take, or a damaged file
-                print(f'readout: {src}: {error}')
-                return 1
-            rate = info['rate']
-            whole = [len(data)] if len(data) else []
-            loop = args.loop or any(start == 0 and end in whole for start, end in info.get('loops', []))
-        analysis = readout.analyse(data, rate, loop=bool(loop), peak_at=peak_at)
+    for _, name, src, loop, peak_at in jobs:
+        analysis, problem = _readout_sound(target, src, loop, peak_at, args)
+        if problem:
+            print(f'readout: {problem}')
+            return 1
         if zoom:
             try:
                 result = readout.view_zoom(analysis, args.from_s, args.to_s, bands=args.bands, hz=hz, channel=args.channel,

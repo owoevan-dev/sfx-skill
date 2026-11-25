@@ -209,6 +209,17 @@ class ReadoutCommand(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn('render folder', proc.stdout)
 
+    def test_a_decay_view_reads_each_band(self):
+        proc = run('readout', self.render, '--view', 'decay')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn('beep: decay of each octave band', proc.stdout)
+        self.assertIn('air: a loop has no decay', proc.stdout)
+        rows = json.loads(run('readout', self.render, '--sound', 'beep', '--view', 'decay', '--json').stdout)
+        self.assertTrue(rows[0]['decay'] and rows[0]['bands'])
+        proc = run('readout', self.render, '--view', 'decay', '--against', self.render)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn('--against goes with --view compare', proc.stdout)
+
     def test_zoom_options_are_checked_in_a_sentence(self):
         self.assertIn('both --from and --to', run('readout', self.render, '--to', '0.1').stdout)
         self.assertIn('go with --from and --to', run('readout', self.render, '--bands', 'third').stdout)
@@ -229,6 +240,58 @@ class ReadoutCommand(unittest.TestCase):
         self.assertEqual(rows[0], both[1])
         self.assertEqual(run('readout', self.render, '--variant', '9').returncode, 1)
         self.assertEqual(run('readout', self.render, '--variant', '2', '--all-variants').returncode, 1)
+
+
+class CompareCommand(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.base = helpers.scratch('readout-compare')
+        first = cls.base / 'project.json'
+        first.write_text(json.dumps(PROJECT), encoding='utf-8')
+        beep = dict(PROJECT['sounds'][0], layers=[dict(PROJECT['sounds'][0]['layers'][0], pitch=900)])   # 39 cents up
+        second = cls.base / 'project2.json'
+        second.write_text(json.dumps(dict(PROJECT, sounds=[beep])), encoding='utf-8')                  # and no air
+        for project, folder in ((first, 'render_1'), (second, 'render_2')):
+            proc = run('render', project, '--output', cls.base / folder, '--no-page')
+            assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    def test_two_renders_are_compared_sound_by_sound(self):
+        args = ('readout', self.base / 'render_2', '--view', 'compare', '--against', self.base / 'render_1')
+        proc = run(*args)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn('beep: render_2 against render_1', proc.stdout)
+        self.assertIn('tonal lines: 1 changed, 0 new, 0 gone, 0 the same', proc.stdout)
+        self.assertIn('+39 cents', proc.stdout)
+        self.assertIn('only in render_1: air', proc.stdout)
+        rows = json.loads(run(*args, '--json').stdout)
+        self.assertEqual([(r['sound'], 'error' in r) for r in rows], [('beep', False), ('air', True)])
+        self.assertEqual([round(line['cents']) for line in rows[0]['lines']['changed']], [39])
+
+    def test_two_wav_files_are_compared_directly(self):
+        x = (0.3 * np.sin(2 * np.pi * 440 * np.arange(24000) / 48000)).astype(np.float32)
+        loud, quiet = self.base / 'loud.wav', self.base / 'quiet.wav'
+        wav.write(loud, x, 48000)
+        wav.write(quiet, x / 2, 48000)
+        rows = json.loads(run('readout', loud, '--view', 'compare', '--against', quiet, '--json').stdout)
+        cells = {v for row in rows[0]['bands']['slices'] for v in row['db'] if isinstance(v, int)}
+        self.assertEqual(cells, {6})
+
+    def test_compare_options_are_checked_in_a_sentence(self):
+        one, two = self.base / 'render_1', self.base / 'render_2'
+        for args, words in (((two, '--view', 'compare'), '--against'), ((two, '--against', one), '--view compare'),
+                            ((two, '--view', 'compare', '--against', one, '--from', '0', '--to', '0.1'), 'zoom'),
+                            ((two, '--view', 'compare', '--against', one, '--page', '2', '--json'), '--page'),
+                            ((two, '--view', 'compare', '--against', self.base / 'nothing.wav'), 'neither')):
+            with self.subTest(args=args):
+                proc = run('readout', *args)
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                self.assertIn(words, proc.stdout)
+                self.assertNotIn('Traceback', proc.stdout + proc.stderr)
+        loud = self.base / 'alone.wav'
+        wav.write(loud, np.zeros(4800, dtype=np.float32), 48000)
+        proc = run('readout', two, '--view', 'compare', '--against', loud)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn('two render folders or two WAV files', proc.stdout)
 
 
 class MidiCommand(unittest.TestCase):

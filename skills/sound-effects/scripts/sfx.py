@@ -163,7 +163,12 @@ def build_parser():
     ro.add_argument('--bands', choices=('octave', 'third'), default='octave', help='zoom: octave or third-octave bands')
     ro.add_argument('--hz', metavar='LOW-HIGH', help='zoom: only the bands whose centre lies in this range, such as 500-4000')
     ro.add_argument('--channel', choices=('left', 'right'), help='zoom: one channel of a stereo sound')
-    ro.add_argument('--page', type=int, default=1, help='zoom: the page to print when the window fills more than one')
+    ro.add_argument('--page', type=int, default=1, help='zoom or a view: the page to print when it fills more than one')
+    ro.add_argument('--view', choices=('compare', 'decay'), help='a view of each sound: compare, against --against OTHER '
+                    '(by sound id and variant; two WAV files directly), on the overview\'s measures; decay, how each '
+                    'octave band rises and fades')
+    ro.add_argument('--against', metavar='OTHER', help='with --view compare: the render folder or WAV file to read this one '
+                    'against (this minus that)')
     ro.add_argument('--json', action='store_true', help='print JSON')
     ro.set_defaults(func=cmd_readout)
 

@@ -102,6 +102,35 @@ so while the others print. JSON holds the whole window (so it takes no `--page`)
 slice widths, the 40 rows, the two periods and the page size are
 this skill's choices.
 
+**Compare** (`readout THIS --view compare --against OTHER`). Each sound of a render folder against the same sound and
+variant of another (one WAV file against another directly); a sound only one side has is named. Each octave band's power
+per slice, on one scale for both, this minus that in dB, taken before rounding, so a sound 6 dB quieter reads -6 wherever
+both sound; `.` where both are more than 60 dB under the louder one's loudest cell, `>+N` or `<-N` where only one side is
+above that (by N dB), `n/a` above either file's reach. One-shots are aligned at their onsets and read over the overview's
+slices both cover, with what the longer one has past that said; loops from their starts over the shorter; a loop is not
+compared with a one-shot. Tonal lines are matched one to one, overlapping in time once aligned, then the nearest by median
+pitch within 50 cents (a line's loudest frame can sit in an attack, where its pitch reads a few cents off); a change under
+5 cents and 1 dB, with both ends within 40 ms, counts as the same, levels being compared on one scale (each line's loudest
+point against a full-scale sine). Events are matched one to one in time order within 30 ms; a shift under 5 ms, a rise
+within 3 dB and the same bands count as the same. So an edit that took out one of three repeated notes shows that one as
+gone. And each one's roll-off. It describes the difference; it gives no score of likeness and judges nothing. It prints a
+page as a rule (three of each kind of change listed, the rest counted); JSON lists every one. The 50 cents, 30 ms and the
+bounds of the same are this skill's choices.
+
+**Decay** (`readout ... --view decay`). Per octave band, in dB against the overview's loudest cell (a band's short peak
+can read above it, the overview's cells being averages over longer slices): its peak; its attack, from 10 % to 90 % of
+the peak's amplitude on the rise that leads to it, read on the band's power smoothed to its resolution (about two periods
+of its width); and its decline, read on the power smoothed over five times that (at most 100 ms), so that noise in the
+band does not read as a fall. A decline counts once the band falls 10 dB under its peak. Its slope in dB/s is fitted from
+5 to 25 dB under the peak, or as far as the decline goes (a decrease slope after Peeters et al. 2011, kept to the
+decline), with the time to fall 60 dB at that slope, marked `~` where the decline is shorter and that time extrapolated.
+It ends where the band falls under the overview's floor (60 dB under its loudest cell); where it levels off (within 3 dB
+of its last low for at least 100 ms and 30 % of the time it took to fall; the level given is where the decline stopped);
+at a later strike (an event in that band, as the overview finds them, more than 30 ms after the peak; the fit stops half
+a smoothing window before it); or cut by the file's end while still falling. A band that never falls 10 dB is held. A
+loop has no decay. The 10 % and 90 %, the five resolutions and 100 ms, the 10 dB, 5 to 25 dB, 3 dB, 100 ms and 30 % are
+this skill's choices.
+
 ## Flags and their thresholds
 
 | Flag | When | Why |
