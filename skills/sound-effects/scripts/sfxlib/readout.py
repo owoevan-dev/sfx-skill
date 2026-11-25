@@ -6,10 +6,11 @@ language models are blind", ACCV). The spectrogram stays as a second look for wh
 
 - Bands over time: ten octave bands at the nominal centres of IEC 61260-1 (31.5 Hz to 16 kHz), made by this skill's own
   split (one FFT of the whole sound, each band a raised-cosine window on log frequency between the geometric midpoints of
-  its neighbours, so the ten add up to the sound; not an IEC class filter). A cell is the band's loudest millisecond (1 ms
-  RMS) in a slice of time, in dB under the loudest cell of the whole table. A one-shot's slices start at its onset (the
-  first millisecond within 40 dB of its loudest) and double in width, fine where an attack lives and coarse where a tail
-  does (this skill's choice); a loop has twelve equal slices.
+  its neighbours, so the ten add up to the sound; not an IEC class filter). A cell is the band's power over a slice of
+  time (its energy in the slice over the slice's length, one measurement per slice), in dB under the loudest cell of the
+  whole table; a brief sound inside a long slice is averaged down there, and shows among the events when it meets their
+  thresholds. A one-shot's slices start at its onset (the first millisecond within 40 dB of its loudest) and double in
+  width, fine where an attack lives and coarse where a tail does (this skill's choice); a loop has twelve equal slices.
 - Tonal lines: spectral peaks at least 12 dB over the average of each side of the third of an octave around them (at least
   8 bins each side), whose instantaneous frequency agrees with both neighbouring bins' (Friedman 1985; Charpentier 1986),
   joined from frame to frame within 40 cents (McAulay and Quatieri 1986); a level from a parabola through the three values
@@ -80,16 +81,22 @@ def _sample(ms, rate):
     return int(round(ms * rate / 1000))
 
 
+def _ms_edges(n, rate):
+    """The first sample of each millisecond of n samples, and n after the last (the last millisecond may be short)."""
+    blocks = max(1, int(math.ceil(n * 1000 / rate)))
+    edges = np.minimum(np.round(np.arange(blocks + 1) * rate / 1000).astype(np.int64), n)
+    edges[-1] = n
+    return edges
+
+
 def _per_ms(power, rate):
     """Mean of a power signal over each millisecond (the last one may be short)."""
     n = len(power)
     if n == 0:
         return np.zeros(0)
-    blocks = max(1, int(math.ceil(n * 1000 / rate)))
-    edges = np.minimum(np.round(np.arange(blocks + 1) * rate / 1000).astype(np.int64), n)
-    edges[-1] = n
+    edges = _ms_edges(n, rate)
     counts = np.diff(edges)
-    out = np.zeros(blocks)
+    out = np.zeros(len(counts))
     filled = counts > 0
     out[filled] = np.add.reduceat(power, edges[:-1][filled]) / counts[filled]
     return out
@@ -484,14 +491,20 @@ def readout(x, rate, loop=False, peak_at=None):
     last_ms = len(raw) - 1 if loop else int(len(raw) - 1 - np.argmax(loud[::-1]))
     env = band_envelopes(x, rate, loop)
     env = np.minimum(env, 2 * raw[None, :])                     # no band holds more than the sound in that millisecond: the
-    top = env.max()                                              # split rings before a sudden sound, and that is cut off here
+                                                                 # split rings before a sudden sound, and that is cut off here
+    counts = np.diff(_ms_edges(len(x), rate)).astype(float)     # samples in each millisecond
+    energy = env * counts[None, :]                               # each band's energy in each millisecond
+    slices = _slices(len(raw), onset_ms, loop)
+    power = [energy[:, a:b].sum(axis=1) / max(float(counts[a:b].sum()), 1.0) for _, a, b in slices]
+    above = np.array([c / math.sqrt(2) >= rate / 2 for c in CENTRES])   # a band wholly above what the file can hold
+    top = max(float(p[~above].max()) for p in power)             # the loudest cell that prints: a band's power over a slice
+    least = 10 ** (-FLOOR_DB / 10)
     rows = []
-    above = [c / math.sqrt(2) >= rate / 2 for c in CENTRES]    # a band wholly above what the file can hold
-    for label, a, b in _slices(len(raw), onset_ms, loop):
-        cells = env[:, a:b].max(axis=1)
-        db = 10 * np.log10(np.maximum(cells, TINY) / top)
+    for (label, a, b), cells in zip(slices, power):
+        ratio = cells / top if top > 0 else np.zeros_like(cells)  # a cell with no energy stays under the floor
         rows.append({'label': label, 'from_ms': int(a), 'to_ms': int(b),
-                     'db': ['n/a' if gone else (int(round(v)) if v >= -FLOOR_DB else None) for v, gone in zip(db, above)]})
+                     'db': ['n/a' if gone else (int(round(10 * math.log10(q))) if q >= least else None)
+                            for q, gone in zip(ratio, above)]})
     active_s = (last_ms + 1 - onset_ms) / 1000
     lines = tonal_lines(x, rate)
     for line in lines:

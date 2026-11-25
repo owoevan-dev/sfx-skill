@@ -260,6 +260,6 @@ def cmd_readout(args):
     if args.json:
         print(json.dumps(found, indent=1, allow_nan=False))
     else:
-        print('Cells: the loudest millisecond of each octave band in each slice, in dB under the loudest cell. Tonal lines are '
-              'steady pitches; events are sudden rises. The spectrogram command draws the same sound as a picture.')
+        print('Cells: each octave band\'s power over each slice, in dB under the loudest cell. Tonal lines are steady '
+              'pitches; events are sudden rises. The spectrogram command draws the same sound as a picture.')
     return 0

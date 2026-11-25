@@ -373,5 +373,56 @@ class ReviewCases5(unittest.TestCase):
         self.assertTrue(any(line['high_hz'] > 860 and line['low_hz'] < 460 for line in r['lines']), r['lines'])
 
 
+class SliceCells(unittest.TestCase):
+    """A cell is the band's power over its slice, one measurement per slice, not the band's loudest millisecond in it."""
+
+    @staticmethod
+    def _sound(tone_ends_ms):
+        x = np.zeros(int(0.9 * RATE))
+        x[:int(0.2 * RATE)] += faded(tone(250, 0.2, 0.6))           # the loudest cell, the same in both sounds
+        a, b = int(0.3 * RATE), int(tone_ends_ms / 1000 * RATE)
+        x[a:b] += faded(tone(2000, (b - a) / RATE, 0.05))
+        return x
+
+    @staticmethod
+    def _cell(r, label, band):
+        row = next(s for s in r['bands']['slices'] if s['label'] == label)
+        return row['db'][readout.LABELS.index(band)]
+
+    def test_a_band_sounding_through_half_a_slice_reads_3_db_under_one_sounding_through_all_of_it(self):
+        whole = self._cell(readout.readout(self._sound(700), RATE), '320-640 ms', '2k')
+        half = self._cell(readout.readout(self._sound(480), RATE), '320-640 ms', '2k')
+        self.assertAlmostEqual(whole - half, 3, delta=1)
+
+    def test_a_brief_click_in_a_long_slice_is_averaged_in_its_row_and_named_as_an_event(self):
+        x = self._sound(700)
+        x[int(0.85 * RATE):int(0.85 * RATE) + 48] += 0.5            # 1 ms, late in the last slice
+        r = readout.readout(x, RATE)
+        self.assertTrue(any(abs(e['time_s'] - 0.85) < 0.003 for e in r['events']), r['events'])
+        self.assertLess(self._cell(r, '640-900 ms', '4k'), self._cell(r, '320-640 ms', '2k') - 15)  # a held tone outweighs it
+
+    def test_a_band_above_the_sample_rate_never_sets_the_reference(self):
+        rate = 22625                                                  # 16 kHz is n/a here, yet the split leaves it energy
+        x = np.zeros(1811)
+        x[0], x[-1] = 0.05, 0.0625
+        x[1787:1810] = np.resize([-0.5, 0.5], 23)
+        r = readout.readout(x, rate)
+        cells = [v for s in r['bands']['slices'] for v in s['db'] if isinstance(v, int)]
+        self.assertEqual(max(cells), 0)
+
+    def test_digital_silence_before_a_tiny_sound_stays_under_the_floor(self):
+        x = np.zeros(int(0.05 * RATE))
+        x[480] = 12 / 2 ** 23                                         # 12 steps of a 24-bit file, at 10 ms
+        before = readout.readout(x, RATE)['bands']['slices'][0]
+        self.assertEqual(before['label'], 'before')
+        self.assertTrue(all(v is None for v in before['db']), before['db'])
+
+    def test_the_loudest_cell_reads_0_db_even_for_noise(self):
+        rng = np.random.default_rng(5)                                # its loudest millisecond stands over any slice's power
+        r = readout.readout(faded(rng.standard_normal(RATE) * 0.2), RATE)
+        cells = [v for s in r['bands']['slices'] for v in s['db'] if isinstance(v, int)]
+        self.assertEqual(max(cells), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
