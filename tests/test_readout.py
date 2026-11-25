@@ -298,5 +298,52 @@ class ReviewCases2(unittest.TestCase):
         self.assertTrue(readout.readout(np.zeros((0, 2)), RATE)['silent'])
 
 
+class ReviewCases3(unittest.TestCase):
+    """Cases from the third review of 0.3."""
+
+    def swell_after(self, bed):
+        """A tap at 0.05 s, then a 500 Hz swell from 0.5 s to its loudest at 1.5 s, over a recording's faint noise (more
+        than 60 dB under); `bed` sounds from the tap on."""
+        x = 0.0003 * np.random.default_rng(5).standard_normal(2 * RATE)
+        k = np.arange(int(0.02 * RATE))
+        x[int(0.05 * RATE):int(0.05 * RATE) + len(k)] = 0.5 * np.exp(-k / (0.003 * RATE)) * np.sin(2 * np.pi * 3000 * k / RATE)
+        x[int(0.05 * RATE):] += bed * np.sin(2 * np.pi * 500 * np.arange(int(0.05 * RATE), 2 * RATE) / RATE)
+        t = np.arange(int(0.5 * RATE), 2 * RATE)
+        swell = np.where(t < 1.5 * RATE, ((t - 0.5 * RATE) / RATE) ** 2, np.exp(-(t - 1.5 * RATE) / (0.1 * RATE)))
+        x[int(0.5 * RATE):] += 0.8 * swell * np.sin(2 * np.pi * 500 * t / RATE)
+        return readout.readout(faded(x), RATE)
+
+    def test_a_tap_before_silence_does_not_lead_a_later_swell(self):
+        r = self.swell_after(0.0)
+        self.assertTrue(r['events'])
+        self.assertFalse(any(e['main'] for e in r['events']), r['events'])
+        held = self.swell_after(0.03)                                   # a bed under the swell carries the tap into it
+        self.assertEqual([e['time_s'] for e in held['events'] if e['main']], [0.05])
+
+    def test_a_dip_of_a_few_milliseconds_is_no_silence(self):
+        x = np.zeros(RATE // 2)
+        x[480:528] = 0.02 * np.sin(2 * np.pi * 4000 * np.arange(48) / RATE)           # a faint tick at 10 ms, then 3 ms of
+        k = np.arange(int(0.2 * RATE))                                                # nothing before the body at 14 ms
+        x[672:672 + len(k)] += 0.5 * np.exp(-k / (0.05 * RATE)) * np.sin(2 * np.pi * 1000 * k / RATE) * np.minimum(1, k / 480)
+        r = readout.readout(x, RATE)
+        self.assertEqual([e['time_s'] for e in r['events'] if e['main']], [0.01], r['events'])
+
+    def test_an_event_across_a_loop_join_is_one_event(self):
+        x = 0.001 * np.random.default_rng(3).standard_normal(RATE)
+        x[int(0.5 * RATE):int(0.53 * RATE)] += 0.5 * np.sin(2 * np.pi * 1000 * np.arange(int(0.03 * RATE)) / RATE)
+        whole = readout.readout(x, RATE, loop=True)
+        turned = readout.readout(np.roll(x, int(0.498 * RATE)), RATE, loop=True)    # the ping now starts at 0.998 s
+        self.assertEqual([(e['time_s'], e['main']) for e in whole['events']], [(0.5, True)])
+        self.assertEqual([(e['time_s'], e['main']) for e in turned['events']], [(0.998, True)])
+        self.assertEqual(turned['events_found'], 1)
+
+    def test_a_line_level_is_under_the_loudest_spectral_peak_tonal_or_not(self):
+        x = 0.001 * np.sin(2 * np.pi * 500 * np.arange(RATE) / RATE)
+        x[:48] = 0.8 * np.sin(2 * np.pi * 2000 * np.arange(48) / RATE)               # a 1 ms click over a faint ring
+        r = readout.readout(x, RATE)
+        line = next(line for line in r['lines'] if abs(line['hz'] - 500) < 5)
+        self.assertLess(line['db'], -20)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -240,5 +240,31 @@ class ReviewCases2(Files):
         self.assertEqual(midifile.quote(song, '1', 2, 2)['controls'], [])
 
 
+class ReviewCases3(Files):
+    """Cases from the third review of 0.3."""
+
+    def test_tracks_sharing_a_channel_keep_their_own_program_and_pedal(self):
+        # MuseScore and music-production put such tracks on two ports (FF 21); other programs reuse a channel outright
+        piano = track([(0, name('Piano')), (0, b'\xff\x21\x01\x00'), (0, b'\xc0\x00'),
+                       (0, b'\x90\x3c\x64'), (4 * PPQ, b'\x80\x3c\x00'), (0, b'\x90\x3e\x64'), (4 * PPQ, b'\x80\x3e\x00')])
+        strings = track([(0, name('Strings')), (0, b'\xff\x21\x01\x01'), (0, b'\xc0\x30'), (0, b'\xb0\x40\x7f'),
+                         (0, b'\x90\x43\x64'), (4 * PPQ, b'\x80\x43\x00'), (0, b'\x90\x45\x64'), (4 * PPQ, b'\x80\x45\x00'),
+                         (0, b'\xb0\x40\x00')])
+        song = midifile.load(self.write(smf([track([(0, meter(4, 2))]), piano, strings]), 'shared'))
+        parts = {p['id']: p for p in song['parts']}
+        self.assertEqual((parts['2']['program'], parts['3']['program']), (0, 0x30))
+        self.assertEqual(midifile.quote(song, '2', 2, 2)['controls'], [])
+        self.assertEqual(midifile.quote(song, '3', 2, 2)['controls'], ['sustain pedal'])
+
+    def test_a_track_name_in_utf8_reads_as_written_and_latin1_still_reads(self):
+        raw = 'Flûte 主旋律'.encode('utf-8')
+        melody = track([(0, b'\xff\x03' + vlq(len(raw)) + raw), (0, b'\x90\x48\x64'), (PPQ, b'\x80\x48\x00')])
+        song = midifile.load(self.write(smf([melody], fmt=0), 'utf8'))
+        self.assertEqual(song['parts'][0]['name'], 'Flûte 主旋律')
+        older = track([(0, name('Flûte')), (0, b'\x90\x48\x64'), (PPQ, b'\x80\x48\x00')])
+        song = midifile.load(self.write(smf([older], fmt=0), 'latin1'))
+        self.assertEqual(song['parts'][0]['name'], 'Flûte')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -2,11 +2,13 @@
 
 Reads the format of The MIDI Association's "Standard MIDI Files 1.0" (RP-001): a header chunk (format 0 or 1, a division
 in ticks per quarter note) and track chunks of events with variable-length delta times, running status, note-on with
-velocity 0 as a note-off, and the meta events for tempo (FF 51), time signature (FF 58), track name (FF 03) and the end of a
-track (FF 2F). Every other event is skipped by its length; chunks of other types are skipped whole. Format 2 (independent
+velocity 0 as a note-off, and the meta events for tempo (FF 51), time signature (FF 58), track name (FF 03, read as UTF-8
+when it is valid UTF-8, else as Latin-1) and the end of a track (FF 2F). Every other event is skipped by its length; chunks of other types are skipped whole. Format 2 (independent
 patterns) and SMPTE divisions are refused in a sentence, as are a file over MAX_BYTES and a chunk that runs past the end.
 
 A part is one track's notes on one channel. Channel 10 is General MIDI's percussion: its numbers are the keys of a kit.
+A part's program is the last its own track sets on its channel by its first note (a track that sets none takes its
+channel's from the other tracks); its pedal and bend are its own track's and those of a track without notes (a setup track).
 A note-off ends the earliest note still open on its key and channel (so a note-on and a note-off of one key at one tick end the old
 note, not the new one), a note still sounding when its key is struck again ends there, and a note left open at the end of its
 track ends there.
@@ -47,6 +49,15 @@ def _vlq(data, pos, end):
     raise MusicError('a delta time or a length runs past four bytes, which the format does not allow')
 
 
+def _decoded(raw):
+    """A track name: UTF-8 as most programs now write it, else one byte a character as older files have it."""
+    try:
+        text = raw.decode('utf-8')
+    except UnicodeDecodeError:
+        text = raw.decode('latin-1')
+    return text.strip() or None
+
+
 def _track(data, pos, end, index):
     """The events of one track chunk: notes [(on tick, off tick, key, velocity, channel)], tempo and meter events, the name,
     programs [(tick, channel, program)], sustain and pitch-bend ticks per channel, and the last tick."""
@@ -85,7 +96,7 @@ def _track(data, pos, end, index):
                 if 1 <= numerator <= 32 and power <= 6:
                     meters.append((tick, seq, numerator, 2 ** power, thirty_seconds))
             elif kind == 0x03 and name is None:
-                name = body.decode('latin-1', errors='replace').strip() or None
+                name = _decoded(body)
             elif kind == 0x2F:
                 ended = True
                 break
@@ -239,20 +250,22 @@ def _bars(meters, ppq, last):
 
 
 def _parts(tracks):
-    programs = {}                                               # every track's program changes and controllers count for their
-    controls = {}                                               # channel: a separate setup track addresses the same instrument
-    for tr in tracks:
-        for t, ch, p in tr['programs']:
-            programs.setdefault(ch, []).append((t, p))
-        for ch, events in tr['controls'].items():
-            controls.setdefault(ch, []).extend(events)
+    programs = {}                                               # tracks that share a channel are often separate instruments (on
+    setup = {}                                                  # two ports, FF 21, or a channel reused): a part keeps its own
+    for tr in tracks:                                           # track's program and pedal. A track that sets no program takes
+        for t, ch, p in tr['programs']:                         # its channel's from the others, and a setup track without notes
+            programs.setdefault(ch, []).append((t, p))          # adds its controllers to every part on its channel
+        if not tr['notes']:
+            for ch, events in tr['controls'].items():
+                setup.setdefault(ch, []).extend(events)
     parts = []
     for index, tr in enumerate(tracks, start=1):
         channels = sorted({n[4] for n in tr['notes']})
         for channel in channels:
             notes = sorted(n for n in tr['notes'] if n[4] == channel)
             pid = str(index) if len(channels) == 1 else f'{index}.{channel + 1}'
-            changes = sorted(programs.get(channel, []), key=lambda c: c[0])         # stable: file order within a tick
+            own = [(t, p) for t, ch, p in tr['programs'] if ch == channel]
+            changes = own or sorted(programs.get(channel, []), key=lambda c: c[0])  # stable: file order within a tick
             program = None
             for t, p in changes:
                 if t <= notes[0][0]:
@@ -260,7 +273,7 @@ def _parts(tracks):
             later = [(t, p) for t, p in changes if t > notes[0][0]]
             parts.append({'id': pid, 'track': index, 'channel': channel + 1, 'name': tr['name'], 'program': program,
                           'later_programs': later, 'notes': notes, 'drums': channel == DRUM_CHANNEL,
-                          'controls': controls.get(channel, [])})
+                          'controls': tr['controls'].get(channel, []) + setup.get(channel, [])})
     return parts
 
 

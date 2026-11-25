@@ -193,6 +193,7 @@ def _peaks(x, rate, n_fft, hop, min_hz):
     left_to, left_n = np.maximum(k - 1, lo + 1), np.maximum(k - 1 - lo, 1)          # each side of a peak on its own: at a
     right_from, right_n = np.minimum(k + 2, hi - 1), np.maximum(hi - k - 2, 1)     # steep edge one side is silent, the other not
     found = []
+    loudest = -math.inf                                         # the loudest bin, tonal or not
     chunk = max(1, (1 << 19) // n_fft)
     side = IF_FRAMES // 2
     for f0 in range(0, frames, chunk):
@@ -206,6 +207,8 @@ def _peaks(x, rate, n_fft, hop, min_hz):
         low_row = np.maximum(rows - side, 0)
         inst = np.angle(cross[top_row] - cross[low_row]) * rate / (2 * np.pi)
         db = 20 * np.log10(np.abs(now[rows]) + TINY)
+        if usable.any():
+            loudest = max(loudest, float(db[:, usable].max()))
         csum = np.concatenate([np.zeros((len(idx), 1)), np.cumsum(db, axis=1)], axis=1)
         around = np.maximum((csum[:, left_to] - csum[:, lo]) / left_n, (csum[:, hi] - csum[:, right_from]) / right_n)
         peak = np.zeros_like(db, dtype=bool)
@@ -222,7 +225,7 @@ def _peaks(x, rate, n_fft, hop, min_hz):
                 den = a - 2 * b + c
                 p = 0.5 * (a - c) / den if den != 0 else 0.0
                 found.append((int(frame), float(inst[row, j]), float(b - 0.25 * (a - c) * p)))
-    return found, frames
+    return found, frames, loudest
 
 
 def _tracks(found, frames, hop, rate, floor):
@@ -285,7 +288,7 @@ def _tracks(found, frames, hop, rate, floor):
 
 def tonal_lines(x, rate):
     """The tracked tonal lines, loudest first, each a dict (times in seconds from the file's start; levels in dB under the
-    loudest spectral peak). Two windows: a long one (N_FFT) resolves low and close pitches, a short one (SHORT_FFT, from
+    loudest spectral peak, tonal or not, of the long window). Two windows: a long one (N_FFT) resolves low and close pitches, a short one (SHORT_FFT, from
     SHORT_FROM_HZ up) follows glides too quick for the long one; a short-window line that a long-window line already holds
     is dropped."""
     x = _channels(x)
@@ -296,17 +299,20 @@ def tonal_lines(x, rate):
     gain = 20 * math.log10(long_fft / short_fft)               # a sinusoid's peak in the short window is this much lower
     long_found, short_found = [], []
     long_frames = short_frames = 1
+    loudest = -math.inf
     for c in range(x.shape[1]):                                 # each channel on its own, so opposite polarity cannot cancel
         if not np.any(x[:, c]):
             continue
-        found, long_frames = _peaks(x[:, c], rate, long_fft, hop, 20.0)
+        found, long_frames, peak = _peaks(x[:, c], rate, long_fft, hop, 20.0)
         long_found += found
-        found, short_frames = _peaks(x[:, c], rate, short_fft, hop, SHORT_FROM_HZ)
+        loudest = max(loudest, peak)
+        found, short_frames, _ = _peaks(x[:, c], rate, short_fft, hop, SHORT_FROM_HZ)
         short_found += [(f, hz, level + gain) for f, hz, level in found]
     if not long_found and not short_found:
         return []
     top = max(level for _, _, level in long_found + short_found)
-    floor = top - LINE_RANGE_DB
+    floor = top - LINE_RANGE_DB                                 # lines are tracked down to this under the loudest one,
+    top = max(top, loudest)                                     # and their levels given under the loudest peak, tonal or not
     pieces = _tracks(long_found, long_frames, hop, rate, floor) + _tracks(short_found, short_frames, hop, rate, floor)
     out = []
     for points in _join([p['points'] for p in pieces], hop, rate):     # one pitch seen by both windows is one line
@@ -373,8 +379,10 @@ def mains_line(line, active_s):
 
 
 def events(env, peak_ms, loop=False, peak_at_ms=None):
-    """The events (dicts: time in seconds from the file's start, the largest rise in dB, the bands that rose); the one
-    nearest the loudest millisecond is the main one."""
+    """The events (dicts: time in seconds from the file's start, the largest rise in dB, the bands that rose) and how many
+    were found. The main one is the event nearest peak_at_ms when the project declares it, else the last to start before
+    the loudest millisecond (or within LEAD_MS after it) with no silence (MERGE_MS with no band within EVENT_RANGE_DB of the
+    loudest) between them; a loop counts round its join, where rises on both sides within MERGE_MS are one event."""
     if env.size == 0 or not np.any(env > 0):
         return [], 0
     level = 10 * np.log10(env + TINY)
@@ -406,11 +414,27 @@ def events(env, peak_ms, loop=False, peak_at_ms=None):
         g['bands'].update(LABELS[r] for r in rows)
     if not groups:
         return [], 0
+    total = level.shape[1]
+    if loop and len(groups) > 1 and groups[0]['start'] + total - groups[-1]['start'] <= MERGE_MS:
+        first = groups.pop(0)                                   # rises on both sides of a loop's join are one event, from
+        groups[-1]['rise'] = max(groups[-1]['rise'], first['rise'])     # where it starts before the join
+        groups[-1]['bands'] |= first['bands']
     if peak_at_ms is not None:                                   # the moment the project says the sound peaks
         main = min(range(len(groups)), key=lambda i: abs(groups[i]['start'] - peak_at_ms))
-    else:                                                       # else the event that leads into the loudest millisecond
-        leading = [i for i, g in enumerate(groups) if g['start'] <= peak_ms + LEAD_MS]
-        main = leading[-1] if leading else None                  # a swell has no rise that leads into its loudest moment
+    else:                                                       # else the event that leads into the loudest millisecond: its
+        quiet = ~(level >= floor).any(axis=0)                   # attack reaches back to the last silence, MERGE_MS in which no
+        limit = total - 1 if loop else peak_ms                  # band comes within EVENT_RANGE_DB of the loudest (round a loop)
+        back = quiet[np.arange(peak_ms - 1, peak_ms - 1 - limit, -1) % total]      # nearest first
+        held = np.concatenate([[0], np.cumsum(back)])
+        silences = np.flatnonzero(held[MERGE_MS:] - held[:-MERGE_MS] == MERGE_MS)  # a dip of a few ms is no silence
+        reach = int(silences[0]) if silences.size else limit
+
+        def ahead(g):                                           # how long before the loudest millisecond an event starts
+            d = peak_ms - g['start']
+            return (d + LEAD_MS) % total - LEAD_MS if loop else d
+
+        leading = [i for i, g in enumerate(groups) if -LEAD_MS <= ahead(g) <= reach]
+        main = min(leading, key=lambda i: ahead(groups[i])) if leading else None    # none: a swell, or silence between
     keep = sorted(range(len(groups)), key=lambda i: (main is None or i != main, -groups[i]['rise']))[:EVENTS_SHOWN]
     out = []
     for i in sorted(keep, key=lambda i: groups[i]['start']):
