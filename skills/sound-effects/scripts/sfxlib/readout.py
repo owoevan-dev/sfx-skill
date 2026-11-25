@@ -89,9 +89,13 @@ DECAY_SMOOTH, DECAY_SMOOTH_MAX_MS = 5, 100    # decay: a band's decline read on 
                                     # its resolutions (at most this long), so noise in it does not read as a fall
 DECAY_MIN_DB = 10.0                 # a decline counts from this far under the band's peak
 DECAY_FIT_DB = (5.0, 25.0)          # the slope is fitted from this far under the peak to this far (or as far as it goes)
-LEVEL_OFF_DB = 3.0                  # a decline has levelled off once within this of its last low ...
-LEVEL_OFF_MS, LEVEL_OFF_SHARE = 100, 0.3    # ... and stays there this long, and this share of the time it took to fall
+LEVEL_OFF_MS, LEVEL_OFF_SHARE = 100, 0.3    # a decline levels off where the level's mean over this long (or this share
+LEVEL_OFF_FALL, LEVEL_OFF_DB = 0.25, 3.0    # of the time it has fallen) changes, to the next such stretch, by under this
+                                    # share of what its early fall would take there, and never more than this
+SETTLE_DB = 1.0                     # ... from where the level first comes within this of the stretch it levels off to
+RISE_MEAN_MS, DECAY_RISE_DB = 50, 6.0   # it rises again where its mean over this long climbs this far over its lowest
 ATTACK_FROM, ATTACK_TO = 0.1, 0.9   # attack: from this share of the peak's amplitude to this one, on the rise that leads to it
+ATTACK_NOTE_MS = 10                 # an attack this long from the file's first millisecond, already loud there, says so
 LIST_SHOWN = 3                      # changed, new and gone lines and events printed, each, before "and N more"
 
 
@@ -386,7 +390,7 @@ def tonal_lines(x, rate):
         out.append({'hz': round(loud[1], 1), 'note': note_name(loud[1]), 'start_s': round(start, 3), 'end_s': round(end, 3),
                     'db': round(min(0.0, loud[2] - top), 1) + 0.0, 'median_hz': round(float(np.median(hzs)), 1),
                     'from_hz': round(hzs[0], 1), 'to_hz': round(hzs[-1], 1), 'low_hz': round(min(hzs), 1),
-                    'high_hz': round(max(hzs), 1), 'hzs': hzs, 'dbfs': round(loud[2] - 20 * math.log10(long_fft / 4), 1),
+                    'high_hz': round(max(hzs), 1), 'hzs': hzs, 'dbfs': loud[2] - 20 * math.log10(long_fft / 4),
                     'covered_s': round(len(points) * hop / rate, 3), 'pieces': pieces})
     out.sort(key=lambda line: -line['db'])
     return out
@@ -898,8 +902,9 @@ def view_compare(a, b):
         common, shift = min(len(a.raw) - a.onset_ms, len(b.raw) - b.onset_ms), (a.onset_ms, b.onset_ms)
         rows = [(label, a.onset_ms + s, a.onset_ms + e, b.onset_ms + s, b.onset_ms + e)
                 for label, s, e in _slices(common, 0, False)]
-        if a.onset_ms > BEFORE_MS and b.onset_ms > BEFORE_MS:
-            rows.insert(0, ('before', 0, a.onset_ms, 0, b.onset_ms))
+        if a.onset_ms > BEFORE_MS and b.onset_ms > BEFORE_MS:      # the same stretch right before each onset
+            lead = min(a.onset_ms, b.onset_ms)
+            rows.insert(0, ('before', a.onset_ms - lead, a.onset_ms, b.onset_ms - lead, b.onset_ms))
         for side, sound in (('this', a), ('that', b)):
             if len(sound.raw) - sound.onset_ms > common:
                 notes.append(f'{side} one goes on to {(len(sound.raw) - sound.onset_ms) / 1000:g} s after its onset, '
@@ -908,7 +913,8 @@ def view_compare(a, b):
                 notes.append(f'only {side} one has {sound.onset_ms} ms before its onset')
     above = np.array([c / math.sqrt(2) >= min(a.rate, b.rate) / 2 for c in CENTRES])
     powers = [(a.band_power(sa, ea), b.band_power(sb, eb)) for _, sa, ea, sb, eb in rows]
-    top = max(float(max(p[~above].max(), q[~above].max())) for p, q in powers)
+    top = max([_overview_cells(a)[3], _overview_cells(b)[3]] +                # the louder one's loudest cell, anywhere
+              [float(max(p[~above].max(), q[~above].max())) for p, q in powers])
     floor = top * 10 ** (-FLOOR_DB / 10)
     table = []
     for (label, sa, ea, sb, eb), (p, q) in zip(rows, powers):
@@ -919,33 +925,53 @@ def view_compare(a, b):
             elif top <= 0 or (p[i] < floor and q[i] < floor):
                 db.append(None)
             elif q[i] < floor:
-                db.append(f'>+{int(round(10 * math.log10(p[i] / floor)))}')
+                db.append(_bound('>+', 10 * math.log10(p[i] / floor)))
             elif p[i] < floor:
-                db.append(f'<-{int(round(10 * math.log10(q[i] / floor)))}')
+                db.append(_bound('<-', 10 * math.log10(q[i] / floor)))
             else:
                 db.append(int(round(10 * math.log10(p[i] / q[i]))))
         table.append({'label': label, 'this_ms': [sa, ea], 'that_ms': [sb, eb], 'db': db})
     return dict(out, silent=[], common_s=round(common / 1000, 3), notes=notes,
                 onset_s=None if a.loop else [round(a.onset_ms / 1000, 3), round(b.onset_ms / 1000, 3)],
                 bands={'labels': list(LABELS), 'centres_hz': list(CENTRES), 'slices': table},
-                lines=_compare_lines(a.lines, b.lines, shift), events=_compare_events(a.events_all, b.events_all, shift),
+                lines=_compare_lines(a, b, shift, common if a.loop else None),
+                events=_compare_events(a.events_all, b.events_all, shift, common if a.loop else None),
                 rolloff_hz=[a.rolloff_hz, b.rolloff_hz])
+
+
+def _bound(sign, db):
+    """'>+N' or '<-N': one side at least N dB over the floor (rounded down, so never more than is so)."""
+    return f'{sign}{int(math.floor(db))}'
 
 
 def _shown(line):
     return {k: line[k] for k in ('hz', 'note', 'start_s', 'end_s', 'db')}
 
 
-def _compare_lines(these, those, shift):
-    """Lines matched one to one: overlapping in time once aligned, then the nearest in pitch (each line's median, steadier
-    than its loudest frame, which an attack can pull) within COMPARE_CENTS."""
+def _compare_lines(a, b, shift, until=None):
+    """Lines matched one to one: sounding at the same time once aligned (piece by piece, so not across a line's silent
+    gap), then the nearest in pitch (each line's median, steadier than its loudest frame, which an attack can pull) within
+    COMPARE_CENTS. A loop's are read only before `until` ms."""
     def span(line, offset):
         return line['start_s'] * 1000 - offset, line['end_s'] * 1000 - offset
 
-    pairs = sorted((abs(_cents(x['median_hz'], y['median_hz'])), i, j) for i, x in enumerate(these)
-                   for j, y in enumerate(those)
-                   if span(x, shift[0])[0] < span(y, shift[1])[1] and span(y, shift[1])[0] < span(x, shift[0])[1]
-                   and abs(_cents(x['median_hz'], y['median_hz'])) <= COMPARE_CENTS)
+    def sounding(sound, offset):
+        return [[(p0 * 1000 / sound.rate - offset, p1 * 1000 / sound.rate - offset) for p0, p1 in line['pieces']]
+                for line in sound.lines]
+
+    def overlap(xs, ys):
+        return any(x0 < y1 and y0 < x1 for x0, x1 in xs for y0, y1 in ys)
+
+    keep = [0, until] if until is not None else None
+    these, those = a.lines, b.lines
+    here, there = sounding(a, shift[0]), sounding(b, shift[1])
+    if keep:                                                       # only what both loops play
+        mine_in = [i for i in range(len(these)) if overlap(here[i], [keep])]
+        theirs_in = [j for j in range(len(those)) if overlap(there[j], [keep])]
+    else:
+        mine_in, theirs_in = list(range(len(these))), list(range(len(those)))
+    pairs = sorted((abs(_cents(these[i]['median_hz'], those[j]['median_hz'])), i, j) for i in mine_in for j in theirs_in
+                   if overlap(here[i], there[j]) and abs(_cents(these[i]['median_hz'], those[j]['median_hz'])) <= COMPARE_CENTS)
     mine, theirs, matched = set(), set(), []
     for _, i, j in pairs:
         if i not in mine and j not in theirs:
@@ -957,33 +983,38 @@ def _compare_lines(these, those, shift):
         x, y = these[i], those[j]
         cents, change = _cents(x['median_hz'], y['median_hz']), x['dbfs'] - y['dbfs']
         moved = max(abs(p - q) for p, q in zip(span(x, shift[0]), span(y, shift[1])))
-        if abs(cents) < SAME_CENTS and abs(change) < SAME_DB and moved < LINE_MOVE_MS:
+        if abs(cents) < SAME_CENTS and abs(change) < SAME_DB and moved <= LINE_MOVE_MS:
             same += 1
         else:
             changed.append(dict(_shown(x), median_hz=x['median_hz'], was_median_hz=y['median_hz'], cents=round(cents, 1),
                                 db_change=round(change, 1), was_start_s=y['start_s'], was_end_s=y['end_s'],
-                                moved=moved >= LINE_MOVE_MS))
-    return {'same': same, 'changed': changed, 'new': [_shown(x) for i, x in enumerate(these) if i not in mine],
-            'gone': [_shown(y) for j, y in enumerate(those) if j not in theirs]}
+                                moved=moved > LINE_MOVE_MS))
+    return {'same': same, 'changed': changed, 'new': [_shown(these[i]) for i in mine_in if i not in mine],
+            'gone': [_shown(those[j]) for j in theirs_in if j not in theirs]}
 
 
-def _compare_events(these, those, shift):
-    """Events matched one to one in time order (once aligned) within COMPARE_EVENT_MS."""
+def _compare_events(these, those, shift, until=None):
+    """Events matched one to one in time order (once aligned, in whole milliseconds) within COMPARE_EVENT_MS; a loop's
+    only before `until` ms."""
+    if until is not None:
+        these = [e for e in these if round(e['time_s'] * 1000) < until]
+        those = [e for e in those if round(e['time_s'] * 1000) < until]
+    at = [round(e['time_s'] * 1000) - shift[0] for e in these]
+    was = [round(e['time_s'] * 1000) - shift[1] for e in those]
     i = j = same = 0
     changed, new, gone = [], [], []
     while i < len(these) or j < len(those):
-        if j == len(those) or (i < len(these) and these[i]['time_s'] * 1000 - shift[0] <
-                               those[j]['time_s'] * 1000 - shift[1] - COMPARE_EVENT_MS):
+        if j == len(those) or (i < len(these) and at[i] < was[j] - COMPARE_EVENT_MS):
             new.append(these[i])
             i += 1
-        elif i == len(these) or those[j]['time_s'] * 1000 - shift[1] < these[i]['time_s'] * 1000 - shift[0] - COMPARE_EVENT_MS:
+        elif i == len(these) or was[j] < at[i] - COMPARE_EVENT_MS:
             gone.append(those[j])
             j += 1
         else:
             x, y = these[i], those[j]
-            delta = int(round((x['time_s'] * 1000 - shift[0]) - (y['time_s'] * 1000 - shift[1])))
+            delta = at[i] - was[j]
             risen = ((x['rise_db'] is None) != (y['rise_db'] is None) or
-                     (x['rise_db'] is not None and abs(x['rise_db'] - y['rise_db']) >= RISE_SAME_DB))
+                     (x['rise_db'] is not None and abs(x['rise_db'] - y['rise_db']) > RISE_SAME_DB))
             if abs(delta) < SAME_MS and not risen and x['bands'] == y['bands']:
                 same += 1
             else:
@@ -1063,8 +1094,11 @@ def _smooth(power, width):
     """A centred moving average over `width` milliseconds, of what the file holds (its ends averaged over less)."""
     if width <= 1:
         return power
-    kernel = np.ones(width)
-    return np.convolve(power, kernel, mode='same') / np.convolve(np.ones(len(power)), kernel, mode='same')
+    n = len(power)
+    cum = np.concatenate([[0.0], np.cumsum(power)])
+    lo = np.clip(np.arange(n) - width // 2, 0, n)
+    hi = np.clip(np.arange(n) - width // 2 + width, 0, n)
+    return (cum[hi] - cum[lo]) / np.maximum(hi - lo, 1)
 
 
 def view_decay(a):
@@ -1096,57 +1130,102 @@ def view_decay(a):
         if level[peak_ms] < -FLOOR_DB:
             rows.append({'band': label, 'under_floor': True})
             continue
+        if len(level) < width:                                     # it reads more at once than the sound lasts
+            rows.append({'band': label, 'too_short': True, 'reads_ms': width})
+            continue
         amp = np.sqrt(np.maximum(fine, 0.0))
-        top_ms = int(np.argmax(amp))
+        near = slice(max(0, peak_ms - width // 2), min(len(amp), peak_ms + width // 2 + 1))
+        top_ms = near.start + int(np.argmax(amp[near]))              # the fine peak of the same rise
         rise = top_ms
         while rise > 0 and amp[rise - 1] >= ATTACK_TO * amp[top_ms]:
             rise -= 1
         start = rise
         while start > 0 and amp[start - 1] >= ATTACK_FROM * amp[top_ms]:
             start -= 1
+        row = {'band': label, 'peak_s': round(peak_ms / 1000, 3), 'peak_db': round(float(level[peak_ms]), 1),
+               'attack_ms': rise - start, 'attack_s': [round(start / 1000, 3), round(rise / 1000, 3)]}
+        if start == 0 and amp[0] >= ATTACK_FROM * amp[top_ms]:      # its 10 % lies before the file, or in its first ms
+            row['starts_at'] = round(float(amp[0] / amp[top_ms]), 2)
         strikes = [round(e['time_s'] * 1000) for e in a.events_all
                    if label in e['bands'] and round(e['time_s'] * 1000) > peak_ms + MERGE_MS]
-        rows.append(dict({'band': label, 'peak_s': round(peak_ms / 1000, 3), 'peak_db': round(float(level[peak_ms]), 1),
-                          'attack_ms': rise - start}, **_decline(level, peak_ms, strikes[0] if strikes else None, width)))
+        rows.append(dict(row, **_decline(level, peak_ms, strikes[0] if strikes else None, width)))
     return dict(out, bands=rows)
 
 
 def _decline(level, peak_ms, strike_ms, width):
     """How a band's level, smoothed over `width` ms, falls from its peak (see view_decay): its slope, the time to fall 60
-    dB at it, and how the decline ends (before a later strike by half that width, where the smoothing starts to hear it)."""
+    dB at it, and how the decline ends. A fall from 5 to 25 dB under the peak (or as far as it goes) quicker than that
+    smoothing is faster than the band can show: abrupt, with no slope."""
     peak = float(level[peak_ms])
     end, kind = len(level), 'cut'
     under = np.flatnonzero(level[peak_ms:] < -FLOOR_DB)
     if under.size:
         end, kind = peak_ms + int(under[0]), 'floor'
-    if strike_ms is not None and strike_ms < end:
+    if strike_ms is not None and strike_ms < end:                  # before the smoothing starts to hear it
         end, kind = max(peak_ms + 1, strike_ms - width // 2), 'strike'
     part = level[peak_ms:end]
+    swell = _rises(part)
+    if swell is not None:
+        kind, rose_at = 'rises', peak_ms + swell
+        part = part[:int(np.argmin(part[:swell])) + 1]             # the decline ends at its low before the swell
     low = np.minimum.accumulate(part)
-    if peak - low[-1] < DECAY_MIN_DB:
-        return {'slope_db_s': None, 't60_s': None, 'extrapolated': None,
-                'end': {'kind': 'held'} if kind != 'strike' else {'kind': 'held', 'strike_s': round(strike_ms / 1000, 3)}}
-    first = int(np.argmax(part <= peak - DECAY_FIT_DB[0]))
-    stop = int(np.argmax(low <= low[-1] + LEVEL_OFF_DB))
-    if kind != 'floor' and len(part) - stop >= max(LEVEL_OFF_MS, LEVEL_OFF_SHARE * (stop - first)):
-        kind = 'levels_off'
-    last = len(part) - 1 if kind != 'levels_off' else stop
-    deep = np.flatnonzero(part[first:last + 1] <= peak - DECAY_FIT_DB[1])
-    last = first + int(deep[0]) if deep.size else last
-    t = np.arange(first, last + 1) / 1000
-    slope = float(np.polyfit(t, part[first:last + 1], 1)[0]) if last - first >= 2 else (
-        float(part[last] - part[first]) / max(last - first, 1) * 1000)
     ending = {'kind': kind}
     if kind == 'floor':
-        ending['at_s'] = round((peak_ms + len(part)) / 1000, 3)
+        ending['at_s'] = round(end / 1000, 3)
     elif kind == 'strike':
         ending['at_s'] = round(strike_ms / 1000, 3)
-    elif kind == 'levels_off':
-        ending.update(at_s=round((peak_ms + stop) / 1000, 3), db=round(float(part[stop]), 1))
-    else:
+    elif kind == 'rises':
+        ending['at_s'] = round(rose_at / 1000, 3)
+    if peak - low[-1] < DECAY_MIN_DB:
+        if kind != 'floor':                                        # a quiet band can fall under the floor first
+            ending = {'kind': 'held', **({'strike_s': ending['at_s']} if kind == 'strike' else {})}
+        return {'slope_db_s': None, 't60_s': None, 'extrapolated': None, 'abrupt': False, 'end': ending}
+    first = int(np.argmax(part <= peak - DECAY_FIT_DB[0]))
+    tenth = int(np.argmax(part <= peak - DECAY_MIN_DB))
+    early = DECAY_MIN_DB - DECAY_FIT_DB[0]                          # dB from the 5 dB to the 10 dB crossing
+    stop = _plateau(part, first, tenth, early / max(tenth - first, 1))
+    if stop is not None:
+        kind, part = 'levels_off', part[:stop + 1]
+        ending = {'kind': kind, 'at_s': round((peak_ms + stop) / 1000, 3), 'db': round(float(part[stop]), 1)}
+    elif kind == 'cut':
         ending['db'] = round(float(part[-1]), 1)
+    deep = np.flatnonzero(part[first:] <= peak - DECAY_FIT_DB[1])
+    last = first + int(deep[0]) if deep.size else len(part) - 1
+    if last - first <= width:                                      # faster than the band's smoothing can show
+        return {'slope_db_s': None, 't60_s': None, 'extrapolated': None, 'abrupt': True, 'end': ending}
+    t = np.arange(first, last + 1) / 1000
+    slope = float(np.polyfit(t, part[first:last + 1], 1)[0])
     return {'slope_db_s': round(slope, 1), 't60_s': round(-60 / slope, 3) if slope < 0 else None,
-            'extrapolated': bool(peak - low[-1] < 60), 'end': ending}
+            'extrapolated': bool(peak - float(np.min(part)) < 60), 'abrupt': False, 'end': ending}
+
+
+def _rises(part):
+    """Where a declining level rises again: its mean over RISE_MEAN_MS climbing DECAY_RISE_DB over its lowest since (a
+    swell; a sudden strike is an event), as an index into part, or None."""
+    w = RISE_MEAN_MS
+    if len(part) < 2 * w:
+        return None
+    cum = np.concatenate([[0.0], np.cumsum(part)])
+    means = (cum[w:] - cum[:-w]) / w
+    up = np.flatnonzero(means >= np.minimum.accumulate(means) + DECAY_RISE_DB)
+    return int(up[0]) + w // 2 if up.size else None
+
+
+def _plateau(part, first, tenth, early_db_ms):
+    """Where a decline levels off (an index into part, or None): from its 10 dB point on, the first place where the level's
+    mean over a stretch (LEVEL_OFF_MS, or LEVEL_OFF_SHARE of the time since its 5 dB point) changes, to the next such
+    stretch, by under LEVEL_OFF_FALL of what its early fall would take over it, and never more than LEVEL_OFF_DB; given
+    as where the level first comes within SETTLE_DB of that next stretch's mean."""
+    cum = np.concatenate([[0.0], np.cumsum(part)])
+    for t in range(tenth, len(part)):
+        w = max(LEVEL_OFF_MS, int(LEVEL_OFF_SHARE * (t - first)))
+        if t + 2 * w > len(part):
+            return None
+        settled = (cum[t + 2 * w] - cum[t + w]) / w
+        if abs(settled - (cum[t + w] - cum[t]) / w) <= min(LEVEL_OFF_FALL * early_db_ms * w, LEVEL_OFF_DB):
+            near = np.flatnonzero(part[t:t + 2 * w] <= settled + SETTLE_DB)
+            return t + int(near[0]) if near.size else t
+    return None
 
 
 def text_decay(z, name):
@@ -1165,17 +1244,24 @@ def text_decay(z, name):
         if row.get('under_floor'):
             body.append(f'  {row["band"]:<5} more than 60 dB under throughout')
             continue
+        if row.get('too_short'):
+            body.append(f'  {row["band"]:<5} too short for this band, which reads {row["reads_ms"]} ms at once')
+            continue
         end = row['end']
         how = {'floor': lambda: f'falls under the floor at {_secs(end["at_s"])} s',
                'levels_off': lambda: f'levels off at {end["db"]:g} dB from {_secs(end["at_s"])} s',
                'strike': lambda: f'a later strike at {_secs(end["at_s"])} s',
+               'rises': lambda: f'rises again from {_secs(end["at_s"])} s',
                'cut': lambda: f'cut by the file\'s end at {end["db"]:g} dB, still falling',
                'held': lambda: 'held: never 10 dB under its peak' +
                                (f' before a later strike at {_secs(end["strike_s"])} s' if 'strike_s' in end else '')}
+        extra = ('; faster than this band can show' if row['abrupt'] else '') + (
+            f'; already at {row["starts_at"]:.0%} in the file\'s first millisecond'
+            if 'starts_at' in row and row['attack_ms'] >= ATTACK_NOTE_MS else '')
         slope = '' if row['slope_db_s'] is None else f'{row["slope_db_s"]:.0f} dB/s'
         t60 = '' if row['t60_s'] is None else f'{row["t60_s"]:.2f} s' + ('~' if row['extrapolated'] else ' ')
         body.append(f'  {row["band"]:<5} {_secs(row["peak_s"])} s {_signed(row["peak_db"]):>6} {row["attack_ms"]:>4} ms '
-                    f'{slope:>11} {t60:>9}  {how[end["kind"]]()}')
+                    f'{slope:>11} {t60:>9}  {how[end["kind"]]()}{extra}')
     return _pages(head, body)
 
 

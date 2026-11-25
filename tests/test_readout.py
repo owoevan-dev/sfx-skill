@@ -854,11 +854,56 @@ class Compare(unittest.TestCase):
                                  readout.analyse(faded(tone(440, 0.5, 0.4)), RATE))       # 151 cents
         self.assertEqual((len(z['lines']['new']), len(z['lines']['gone']), z['lines']['changed']), (1, 1, []))
 
-    def test_what_both_hold_before_their_onsets_is_compared(self):
-        lead = 0.001 * np.random.default_rng(5).standard_normal(int(0.05 * RATE))       # under the onset's 40 dB
+    def test_what_both_hold_before_their_onsets_is_compared_over_the_same_stretch(self):
+        lead = 0.0015 * np.random.default_rng(5).standard_normal(int(0.05 * RATE))      # under the onset's 40 dB
         x = np.concatenate([lead, faded(tone(660, 0.3, 0.4))])
-        z = readout.view_compare(readout.analyse(x, RATE), readout.analyse(x * 0.5, RATE))
-        self.assertEqual(z['bands']['slices'][0]['label'], 'before')
+        before = readout.view_compare(readout.analyse(x, RATE), readout.analyse(x * 0.5, RATE))['bands']['slices'][0]
+        self.assertEqual((before['label'], {v for v in before['db'] if isinstance(v, int)}), ('before', {6}))
+        padded = np.concatenate([np.zeros(int(0.15 * RATE)), x])                       # more silence before the same lead
+        before = readout.view_compare(readout.analyse(padded, RATE), readout.analyse(x, RATE))['bands']['slices'][0]
+        self.assertEqual({v for v in before['db'] if isinstance(v, int)}, {0})
+
+    def test_the_floor_is_under_the_louder_sounds_loudest_cell_anywhere(self):
+        n = int(0.3 * RATE)
+        start = faded(0.04 * np.sin(2 * np.pi * 1000 * np.arange(n) / RATE)
+                      + 0.4 * 10 ** (-66 / 20) * np.sin(2 * np.pi * 4000 * np.arange(n) / RATE))
+        longer = np.concatenate([start, np.zeros(int(0.1 * RATE)), faded(tone(1000, 0.1, 0.4))])     # an accent after
+        z = readout.view_compare(readout.analyse(longer, RATE), readout.analyse(start, RATE))
+        self.assertTrue(all(v is None for v in column(z, '4k')), column(z, '4k'))       # 66 dB under that accent
+        self.assertEqual((readout._bound('>+', 5.73), readout._bound('<-', 5.73)), ('>+5', '<-5'))    # never more than is so
+
+    def test_loops_of_unequal_length_list_changes_only_where_both_play(self):
+        x = burst(burst(np.zeros(RATE), 0.2, hz=3000, ms=5), 0.83, hz=3000, ms=5)
+        x[int(0.7 * RATE):int(0.9 * RATE)] += faded(tone(1000, 0.2, 0.3))           # a line only the longer loop plays
+        z = readout.view_compare(readout.analyse(x, RATE, loop=True), readout.analyse(x[:int(0.6 * RATE)], RATE, loop=True))
+        listed = z['events']['new'] + z['events']['gone'] + z['lines']['new'] + z['lines']['gone']
+        self.assertTrue(all(item.get('time_s', item.get('start_s')) < 0.6 for item in listed), listed)
+
+    def test_lines_are_matched_where_they_sound_not_across_their_gaps(self):
+        click = burst(np.zeros(int(0.7 * RATE)), 0.0, hz=3000, ms=3, amp=0.4)            # one onset for both
+        a, b = readout.analyse(click, RATE), readout.analyse(click.copy(), RATE)
+
+        def line(pieces_ms):
+            return dict(hz=660.0, note='E5+2', start_s=pieces_ms[0][0] / 1000, end_s=pieces_ms[-1][1] / 1000, db=0.0,
+                        median_hz=660.0, from_hz=660.0, to_hz=660.0, low_hz=660.0, high_hz=660.0, mains=False,
+                        hzs=[660.0], covered_s=0.1, dbfs=-10.0, pieces=[[s * 48, e * 48] for s, e in pieces_ms])
+
+        a.lines, b.lines = [line([(255, 340), (485, 570)])], [line([(390, 435)])]      # the other sounds inside the gap
+        z = readout.view_compare(a, b)
+        self.assertEqual((z['lines']['changed'], len(z['lines']['new']), len(z['lines']['gone'])), ([], 1, 1))
+
+    def test_events_exactly_30_ms_apart_are_one_event_moved(self):
+        def hits(at):
+            return burst(burst(np.zeros(int(1.2 * RATE)), 0.0, hz=3000, ms=3, amp=0.4), at, hz=3000, ms=3, amp=0.4)
+
+        z = readout.view_compare(readout.analyse(hits(1.003), RATE), readout.analyse(hits(1.033), RATE))
+        self.assertEqual((z['events']['new'], z['events']['gone']), ([], []))
+        self.assertEqual([e['shift_ms'] for e in z['events']['changed']], [-30])
+
+    def test_a_line_changed_under_1_db_counts_as_the_same(self):
+        x = faded(tone(440, 0.5, 0.3))
+        z = readout.view_compare(readout.analyse(x * 10 ** (0.96 / 20), RATE), readout.analyse(x, RATE))
+        self.assertEqual((z['lines']['changed'], z['lines']['same']), ([], 1))
 
     def test_bands_above_either_files_reach_read_na(self):
         slow, fast = 22050, 48000
@@ -906,7 +951,7 @@ class Compare(unittest.TestCase):
     def test_a_comparison_fits_one_page(self):
         x = toned_noise(2.0, 4)
         z = readout.view_compare(readout.analyse(x * 0.7, RATE), readout.analyse(x, RATE))
-        self.assertEqual(len(readout.text_compare(z, 'noise', 'render_2', 'render_1')), 1)
+        within_a_page(self, readout.text_compare(z, 'noise', 'render_2', 'render_1'))
         freqs = 100 * 1.47 ** np.arange(12)
 
         def chord(cents):
@@ -914,7 +959,15 @@ class Compare(unittest.TestCase):
 
         z = readout.view_compare(readout.analyse(chord(20), RATE), readout.analyse(chord(0), RATE))
         self.assertGreater(len(z['lines']['changed']), readout.LIST_SHOWN)      # a busy change still fits a page
-        self.assertEqual(len(readout.text_compare(z, 'chord', 'render_2', 'render_1')), 1)
+        within_a_page(self, readout.text_compare(z, 'chord', 'render_2', 'render_1'))
+
+
+def within_a_page(test, pages):
+    """One page, which with the blank line after it keeps within the budget as printed."""
+    test.assertEqual(len(pages), 1)
+    printed = pages[0] + ['']
+    test.assertLessEqual(len(printed), readout.PAGE_LINES)
+    test.assertLessEqual(sum(len(line) + len(os.linesep) for line in printed), readout.PAGE_CHARS)
 
 
 def decaying(freq, rate_db_s, seconds, amp=0.4, at=0.0, total=None):
@@ -947,13 +1000,78 @@ class Decay(unittest.TestCase):
         self.assertAlmostEqual(high['end']['at_s'], 0.5, delta=0.06)
 
     def test_a_band_held_then_cut_has_no_fade(self):
-        x = np.zeros(int(0.8 * RATE))
-        x[:int(0.5 * RATE)] = tone(1000, 0.5, 0.4)
-        x[:240] *= np.linspace(0, 1, 240)                              # no fade out: cut at 0.5 s
+        for hz, label in ((1000, '1k'), (125, '125')):                 # a low band's smoothing would read as a fade
+            x = np.zeros(int(0.8 * RATE))
+            x[:int(0.5 * RATE)] = tone(hz, 0.5, 0.4)
+            x[:240] *= np.linspace(0, 1, 240)                          # no fade out: cut at 0.5 s
+            row = band(readout.view_decay(readout.analyse(x, RATE)), label)
+            with self.subTest(band=label):
+                self.assertEqual((row['slope_db_s'], row['t60_s'], row['abrupt']), (None, None, True))
+                self.assertEqual(row['end']['kind'], 'floor')
+                self.assertAlmostEqual(row['end']['at_s'], 0.5, delta=0.06)
+
+    def test_a_band_too_slow_for_a_short_sound_says_so(self):
+        n = int(0.067 * RATE)
+        t = np.arange(n) / RATE
+        z = readout.view_decay(readout.analyse(faded(0.3 * np.sin(2 * np.pi * 63 * t) + 0.3 * np.sin(2 * np.pi * 1000 * t)), RATE))
+        self.assertTrue(band(z, '63')['too_short'])                    # it reads 100 ms at once
+        self.assertNotIn('too_short', band(z, '1k'))
+        self.assertIn('too short', '\n'.join(readout.text_decay(z, 'toggle')[0]))
+
+    def test_a_fast_attack_from_silence_has_no_note_of_its_first_millisecond(self):
+        text = '\n'.join(readout.text_decay(readout.view_decay(readout.analyse(decaying(1000, 60, 1.0), RATE)), 'tap')[0])
+        self.assertNotIn('already', text)
+
+    def test_no_time_is_read_past_a_short_sounds_end(self):
+        n = int(0.067 * RATE)
+        t = np.arange(n) / RATE
+        z = readout.view_decay(readout.analyse(faded(0.3 * np.sin(2 * np.pi * 63 * t) + 0.3 * np.sin(2 * np.pi * 1000 * t)), RATE))
+        times = [row.get(k) for row in z['bands'] for k in ('peak_s',)] + [row.get('end', {}).get('at_s') for row in z['bands']]
+        self.assertTrue(all(v is None or v <= z['seconds'] for v in times), times)
+
+    def test_the_attack_leads_to_the_reported_peak(self):
+        x = np.zeros(RATE)
+        x[int(0.2 * RATE):int(0.5 * RATE)] = faded(tone(1000, 0.3, 0.24), 50)          # a broad hump
+        x[int(0.7 * RATE):int(0.702 * RATE)] = tone(1000, 0.002, 0.4)                  # and a 2 ms spike, higher at 3 ms
         row = band(readout.view_decay(readout.analyse(x, RATE)), '1k')
-        self.assertLess(row['t60_s'], 0.06)
+        self.assertLess(row['peak_s'], 0.6)
+        self.assertLessEqual(row['attack_s'][1], row['peak_s'] + 0.01)
+
+    def test_a_band_already_sounding_when_the_file_starts_says_so(self):
+        t = np.arange(int(0.6 * RATE)) / RATE
+        x = 0.4 * np.minimum(0.47 + t / 0.3 * 0.53, 1.0) * np.sin(2 * np.pi * 1000 * t)
+        z = readout.view_decay(readout.analyse(x, RATE))
+        self.assertAlmostEqual(band(z, '1k')['starts_at'], 0.47, delta=0.08)
+        self.assertIn('already', '\n'.join(readout.text_decay(z, 'rec')[0]))
+
+    def test_a_decline_into_a_sustain_levels_off_even_when_the_sustain_is_cut_later(self):
+        t = np.arange(int(1.5 * RATE)) / RATE
+        env = np.maximum(10 ** (-60 * t / 20), 10 ** (-15 / 20))
+        env[t >= 1.2] = 0.0
+        x = 0.4 * env * np.sin(2 * np.pi * 1000 * t)
+        x[:96] *= np.linspace(0, 1, 96)
+        row = band(readout.view_decay(readout.analyse(x, RATE)), '1k')
+        self.assertEqual(row['end']['kind'], 'levels_off')
+        self.assertAlmostEqual(row['end']['db'], -15, delta=3)
+        self.assertAlmostEqual(row['slope_db_s'], -60, delta=6)
+
+    def test_a_dip_that_swells_again_rises_and_does_not_level_off(self):
+        t = np.arange(RATE) / RATE
+        db = np.where(t < 0.4, -62.5 * t, np.minimum(-25 + (t - 0.4) * 50, -10))       # down 25 dB, back up to -10
+        x = 0.4 * 10 ** (db / 20) * np.sin(2 * np.pi * 1000 * t)
+        x[:96] *= np.linspace(0, 1, 96)
+        row = band(readout.view_decay(readout.analyse(x, RATE)), '1k')
+        self.assertEqual(row['end']['kind'], 'rises')
+        self.assertAlmostEqual(row['end']['at_s'], 0.52, delta=0.06)
+
+    def test_a_slow_fade_cut_by_the_files_end_does_not_level_off(self):
+        self.assertEqual(band(readout.view_decay(readout.analyse(decaying(1000, 20, 0.85), RATE)), '1k')['end']['kind'], 'cut')
+
+    def test_a_quiet_band_that_falls_under_the_floor_says_so(self):
+        faint = np.zeros(int(0.5 * RATE))
+        faint[:int(0.1 * RATE)] = faded(tone(8000, 0.1, 0.4 * 10 ** (-55 / 20)))
+        row = band(readout.view_decay(readout.analyse(faded(tone(250, 0.5, 0.4)) + faint, RATE)), '8k')
         self.assertEqual(row['end']['kind'], 'floor')
-        self.assertAlmostEqual(row['end']['at_s'], 0.5, delta=0.01)
 
     def test_a_decline_that_reaches_a_noise_floor_levels_off_there(self):
         noise = 0.0052 * np.random.default_rng(6).standard_normal(int(1.5 * RATE))    # about 50 dB under the tone in 1 kHz
@@ -1014,7 +1132,8 @@ class Decay(unittest.TestCase):
     def test_the_decay_fits_one_page(self):
         z = readout.view_decay(readout.analyse(decaying(1000, 60, 1.5) + 0.01 * toned_noise(1.5), RATE))
         pages = readout.text_decay(z, 'bell')
-        self.assertEqual(len(pages), 1)
+        within_a_page(self, pages)
+        self.assertEqual(len(pages[0]), 2 + len(z['bands']))          # the head, the columns, one row a band
         self.assertIn('slope', '\n'.join(pages[0]))
 
 

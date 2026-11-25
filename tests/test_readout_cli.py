@@ -267,6 +267,15 @@ class CompareCommand(unittest.TestCase):
         self.assertEqual([(r['sound'], 'error' in r) for r in rows], [('beep', False), ('air', True)])
         self.assertEqual([round(line['cents']) for line in rows[0]['lines']['changed']], [39])
 
+    def test_a_sound_only_the_other_render_has_is_named(self):
+        args = ('readout', self.base / 'render_2', '--view', 'compare', '--against', self.base / 'render_1', '--sound', 'air')
+        proc = run(*args)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn('only in render_1: air', proc.stdout)
+        proc = run(*args, '--json')
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(json.loads(proc.stdout), [{'sound': 'air', 'compare': True, 'error': 'only in render_1'}])
+
     def test_two_wav_files_are_compared_directly(self):
         x = (0.3 * np.sin(2 * np.pi * 440 * np.arange(24000) / 48000)).astype(np.float32)
         loud, quiet = self.base / 'loud.wav', self.base / 'quiet.wav'

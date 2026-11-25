@@ -361,7 +361,7 @@ def _readout_compare(args):
     if this.is_dir() != other.is_dir():
         print('readout: compare two render folders or two WAV files')
         return 1
-    if not mine:
+    if not mine and not theirs:
         print('readout: no sound matched')
         return 1
     this_name, other_name = (this.name, other.name) if this.name != other.name else (str(this), str(other))
