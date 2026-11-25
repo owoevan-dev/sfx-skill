@@ -1,6 +1,7 @@
 """The readout: a sound as numbers an agent reads (octave bands over time, tonal lines, events, roll-off)."""
 import json
 import math
+import os
 import unittest
 
 import numpy as np
@@ -570,6 +571,12 @@ class ZoomReview(unittest.TestCase):
         self.assertLessEqual(abs(cell(one, 300, '31') - cell(two, 308, '31')), 1)
         self.assertEqual((one['coarse_ms']['31'], one['coarse_ms']['250']), (90, 12))
         self.assertNotIn('4k', one['coarse_ms'])
+        x = np.zeros(RATE)
+        x[int(0.35 * RATE):] = faded(tone(40, 0.65, 0.4))              # comes in 50 ms into the 90 ms cell
+        b = readout.analyse(x, RATE)
+        fine, whole = readout.view_zoom(b, 0.3, 0.301, slice_ms=1), readout.view_zoom(b, 0.3, 0.39, slice_ms=90)
+        self.assertIsInstance(cell(fine, 300, '31'), int)
+        self.assertEqual(cell(fine, 300, '31'), cell(whole, 300, '31'))     # the same 90 ms, read either way
 
     def test_a_steady_low_loop_reads_0_db(self):
         z = readout.view_zoom(readout.analyse(tone(30, 0.9, 0.4), RATE, loop=True), 0.1, 0.5)
@@ -577,10 +584,10 @@ class ZoomReview(unittest.TestCase):
 
     def test_a_loop_a_fraction_of_a_millisecond_long_wraps_at_its_true_length(self):
         x = np.zeros(4824)                                            # 100.5 ms
-        x[:24] = 0.3 * np.sin(2 * np.pi * 8000 * np.arange(24) / RATE)
+        x[:48] = 0.3 * np.sin(2 * np.pi * 8000 * np.arange(48) / RATE)   # its first millisecond comes back at 100.5-101.5
         z = readout.view_zoom(readout.analyse(x, RATE, loop=True), 0.095, 0.105, slice_ms=1)
-        self.assertIsInstance(cell(z, 100, '8k'), int)
-        self.assertIsNone(cell(z, 101, '8k'))
+        self.assertEqual([isinstance(cell(z, ms, '8k'), int) for ms in (99, 100, 101, 102)], [False, True, True, False])
+        self.assertEqual([e['time_s'] for e in z['events']], [0.1005])
 
     def test_the_window_snaps_to_whole_milliseconds_and_keeps_out_what_lies_outside(self):
         ping = faded(tone(3000, 0.01, 0.5), 1)
@@ -625,23 +632,34 @@ class ZoomReview(unittest.TestCase):
         self.assertEqual(len(readout.view_zoom(a, 0.35, 0.36)['lines']), 1)
 
     def test_third_octave_cells_follow_the_signal(self):
-        z = readout.view_zoom(readout.analyse(faded(tone(1000, 0.5, 0.4)), RATE), 0.1, 0.2, bands='third')
-        self.assertIsInstance(cell(z, 100, '1k'), int)
-        self.assertIsNone(cell(z, 100, '500'))
-        self.assertIsNone(cell(z, 100, '2k'))
+        z = readout.view_zoom(readout.analyse(faded(tone(1250, 0.5, 0.4)), RATE), 0.1, 0.2, bands='third')
+        self.assertIsInstance(cell(z, 100, '1.25k'), int)               # inside the 1 kHz octave, outside its third
+        self.assertIsNone(cell(z, 100, '1k'))
+        self.assertIsNone(cell(z, 100, '1.6k'))
 
     def test_crossfades_wider_than_the_band_spacing_are_refused(self):
         with self.assertRaises(ValueError):
             readout.band_weights(np.geomspace(20, 20000, 100), (800.0, 1000.0, 1250.0), 1.0)
 
     def test_pages_leave_room_for_a_blank_line_and_long_page_numbers(self):
-        for body in (['x'] * 100, ['x' * 122] * 2100):                # pages full by lines; by characters past page 99
-            pages = readout._pages(['h'], body)
-            self.assertGreater(len(pages), 3)
+        end = len(os.linesep)                                          # as printed: two characters on Windows
+
+        def note(digits):
+            return len(f'  page {"9" * digits} of {"9" * digits}: --page {"9" * digits} goes on')
+
+        def filling(room, ends, times):                                # lines that fill room exactly, each with its end
+            k = room // (120 + ends)
+            return (['x' * 120] * k + ['y' * (room - k * (120 + ends) - ends)]) * times
+
+        under_two = readout.PAGE_CHARS - (1 + end) - end - (note(2) + end)     # a page's body under a two-digit note
+        under_one = readout.PAGE_CHARS - (1 + 1) - 1 - (note(3) + 1)            # ... and under one-character line ends
+        for body in (['x'] * 100, filling(under_two, end, 110), filling(under_one, 1, 30)):
+            pages = readout._pages(['h'], body)                        # full by lines; by characters past page 99; by
+            self.assertGreater(len(pages), 3)                          # characters where a line's end is two
             for page in pages:
                 printed = page + ['']                                  # sfx.py prints a blank line after each page
                 self.assertLessEqual(len(printed), readout.PAGE_LINES)
-                self.assertLessEqual(len('\n'.join(printed)) + 1, readout.PAGE_CHARS)
+                self.assertLessEqual(sum(len(line) + end for line in printed), readout.PAGE_CHARS)
 
     def test_bad_windows_slices_and_channels_are_refused_even_for_silence(self):
         silent = readout.analyse(np.zeros(RATE), RATE)
@@ -649,6 +667,80 @@ class ZoomReview(unittest.TestCase):
                              ((0.1, math.inf), {})]:
             with self.subTest(args=args, kwargs=kwargs), self.assertRaises(ValueError):
                 readout.view_zoom(silent, *args, **kwargs)
+
+
+class ZoomReview2(unittest.TestCase):
+    """Cases from the zoom's second review."""
+
+    def test_a_loops_reference_holds_only_cells_a_window_can_reach(self):
+        x = np.zeros(4812)                                            # 100.25 ms: each turn falls differently on the grid
+        start = int(round(0.0805 * RATE))
+        x[start:start + 48] = 0.3 * np.sin(2 * np.pi * 8000 * np.arange(48) / RATE)
+        z = readout.view_zoom(readout.analyse(x, RATE, loop=True), 0.1, 0.2, slice_ms=1)
+        self.assertEqual(cell(z, 181, '8k'), 0)                         # the third turn's whole millisecond is out of reach
+
+    def test_a_window_is_checked_as_asked_before_it_is_snapped(self):
+        quiet = readout.analyse(np.zeros(RATE), RATE)
+        for args in ((0.0204, 0.0204), (0.0208, 0.0202)):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                readout.view_zoom(quiet, *args)
+        short = readout.analyse(burst(np.zeros(4812), 0.05), RATE, loop=True)          # 100.25 ms
+        with self.assertRaises(ValueError):
+            readout.view_zoom(short, 0.1003, 0.12)                      # starts past the loop's end
+        turn = readout.analyse(burst(np.zeros(int(0.12 * RATE)), 0.02, hz=3000, ms=5), RATE, loop=True)
+        z = readout.view_zoom(turn, 0.0205, 0.1405)                     # exactly one turn
+        self.assertEqual((z['from_s'], z['to_s']), (0.02, 0.145))
+
+    def test_a_window_past_a_one_shots_end_is_refused_and_its_last_row_ends_with_the_sound(self):
+        a = readout.analyse(burst(np.zeros(4812), 0.05), RATE)        # 100.25 ms
+        with self.assertRaises(ValueError):
+            readout.view_zoom(a, 0.1003, 0.1008)
+        z = readout.view_zoom(a, 0.09, 0.2, slice_ms=1)
+        self.assertEqual((z['to_s'], z['bands']['slices'][-1]['to_ms']), (0.10025, 100.25))
+
+    def test_a_silent_sounds_window_is_named(self):
+        z = readout.view_zoom(readout.analyse(np.zeros(RATE), RATE), 0.2, 0.3)
+        self.assertEqual((z['silent'], z['from_s'], z['to_s']), (True, 0.2, 0.3))
+        self.assertIn('0.200-0.300 s', readout.text_zoom(z, 'quiet')[0][0])
+
+    def test_a_loops_events_and_lines_are_listed_at_each_time_they_come_in_the_window(self):
+        a = readout.analyse(burst(np.zeros(int(0.12 * RATE)), 0.02, hz=3000, ms=5), RATE, loop=True)
+        self.assertEqual([e['time_s'] for e in readout.view_zoom(a, 0.110, 0.141)['events']], [0.14])
+        self.assertEqual([e['time_s'] for e in readout.view_zoom(a, 0.01, 0.13, slice_ms=50)['events']], [0.02, 0.14])
+        x = np.zeros(RATE // 2)
+        x[int(0.05 * RATE):int(0.25 * RATE)] = faded(tone(1000, 0.2, 0.4))
+        b = readout.analyse(x, RATE, loop=True)
+        lines = readout.view_zoom(b, 0.4, 0.9)['lines']
+        self.assertEqual([line['start_s'] for line in lines], [round(b.lines[0]['start_s'] + 0.5, 6)])
+
+    def test_a_line_starting_inside_a_millisecond_is_listed_there(self):
+        rate = 44100                                                   # frames fall between whole milliseconds
+        x = np.zeros(int(0.4 * rate))
+        n = int(0.2 * rate)
+        x[int(0.1 * rate):int(0.1 * rate) + n] = 0.4 * np.sin(2 * np.pi * 1000 * np.arange(n) / rate)
+        a = readout.analyse(x, rate)
+        start_ms = a.lines[0]['pieces'][0][0] * 1000
+        self.assertGreaterEqual(start_ms % 1, 0.5)
+        z = readout.view_zoom(a, math.floor(start_ms) / 1000, (math.floor(start_ms) + 1) / 1000, slice_ms=1)
+        self.assertEqual(len(z['lines']), 1)
+
+    def test_one_channels_mains_label_counts_that_channels_active_part(self):
+        left = np.zeros(2 * RATE)
+        left[int(0.1 * RATE):int(0.8 * RATE)] = faded(tone(60, 0.7, 0.4))
+        a = readout.analyse(np.stack([left, faded(tone(1000, 2.0, 0.4))], axis=1), RATE)
+        lines = readout.view_zoom(a, 0.2, 0.7, channel='left')['lines']
+        self.assertTrue(any(line['mains'] for line in lines), lines)
+
+    def test_changes_of_no_width_are_refused(self):
+        for cross in (0.0, -0.1, math.nan):
+            with self.subTest(cross=cross), self.assertRaises(ValueError):
+                readout.band_weights(np.geomspace(20, 20000, 100), (800.0, 1000.0, 1250.0), cross)
+
+    def test_huge_values_are_clipped_or_refused_in_a_sentence(self):
+        a = readout.analyse(burst(np.zeros(RATE), 0.3), RATE)
+        self.assertEqual(readout.view_zoom(a, 0.0, 1e308)['to_s'], 1.0)      # a one-shot's window ends with the sound
+        with self.assertRaises(ValueError):
+            readout.view_zoom(a, 0.1, 0.2, slice_ms=2 ** 64)             # a slice longer than the window
 
 
 if __name__ == '__main__':

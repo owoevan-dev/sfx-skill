@@ -239,6 +239,12 @@ def cmd_readout(args):
     if args.variant is not None and (args.all_variants or args.variant < 1):
         print('readout: --variant takes one variant, numbered from 1, instead of --all-variants')
         return 1
+    if zoom:                                            # what no sound decides is said once
+        try:
+            readout.zoom_settings(args.from_s, args.to_s, args.bands, hz, args.channel, args.slice_ms)
+        except ValueError as error:
+            print(f'readout: {error}')
+            return 1
     jobs = []
     if target.is_dir():
         if not (target / 'resolved.json').is_file():
@@ -290,9 +296,13 @@ def cmd_readout(args):
             try:
                 result = readout.view_zoom(analysis, args.from_s, args.to_s, bands=args.bands, hz=hz, channel=args.channel,
                                            slice_ms=args.slice_ms)
-            except ValueError as error:
-                print(f'readout: {name}: {error}')
-                return 1
+            except ValueError as error:                 # this sound's own (too short for the window, one channel)
+                if args.json:
+                    found.append({'sound': name, 'zoom': True, 'error': str(error)})
+                else:
+                    print(f'readout: {name}: {error}')
+                    print()
+                continue
         else:
             result = readout.view_overview(analysis)
         if args.json:
@@ -311,11 +321,11 @@ def cmd_readout(args):
             print()
     if args.json:
         print(json.dumps(found, indent=1, allow_nan=False))
-    elif zoom:                                          # each page explains itself: nothing more to fit in
+        return 0 if any('error' not in row for row in found) else 1
+    if zoom:                                            # each page explains itself: nothing more to fit in
         return 0 if shown else 1
-    else:
-        print('Cells: each octave band\'s power over each slice, in dB under the loudest cell. Tonal lines are steady '
-              'pitches; events are sudden rises. The spectrogram command draws the same sound as a picture.')
-        print('Look closer: --from S --to S zooms in on a window (finer slices, every line and event in it; --bands third, '
-              '--hz LOW-HIGH, --channel left|right; --variant N reads another variant).')
+    print('Cells: each octave band\'s power over each slice, in dB under the loudest cell. Tonal lines are steady '
+          'pitches; events are sudden rises. The spectrogram command draws the same sound as a picture.')
+    print('Look closer: --from S --to S zooms in on a window (finer slices, every line and event in it; --bands third, '
+          '--hz LOW-HIGH, --channel left|right; --variant N reads another variant).')
     return 0

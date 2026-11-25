@@ -158,8 +158,8 @@ def build_parser():
     ro.add_argument('--from', dest='from_s', type=float, metavar='S',
                     help='zoom in: the window from this second of the file (with --to); every line and event in it is listed')
     ro.add_argument('--to', dest='to_s', type=float, metavar='S', help='zoom in: ... to this second')
-    ro.add_argument('--slice-ms', type=int, help='zoom: slices of this many ms (default: the finest of 1, 2, 5, 10, 20, 50 '
-                    'and 100 that gives at most 40 rows)')
+    ro.add_argument('--slice-ms', type=int, help='zoom: slices of this many ms, at most the window (default: the finest of 1, '
+                    '2, 5, 10, 20, 50 and 100 that gives at most 40 rows; 100 for a window over 4 s)')
     ro.add_argument('--bands', choices=('octave', 'third'), default='octave', help='zoom: octave or third-octave bands')
     ro.add_argument('--hz', metavar='LOW-HIGH', help='zoom: only the bands whose centre lies in this range, such as 500-4000')
     ro.add_argument('--channel', choices=('left', 'right'), help='zoom: one channel of a stereo sound')

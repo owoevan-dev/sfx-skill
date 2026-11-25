@@ -27,6 +27,12 @@ def run(*args):
                           encoding='utf-8', errors='replace', env=helpers.child_env(), timeout=300)
 
 
+def printed(*args):
+    """What sfx.py writes, line ends as they are (CRLF on Windows)."""
+    return subprocess.run([sys.executable, str(SFX), *map(str, args)], capture_output=True, env=helpers.child_env(),
+                          timeout=300).stdout.decode('utf-8', 'replace')
+
+
 def vlq(value):
     out = [value & 0x7F]
     value >>= 7
@@ -142,17 +148,42 @@ class ReadoutCommand(unittest.TestCase):
         proc = run(*args)                                              # the beep fills fewer pages than the air
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn('readout: beep fills', proc.stdout)
-        self.assertIn('air: 0-2 s in slices of 10 ms', proc.stdout)
+        self.assertIn('air: 0.000-2.000 s in slices of 10 ms', proc.stdout)
         self.assertIn('page 5 of', proc.stdout)
         self.assertEqual(run(*args, '--sound', 'beep').returncode, 1)
 
+    def test_a_window_one_sound_lacks_is_said_and_the_others_still_print(self):
+        proc = run('readout', self.render, '--from', '0.6', '--to', '0.9', '--slice-ms', '5', '--page', '2')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)  # the beep is shorter than 0.6 s
+        self.assertIn('readout: beep:', proc.stdout)
+        self.assertIn('page 2 of', proc.stdout)
+        rows = json.loads(run('readout', self.render, '--from', '0.6', '--to', '0.9', '--json').stdout)
+        self.assertEqual([(r['sound'], 'error' in r) for r in rows], [('beep', True), ('air', False)])
+        alone = run('readout', self.render, '--sound', 'beep', '--from', '0.6', '--to', '0.9', '--json')
+        self.assertEqual((alone.returncode, 'error' in json.loads(alone.stdout)[0]), (1, True))   # no sound read
+        once = run('readout', self.render, '--from', '0', '--to', '0.1', '--slice-ms', '0')
+        self.assertEqual((once.returncode, once.stdout.count('at least 1 ms')), (1, 1))   # said once, not per sound
+
+    def test_huge_values_end_with_the_sound_or_are_refused_in_a_sentence(self):
+        proc = run('readout', self.render, '--sound', 'beep', '--from', '0', '--to', '1e308')
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        proc = run('readout', self.render, '--sound', 'beep', '--from', '0', '--to', '0.1', '--slice-ms', str(2 ** 64))
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn('slice', proc.stdout)
+        self.assertNotIn('Traceback', proc.stdout + proc.stderr)
+
+    def test_the_help_says_how_a_long_window_is_sliced(self):
+        self.assertIn('100 for a window over 4 s', ' '.join(run('readout', '--help').stdout.split()))
+
     def test_a_printed_page_keeps_within_the_budget(self):
-        for extra in ((), ('--bands', 'third'), ('--hz', '1000-1000', '--slice-ms', '1')):
-            with self.subTest(extra=extra):
-                proc = run('readout', self.render, '--sound', 'air', '--from', '0', '--to', '2', *extra, '--page', '2')
-                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-                self.assertLessEqual(len(proc.stdout.splitlines()), 25)
-                self.assertLessEqual(len(proc.stdout), 2500)
+        for extra in ((), ('--bands', 'third'), ('--hz', '1000-1000', '--slice-ms', '1'),
+                      ('--slice-ms', '1', '--bands', 'third', '--hz', '800-20000')):
+            for page in ('1', '2'):
+                with self.subTest(extra=extra, page=page):
+                    out = printed('readout', self.render, '--sound', 'air', '--from', '0', '--to', '2', *extra,
+                                  '--page', page)
+                    self.assertLessEqual(out.count('\n'), 25)
+                    self.assertLessEqual(len(out), 2500)                # as printed: CRLF on Windows counts twice
 
     def test_bad_zoom_values_are_refused_in_a_sentence(self):
         window = ('--from', '0', '--to', '0.1')
