@@ -1,5 +1,6 @@
 """The readout: a sound as numbers an agent reads (octave bands over time, tonal lines, events, roll-off)."""
 import json
+import math
 import unittest
 
 import numpy as np
@@ -468,6 +469,8 @@ class Zoom(unittest.TestCase):
         self.assertEqual(z['slice_ms'], 5)                            # 1 ms would give 100 rows and 2 ms 50
         self.assertLessEqual(len(rows), readout.ZOOM_ROWS)
         self.assertEqual((rows[0]['from_ms'], rows[-1]['to_ms']), (200, 300))
+        z = readout.view_zoom(readout.analyse(faded(tone(1000, 1.0, 0.4)), RATE), 0.2, 0.307, slice_ms=10)
+        self.assertEqual((z['to_s'], z['bands']['slices'][-1]['to_ms']), (0.31, 310))     # the last slice is whole
 
     def test_a_band_never_shows_finer_than_it_can_resolve(self):
         z = readout.view_zoom(readout.analyse(faded(tone(40, 1.0, 0.4)), RATE), 0.3, 0.33, slice_ms=1)
@@ -530,10 +533,122 @@ class Zoom(unittest.TestCase):
         rows = z['bands']['slices']
         self.assertEqual((rows[0]['from_ms'], rows[-1]['to_ms']), (1900, 2100))
         self.assertTrue(all(isinstance(row['db'][readout.LABELS.index('63')], (int, str)) for row in rows))
+        x = burst(np.zeros(2 * RATE), 0.0, hz=4000)                    # a burst at the loop's start comes back after its end
+        z = readout.view_zoom(readout.analyse(x, RATE, loop=True), 1.9, 2.1)
+        self.assertIsNone(cell(z, 1995, '4k'))
+        self.assertIsInstance(cell(z, 2000, '4k'), int)
 
     def test_an_empty_window_is_refused(self):
         with self.assertRaises(ValueError):
             readout.view_zoom(readout.analyse(faded(tone(440, 0.5)), RATE), 0.3, 0.3)
+
+
+def burst(x, at_s, hz=8000, ms=10, amp=0.3, rate=RATE):
+    n, start = int(ms * rate / 1000), int(round(at_s * rate))
+    x[start:start + n] += faded(amp * np.sin(2 * np.pi * hz * np.arange(n) / rate), 1)
+    return x
+
+
+def cell(z, from_ms, band):
+    row = next(r for r in z['bands']['slices'] if r['from_ms'] == from_ms)
+    return row['db'][z['bands']['labels'].index(band)]
+
+
+class ZoomReview(unittest.TestCase):
+    """Cases from the zoom's first review."""
+
+    def test_a_cell_reads_the_same_whatever_window_holds_it(self):
+        x = burst(burst(np.zeros(int(0.6 * RATE)), 0.105, amp=0.6), 0.305)   # the louder burst off the 10 ms grid
+        a = readout.analyse(x, RATE)
+        early = readout.view_zoom(a, 0.095, 0.395, slice_ms=10)              # holds the louder burst whole
+        late = readout.view_zoom(a, 0.295, 0.595, slice_ms=10)               # does not hold it
+        self.assertEqual(cell(early, 305, '8k'), cell(late, 305, '8k'))
+
+    def test_a_coarse_band_is_measured_over_its_whole_span(self):
+        a = readout.analyse(faded(tone(40, 1.0, 0.4)), RATE)
+        one, two = readout.view_zoom(a, 0.3, 0.301, slice_ms=1), readout.view_zoom(a, 0.308, 0.309, slice_ms=1)
+        self.assertLessEqual(abs(cell(one, 300, '31') - cell(two, 308, '31')), 1)
+        self.assertEqual((one['coarse_ms']['31'], one['coarse_ms']['250']), (90, 12))
+        self.assertNotIn('4k', one['coarse_ms'])
+
+    def test_a_steady_low_loop_reads_0_db(self):
+        z = readout.view_zoom(readout.analyse(tone(30, 0.9, 0.4), RATE, loop=True), 0.1, 0.5)
+        self.assertEqual(max(v for r in z['bands']['slices'] for v in r['db'] if isinstance(v, int)), 0)
+
+    def test_a_loop_a_fraction_of_a_millisecond_long_wraps_at_its_true_length(self):
+        x = np.zeros(4824)                                            # 100.5 ms
+        x[:24] = 0.3 * np.sin(2 * np.pi * 8000 * np.arange(24) / RATE)
+        z = readout.view_zoom(readout.analyse(x, RATE, loop=True), 0.095, 0.105, slice_ms=1)
+        self.assertIsInstance(cell(z, 100, '8k'), int)
+        self.assertIsNone(cell(z, 101, '8k'))
+
+    def test_the_window_snaps_to_whole_milliseconds_and_keeps_out_what_lies_outside(self):
+        ping = faded(tone(3000, 0.01, 0.5), 1)
+        x = np.zeros(int(2.6 * RATE))
+        for k in range(12):
+            start = int((0.05 + 0.2 * k) * RATE)
+            x[start:start + len(ping)] += ping
+        a = readout.analyse(x, RATE)
+        self.assertEqual([e['time_s'] for e in readout.view_zoom(a, 0.4, 0.8)['events']], [0.45, 0.65])
+        z = readout.view_zoom(a, 0.2504, 0.6504)                       # every millisecond the window touches is read
+        self.assertEqual(z['from_s'], 0.25)                            # and shown as the window it reads
+        self.assertEqual([e['time_s'] for e in z['events']], [0.25, 0.45, 0.65])
+
+    def test_a_loops_repeat_counts_only_inside_the_window(self):
+        a = readout.analyse(burst(np.zeros(int(0.12 * RATE)), 0.02, hz=3000, ms=5), RATE, loop=True)
+        self.assertEqual(readout.view_zoom(a, 0.110, 0.140)['events'], [])
+        self.assertEqual(len(readout.view_zoom(a, 0.110, 0.141)['events']), 1)
+
+    def test_one_channel_lists_only_its_own_lines_and_events(self):
+        right = np.zeros(int(0.6 * RATE))
+        right[int(0.3 * RATE):] = faded(tone(1000, 0.3, 0.4))
+        a = readout.analyse(np.stack([np.zeros_like(right), right], axis=1), RATE)
+        left = readout.view_zoom(a, 0.2, 0.5, channel='left')
+        self.assertEqual((left['lines'], left['events']), ([], []))
+        both = readout.view_zoom(a, 0.2, 0.5, channel='right')
+        self.assertTrue(both['lines'] and both['events'])
+
+    def test_one_channel_is_cut_off_by_its_own_power(self):
+        left = np.zeros(int(0.6 * RATE))
+        left[int(0.3 * RATE)] = 0.5                                    # a click out of digital silence
+        right = np.random.default_rng(9).standard_normal(len(left)) * 0.2
+        z = readout.view_zoom(readout.analyse(np.stack([left, right], axis=1), RATE), 0.29, 0.3, slice_ms=1,
+                              channel='left', hz=(4000, 16000))        # bands that read 1 ms slices as they are
+        self.assertTrue(all(v is None for row in z['bands']['slices'] for v in row['db']), z['bands']['slices'])
+
+    def test_a_line_is_not_listed_inside_its_silent_gap(self):
+        x = np.zeros(int(0.5 * RATE))
+        x[int(0.05 * RATE):int(0.2 * RATE)] = faded(tone(1000, 0.15, 0.4))
+        x[int(0.3 * RATE):int(0.45 * RATE)] = faded(tone(1000, 0.15, 0.4))
+        a = readout.analyse(x, RATE)
+        self.assertEqual(readout.view_zoom(a, 0.245, 0.255)['lines'], [])
+        self.assertEqual(len(readout.view_zoom(a, 0.35, 0.36)['lines']), 1)
+
+    def test_third_octave_cells_follow_the_signal(self):
+        z = readout.view_zoom(readout.analyse(faded(tone(1000, 0.5, 0.4)), RATE), 0.1, 0.2, bands='third')
+        self.assertIsInstance(cell(z, 100, '1k'), int)
+        self.assertIsNone(cell(z, 100, '500'))
+        self.assertIsNone(cell(z, 100, '2k'))
+
+    def test_crossfades_wider_than_the_band_spacing_are_refused(self):
+        with self.assertRaises(ValueError):
+            readout.band_weights(np.geomspace(20, 20000, 100), (800.0, 1000.0, 1250.0), 1.0)
+
+    def test_pages_leave_room_for_a_blank_line_and_long_page_numbers(self):
+        for body in (['x'] * 100, ['x' * 122] * 2100):                # pages full by lines; by characters past page 99
+            pages = readout._pages(['h'], body)
+            self.assertGreater(len(pages), 3)
+            for page in pages:
+                printed = page + ['']                                  # sfx.py prints a blank line after each page
+                self.assertLessEqual(len(printed), readout.PAGE_LINES)
+                self.assertLessEqual(len('\n'.join(printed)) + 1, readout.PAGE_CHARS)
+
+    def test_bad_windows_slices_and_channels_are_refused_even_for_silence(self):
+        silent = readout.analyse(np.zeros(RATE), RATE)
+        for args, kwargs in [((0.3, 0.2), {}), ((0.1, 0.2), {'channel': 'right'}), ((0.1, 0.2), {'slice_ms': 0}),
+                             ((0.1, math.inf), {})]:
+            with self.subTest(args=args, kwargs=kwargs), self.assertRaises(ValueError):
+                readout.view_zoom(silent, *args, **kwargs)
 
 
 if __name__ == '__main__':

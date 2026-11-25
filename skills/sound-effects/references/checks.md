@@ -76,18 +76,24 @@ this skill's choice.
 | events | sudden rises: a millisecond in a band at least 12 dB over that band's loudest millisecond 5 to 25 ms before (relative rises in bands: Klapuri 1999; Bello et al. 2005). A start from silence (the band more than 80 dB under the loudest level in the 5 to 25 ms before) counts in any band; a rise in one band alone must reach 20 dB, since one narrow band swells by chance. Only rises within 40 dB of the loudest band level count. Rises within 30 ms are one event, in a loop across its join too | time, rise and the bands that rose; at most ten, the largest, with the number found when there are more. The main one is the event nearest the sound's `peak_at` when the project declares one (round the join for a loop), else the last to start before the loudest millisecond (or within 5 ms after it) with no silence between them (30 ms in which no band comes within 40 dB of the loudest band level), counted round a loop's join; a sound that swells into its loudest moment has none. Another event late in a one-shot is a second strike, a click or a noise in a recording: decide which from the design |
 | roll-off | the frequency under which 95 % of the active part's energy between 20 Hz and 20 kHz lies (Peeters et al. 2011) | how far up the sound reaches; a bass-heavy sound can still have a bright attack, which the first rows show |
 
-**Zoom** (`readout ... --from S --to S`). The window is in seconds from the file's start; a loop's may run past its end,
-round its join. It is cut into equal slices, the finest of 1, 2, 5, 10, 20, 50 and 100 ms that gives at most 40 rows
-(`--slice-ms` sets one). A cell is the band's power over its slice, in dB under the loudest cell that slicing gives
-anywhere in the sound, so windows of one sound compare. A band cannot separate events closer than about two periods of
-its width (2 / bandwidth: about 90 ms for the 31.5 Hz octave band, 11 ms at 250 Hz, under 1 ms from 4 kHz up), so where
-the slices are finer its value stands in the first row of that span and `^` in the rows below (`.` throughout when it is
-more than 60 dB under); the text names those bands. `--bands third` reads the 31 third-octave bands at IEC 61260-1's
-nominal centres (20 Hz to 20 kHz), made by the same split with changes a third as wide, still adding up to the sound;
-`--hz LOW-HIGH` keeps the bands whose centre lies in the range; `--channel left|right` reads one channel of a stereo sound,
-its millisecond limit set by that channel's own power. Every event and every tonal line sounding in the window is listed,
-none cut. A page holds at most 25 lines and 2,500 characters; `--page N` prints the next, and JSON holds the whole window.
-The slice widths, the 40 rows, the two periods and the page size are this skill's choices.
+**Zoom** (`readout ... --from S --to S`). The window is in seconds from the file's start, read in whole milliseconds
+(every one it touches) and ended at its last whole slice or the sound's end; the text shows the window read. A loop's
+window starts inside the loop and may run past its end, round its join, its repeats in their true time even when the loop
+is not a whole number of milliseconds long. It is cut into equal slices, the finest of 1, 2, 5, 10, 20, 50 and 100 ms
+that gives at most 40 rows (a window over 4 s takes 100 ms and more rows; `--slice-ms` sets a width of at least 1 ms). A
+cell is the band's power over its slice, in dB under the loudest cell that slicing gives anywhere in the sound (any band,
+from any millisecond), so windows of one sound compare and none reads above 0. A band cannot separate events closer than
+about two periods of its width (2 / bandwidth: about 90 ms for the 31.5 Hz octave band, 11 ms at 250 Hz, under 1 ms from
+4 kHz up), so where the slices are finer it is measured over that whole span, past the window's end if the span runs on:
+its value stands in the first row and `^` in the rows below (`.` throughout when it is more than 60 dB under); the text
+names those bands. `--bands third` reads the 31 third-octave bands at IEC 61260-1's nominal centres (20 Hz to 20 kHz),
+made by the same split with changes a third as wide, still adding up to the sound; `--hz LOW-HIGH` keeps the bands whose
+centre lies in the range; `--channel left|right` reads one channel of a stereo sound: its cells (their millisecond limit
+set by that channel's own power), its lines and its events. Every event and every tonal line sounding in the window is
+listed, none cut; a line joined across a silence is not listed inside it. A page, with the blank line after it, holds at
+most 25 lines and 2,500 characters; `--page N` prints that page of each sound (one with fewer pages says how many it
+has), and JSON holds the whole window. The slice widths, the 40 rows, the two periods and the page size are this skill's
+choices.
 
 ## Flags and their thresholds
 

@@ -137,6 +137,38 @@ class ReadoutCommand(unittest.TestCase):
         self.assertEqual(late.returncode, 1)
         self.assertIn('pages at these settings', late.stdout)
 
+    def test_a_page_one_sound_lacks_is_said_and_the_others_still_print(self):
+        args = ('readout', self.render, '--from', '0', '--to', '2', '--slice-ms', '10', '--page', '5')
+        proc = run(*args)                                              # the beep fills fewer pages than the air
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn('readout: beep fills', proc.stdout)
+        self.assertIn('air: 0-2 s in slices of 10 ms', proc.stdout)
+        self.assertIn('page 5 of', proc.stdout)
+        self.assertEqual(run(*args, '--sound', 'beep').returncode, 1)
+
+    def test_a_printed_page_keeps_within_the_budget(self):
+        for extra in ((), ('--bands', 'third'), ('--hz', '1000-1000', '--slice-ms', '1')):
+            with self.subTest(extra=extra):
+                proc = run('readout', self.render, '--sound', 'air', '--from', '0', '--to', '2', *extra, '--page', '2')
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertLessEqual(len(proc.stdout.splitlines()), 25)
+                self.assertLessEqual(len(proc.stdout), 2500)
+
+    def test_bad_zoom_values_are_refused_in_a_sentence(self):
+        window = ('--from', '0', '--to', '0.1')
+        for extra, words in ((window + ('--slice-ms', '0'), 'at least 1 ms'), (('--from', '0', '--to', 'inf'), 'seconds'),
+                             (('--from', 'nan', '--to', '0.1'), 'seconds'), (window + ('--channel', 'right'), 'one channel')):
+            with self.subTest(extra=extra):
+                proc = run('readout', self.render, '--sound', 'beep', *extra)
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                self.assertIn(words, proc.stdout)
+                self.assertNotIn('Traceback', proc.stdout + proc.stderr)
+        quiet = self.base / 'quiet.wav'
+        wav.write(quiet, np.zeros(4800, dtype=np.float32), 48000)
+        proc = run('readout', quiet, '--variant', '2')
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn('render folder', proc.stdout)
+
     def test_zoom_options_are_checked_in_a_sentence(self):
         self.assertIn('both --from and --to', run('readout', self.render, '--to', '0.1').stdout)
         self.assertIn('go with --from and --to', run('readout', self.render, '--bands', 'third').stdout)

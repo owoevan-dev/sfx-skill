@@ -258,6 +258,9 @@ def cmd_readout(args):
                 name = f"{snd['id']}, variant {n}" if args.all_variants or args.variant is not None else snd['id']
                 jobs.append((name, v['file'], snd.get('use') == 'loop', snd.get('peak_at')))
     elif target.suffix.lower() == '.wav' and target.is_file():
+        if args.variant is not None:
+            print("readout: --variant picks a variant of a render folder's sound; a WAV file is one sound")
+            return 1
         jobs.append((target.name, target, None, None))
     else:
         print(f'readout: {target} is neither a render folder nor a WAV file')
@@ -265,7 +268,7 @@ def cmd_readout(args):
     if not jobs:
         print('readout: no sound matched')
         return 1
-    found = []
+    found, shown = [], 0
     for name, src, loop, peak_at in jobs:
         if target.is_dir():
             try:
@@ -296,19 +299,20 @@ def cmd_readout(args):
             found.append({'sound': name, **result})
         elif zoom:
             pages = readout.text_zoom(result, name)
-            if args.page > len(pages):
+            if args.page > len(pages):                  # said, and the other sounds go on
                 print(f'readout: {name} fills {len(pages)} page{"s" if len(pages) > 1 else ""} at these settings')
-                return 1
+                print()
+                continue
             print('\n'.join(pages[args.page - 1]))
             print()
+            shown += 1
         else:
             print('\n'.join(readout.text(result, name)))
             print()
     if args.json:
         print(json.dumps(found, indent=1, allow_nan=False))
-    elif zoom:
-        print('Cells: each band\'s power over each slice; a narrow low band reads coarser than the slices, shown by ^. '
-              'Events and tonal lines are every one in the window.')
+    elif zoom:                                          # each page explains itself: nothing more to fit in
+        return 0 if shown else 1
     else:
         print('Cells: each octave band\'s power over each slice, in dB under the loudest cell. Tonal lines are steady '
               'pitches; events are sudden rises. The spectrogram command draws the same sound as a picture.')
