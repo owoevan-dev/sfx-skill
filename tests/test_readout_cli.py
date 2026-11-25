@@ -172,6 +172,15 @@ class ReadoutCommand(unittest.TestCase):
         self.assertIn('slice', proc.stdout)
         self.assertNotIn('Traceback', proc.stdout + proc.stderr)
 
+    def test_page_goes_with_the_text_and_a_range_is_read_as_numbers(self):
+        window = ('readout', self.render, '--sound', 'beep', '--from', '0', '--to', '0.1')
+        proc = run(*window, '--page', '2', '--json')                   # JSON holds the whole window
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn('--page', proc.stdout)
+        self.assertEqual(run(*window, '--hz=').returncode, 1)
+        rows = json.loads(run(*window, '--hz', '1e-3-1000', '--json').stdout)
+        self.assertEqual(rows[0]['bands']['labels'][-1], '1k')
+
     def test_the_help_says_how_a_long_window_is_sliced(self):
         self.assertIn('100 for a window over 4 s', ' '.join(run('readout', '--help').stdout.split()))
 

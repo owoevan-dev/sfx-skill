@@ -211,20 +211,30 @@ def cmd_spectrogram(args):
     return 0
 
 
+def _range(text):
+    """(low, high) from 'LOW-HIGH', each a number as Python reads it (1e-3-1000 too), or None."""
+    for i, ch in enumerate(text):
+        if ch == '-' and i:                             # the first '-' that splits it into two numbers
+            try:
+                return float(text[:i]), float(text[i + 1:])
+            except ValueError:
+                continue
+    return None
+
+
 def _zoom_options(args):
     """(zoom?, hz range or None, error or None) from the readout's arguments."""
     zoom = args.from_s is not None or args.to_s is not None
     if zoom and (args.from_s is None or args.to_s is None):
         return zoom, None, 'zoom in with both --from and --to'
-    if not zoom and (args.slice_ms is not None or args.hz or args.channel or args.page != 1 or args.bands != 'octave'):
+    if not zoom and (args.slice_ms is not None or args.hz is not None or args.channel or args.page != 1
+                     or args.bands != 'octave'):
         return zoom, None, '--slice-ms, --bands, --hz, --channel and --page go with --from and --to'
-    hz = None
-    if args.hz:
-        try:
-            low, high = (float(v) for v in args.hz.split('-', 1))
-        except ValueError:
-            return zoom, None, f'--hz takes LOW-HIGH in Hz, such as 500-4000, not {args.hz!r}'
-        hz = (low, high)
+    if zoom and args.json and args.page != 1:
+        return zoom, None, '--page goes with the printed text; JSON holds the whole window'
+    hz = None if args.hz is None else _range(args.hz)
+    if args.hz is not None and hz is None:
+        return zoom, None, f'--hz takes LOW-HIGH in Hz, such as 500-4000, not {args.hz!r}'
     if args.page < 1:
         return zoom, None, '--page counts from 1'
     return zoom, hz, None
