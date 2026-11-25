@@ -253,7 +253,8 @@ def _parts(tracks):
     """Tracks that share a channel are often separate instruments (on two ports, FF 21, or a channel reused), so a part
     takes its program changes and controllers from its own track and from setup tracks (those without notes), in track
     order at one tick as a player takes them. A part whose own and setup tracks set no program by its first note opens on
-    the one its channel has from the other tracks then, and lists their later changes."""
+    the one its channel has from the other tracks then; it lists the other tracks' later changes only when its own and
+    setup tracks set no program at all."""
     parts = []
     for index, tr in enumerate(tracks, start=1):
         channels = sorted({n[4] for n in tr['notes']})
