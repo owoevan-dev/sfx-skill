@@ -88,7 +88,7 @@ https://github.com/user-attachments/assets/23ff56ba-839f-43e6-ab21-d8557511ab95
 3. **渲染。** 每個音效連同變體一起輸出，整組在真實峰值上限內調到同一響度，格式為 48 kHz 24-bit WAV。
 4. **量測。** agent 聽不到聲音，所以 skill 替它讀每個檔案：爆音、被截斷的結尾、直流偏移、最響的時間點是否符合設計、聲音有多亮、多密、多長，還有一張頻譜圖。
 5. **試聽。** 你在單一檔案的試聽頁上聽：每個變體、不重複的隨機變體、快速連發、循環接縫，以及游標移動、選擇、確認這類連續動作，也能疊在遊戲配樂上聽。試聽頁會用你的語言顯示。你的意見會回到 agent 手上。
-6. **匯出。** 替 Godot、Unity、Unreal、Roblox 和網頁輸出檔案，附上建議設定的清單。
+6. **匯出。** 替 Godot、Unity、Unreal、Roblox 和網頁輸出檔案，附上建議設定的清單。Godot 和 Unity 的匯出已實際匯入引擎確認；Unreal 和 Roblox 的則依照官方文件製作，歡迎[回報](https://github.com/owoevan-dev/sfx-skill/issues)使用結果。
 
 ## 更多內容
 
@@ -162,13 +162,13 @@ npx skills add owoevan-dev/sfx-skill
 
 如果這裡面有你的錄音，或用到了你的作品，而你不希望被收錄，請[開一個 issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml)，我們會盡快從發行版拿掉。不需要 Freesound 帳號。
 
-這些錄音之所以存在，是因為有人把它們做出來並無償分享。如果這個 skill 對你有幫助，請支持他們：
+這些錄音之所以存在，是因為有人把它們做出來並無償分享。如果這個 skill 對你有幫助，可以這樣支持他們：
 
 - Freesound 由音樂科技研究組創立並維運，接受[捐款](https://freesound.org/donations/donate/)。
 - 如果你在研究中使用 FSD50K，請[引用論文](THIRD_PARTY_NOTICES.md#recordings)。
-- 每次渲染都會列出用到的錄音。就算不需要標示，給個感謝也不花成本。
+- 每次渲染都會列出用到的錄音，想在遊戲的製作名單裡感謝作者時可以直接用。
 
-**為什麼本專案不收錄任何人的音效包。** 許多獨立音效設計師免費公開了很棒的素材包，其中不少是 CC0，而他們自己的頁面正是大家認識和支持他們的地方。授權也許允許重新打包，但我們寧可把你帶到他們那裡。喜歡什麼就向創作者下載，有餘力就謝謝他們，再交給 agent 使用。
+**為什麼不收錄創作者自己發行的素材包。** FSD50K 是研究團隊公開發佈的資料集，我們只從中挑選。創作者自己發行的素材包不一樣：許多獨立音效設計師免費公開了很棒的素材包，其中不少是 CC0，而他們自己的頁面正是大家認識和支持他們的地方。授權也許允許重新打包，但我們寧可把你帶到他們那裡。喜歡什麼就向創作者下載，再交給 agent 使用。
 
 </details>
 
@@ -204,7 +204,6 @@ npx skills add owoevan-dev/sfx-skill
 - FSD50K 由社群錄製，品質參差，也不是商業擬音音效庫。近距離細聽，頂尖的付費音效庫仍然更好。
 - 合成的金屬、引擎等複雜物理聲音，不如真實錄音有說服力。
 - 它不做語音和音樂。音樂請看 [music-skill](https://github.com/owoevan-dev/music-skill)。
-- Unreal 和 Roblox 的匯出是依照官方文件製作，尚未在這兩個引擎中實際開啟過。
 
 </details>
 

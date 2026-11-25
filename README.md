@@ -88,7 +88,7 @@ If an agent is already building your game, it knows what each sound has to do: w
 3. **Render.** Every sound comes out with its variants, the set at one loudness under a true-peak ceiling, as 48 kHz 24-bit WAV.
 4. **Measure.** The agent cannot hear, so the skill reads each file for it: clicks, cut endings, offsets, the loudest moment against the intended one, how bright, dense and long the sound is, and a picture of its spectrum.
 5. **Listen.** You hear the sounds on a single-file audition page: each variant, random variants without repeats, rapid repeats, loops across their join, and sequences such as hover, select and confirm, also over your game's music. The page speaks your language. Your notes go back to the agent.
-6. **Export.** Files and a manifest of suggested settings for Godot, Unity, Unreal, Roblox and the web.
+6. **Export.** Files and a manifest of suggested settings for Godot, Unity, Unreal, Roblox and the web. The Godot and Unity exports have been imported into those engines; the Unreal and Roblox ones follow their documentation, and [reports](https://github.com/owoevan-dev/sfx-skill/issues) from either are welcome.
 
 ## More
 
@@ -162,13 +162,13 @@ Synthesis needs nothing else. For real attacks and textures the skill can layer 
 
 If one of these recordings is yours or holds your work and you would rather it were not included, [open an issue](https://github.com/owoevan-dev/sfx-skill/issues/new?template=remove_recording.yml) and it will come out of the release as soon as we can. You don't need a Freesound account.
 
-Every one of these recordings exists because someone made it and gave it away. If the skill is useful to you, please support them:
+Every one of these recordings exists because someone made it and gave it away. If the skill is useful to you, here is how to support them:
 
 - Freesound, started and hosted by the Music Technology Group, takes [donations](https://freesound.org/donations/donate/).
 - If you use FSD50K in research, [cite the paper](THIRD_PARTY_NOTICES.md#recordings).
-- Each render credits the recordings it used. A credit costs nothing, even where none is required.
+- Each render lists the recordings it used, ready for your game's credits if you want to thank their authors.
 
-**Why the project carries no one's sound packs.** Many independent sound designers publish excellent packs for free, often under CC0, and their own pages are how people find them and support them. A licence may allow repackaging their work; we would rather send you to them. Download what you like from its creator, thank them if you can, and hand it to the agent.
+**Why the project doesn't bundle sound designers' own packs.** FSD50K is a research dataset that already shares these recordings openly; we only select from it. A designer's own pack is different. Many independent sound designers publish excellent packs for free, often under CC0, and their own pages are how people find them and support them. A licence may allow repackaging their work; we would rather send you to them. Download what you like from its creator and hand it to the agent.
 
 </details>
 
@@ -204,7 +204,6 @@ Whether a sound is good is another matter, and only listening can tell.
 - FSD50K was recorded by a community, so its quality varies, and it is not a commercial foley library. Up close, the best paid libraries are still ahead.
 - Synthesized metal, engines and other complex physical sounds are less convincing than recordings of them.
 - It does not make speech or music. For music, see [music-skill](https://github.com/owoevan-dev/music-skill).
-- The Unreal and Roblox exports follow those engines' documentation and have not been opened in them.
 
 </details>
 
