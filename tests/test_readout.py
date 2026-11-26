@@ -1146,6 +1146,27 @@ class ReleaseReview(unittest.TestCase):
         z = readout.view_compare(readout.analyse(x, RATE, loop=True), readout.analyse(tone(440, 0.6, 0.1), RATE, loop=True))
         self.assertEqual((z['lines']['same'], z['lines']['changed'], z['lines']['new'], z['lines']['gone']), (1, [], [], []))
 
+    def test_no_frame_of_the_longer_loop_hears_past_what_both_play(self):
+        x = tone(220, 1.0, 1.0)
+        n = int(0.6 * RATE)
+        x *= np.interp(np.arange(RATE), [0, n, n + int(0.03 * RATE), RATE], [0.1, 0.1, 0.4, 0.4])   # up 12 dB just after
+        x = np.round(x * 32767) / 32767                                # as a 16-bit file holds it
+        longer, shorter = readout.analyse(x, RATE, loop=True), readout.analyse(x[:n], RATE, loop=True)
+        z = readout.view_compare(longer, shorter)
+        self.assertEqual((z['lines']['same'], z['lines']['changed'], z['lines']['new'], z['lines']['gone']), (1, [], [], []))
+        cut = readout._trimmed_lines(longer, 0.6)                      # its level under the whole loop's loudest peak
+        self.assertAlmostEqual(cut[0]['db'], longer.lines[0]['db'] - 12, delta=0.5)
+
+    def test_line_ends_moved_exactly_40_ms_count_as_the_same(self):
+        def beep(at):
+            x = np.zeros(2 * RATE)
+            start = int(round(at * RATE))
+            x[start:start + int(0.19 * RATE)] = faded(tone(660, 0.19, 0.4), 8)
+            return readout.analyse(x, RATE, loop=True)
+
+        z = readout.view_compare(beep(1.0375), beep(1.0))               # its tracked ends move 40 and 35 ms
+        self.assertEqual((z['lines']['same'], z['lines']['changed']), (1, []))
+
     def test_the_floor_is_under_the_overviews_loudest_cell_not_a_shorter_slices(self):
         quiet = 0.4 * 10 ** (-62 / 20)                                 # 58 dB under the longer loop's loudest overview cell
         longer = tone(8000, 1.0, quiet)

@@ -79,7 +79,7 @@ ZOOM_ROWS = 40
 PAGE_LINES = 25                     # a page of a view holds at most this many lines ...
 PAGE_CHARS = 2500                   # ... and characters, and says how to see the rest
 BANDS = {'octave': (LABELS, CENTRES, CROSS_OCT), 'third': (THIRD_LABELS, THIRD_CENTRES, CROSS_OCT / 3)}
-FRAME_DATA = ('hzs', 'covered_s', 'pieces', 'dbfs', 'frames')   # what the Analysis keeps of each line and the views leave out
+FRAME_DATA = ('hzs', 'covered_s', 'pieces', 'dbfs')   # what the Analysis keeps of each line and the views leave out
 COMPARE_CENTS = 50.0                # compare: lines further apart than this are not one line changed ...
 COMPARE_EVENT_MS = 30               # ... nor events further apart in time one event moved
 SAME_CENTS, SAME_DB, SAME_MS = 5.0, 1.0, 5    # ... and smaller changes than these count as the same
@@ -374,7 +374,6 @@ def tonal_lines(x, rate):
     floor = top - LINE_RANGE_DB                                 # lines are tracked down to this under the loudest one,
     top = max(top, loudest)                                     # and their levels given under the loudest peak, tonal or not
     pieces = _tracks(long_found, long_frames, hop, rate, floor) + _tracks(short_found, short_frames, hop, rate, floor)
-    full_scale = 20 * math.log10(long_fft / 4)                  # a full-scale sine's peak in the long window
     out = []
     for points in _join([p['points'] for p in pieces], hop, rate):     # one pitch seen by both windows is one line
         start, end = points[0][0] * hop / rate, (points[-1][0] + 1) * hop / rate
@@ -391,9 +390,8 @@ def tonal_lines(x, rate):
         out.append({'hz': round(loud[1], 1), 'note': note_name(loud[1]), 'start_s': round(start, 3), 'end_s': round(end, 3),
                     'db': round(min(0.0, loud[2] - top), 1) + 0.0, 'median_hz': round(float(np.median(hzs)), 1),
                     'from_hz': round(hzs[0], 1), 'to_hz': round(hzs[-1], 1), 'low_hz': round(min(hzs), 1),
-                    'high_hz': round(max(hzs), 1), 'hzs': hzs, 'dbfs': loud[2] - full_scale,
-                    'covered_s': round(len(points) * hop / rate, 3), 'pieces': pieces,
-                    'frames': [(f * hop, hz, level - full_scale) for f, hz, level in points]})
+                    'high_hz': round(max(hzs), 1), 'hzs': hzs, 'dbfs': loud[2] - 20 * math.log10(long_fft / 4),
+                    'covered_s': round(len(points) * hop / rate, 3), 'pieces': pieces})
     out.sort(key=lambda line: -line['db'])
     return out
 
@@ -546,10 +544,9 @@ class Analysis:
     0 for a loop), last_ms, active_s; channel_env, each channel's band powers per millisecond (channels x bands x ms); env,
     their sum, no band above twice the sound's power in its millisecond (the split rings before a sudden sound, and that is
     cut off); counts, the samples in each millisecond; lines, every tonal line, loudest first, with its frame-by-frame
-    frequencies (`hzs`), each frame's first sample, frequency and level against a full-scale sine (`frames`), the time its
-    frames hold (`covered_s`), the stretches it sounds in (`pieces`, [from, to) samples) and its mains label; rolloff_hz.
-    `events_all` lists every event, the main one marked; `channel_lines_events(c)` gives one channel's lines and events the
-    same way."""
+    frequencies (`hzs`), the time its frames hold (`covered_s`), the stretches it sounds in (`pieces`, [from, to) samples) and
+    its mains label; rolloff_hz. `events_all` lists every event, the main one marked; `channel_lines_events(c)` gives one
+    channel's lines and events the same way."""
 
     def __init__(self, x, rate, loop=False, peak_at=None):
         self.x, self.rate, self.loop, self.peak_at = _channels(x), rate, bool(loop), peak_at
@@ -934,10 +931,14 @@ def view_compare(a, b):
             else:
                 db.append(int(round(10 * math.log10(p[i] / q[i]))))
         table.append({'label': label, 'this_ms': [sa, ea], 'that_ms': [sb, eb], 'db': db})
+    if a.loop:                                                     # a loop's lines as they sound in what both play
+        shared = min(len(a.x) / a.rate, len(b.x) / b.rate)
+        lines = _compare_lines(_trimmed_lines(a, shared), a.rate, _trimmed_lines(b, shared), b.rate, shift)
+    else:
+        lines = _compare_lines(a.lines, a.rate, b.lines, b.rate, shift)
     return dict(out, silent=[], common_s=round(common / 1000, 3), notes=notes,
                 onset_s=None if a.loop else [round(a.onset_ms / 1000, 3), round(b.onset_ms / 1000, 3)],
-                bands={'labels': list(LABELS), 'centres_hz': list(CENTRES), 'slices': table},
-                lines=_compare_lines(a, b, shift, common if a.loop else None),
+                bands={'labels': list(LABELS), 'centres_hz': list(CENTRES), 'slices': table}, lines=lines,
                 events=_compare_events(a.events_all, b.events_all, shift, common if a.loop else None),
                 rolloff_hz=[a.rolloff_hz, b.rolloff_hz])
 
@@ -951,48 +952,35 @@ def _shown(line):
     return {k: line[k] for k in ('hz', 'note', 'start_s', 'end_s', 'db')}
 
 
-def _clipped(line, rate, until):
-    """A loop's line as it sounds before `until` ms: its pitch, level, ends and stretches from those frames alone (None
-    where it has none there)."""
-    edge = until * rate / 1000                                     # in samples
-    frames = [f for f in line['frames'] if f[0] < edge]
-    if not frames:
-        return None
-    last = frames[-1][0] + max(1, int(round(rate * HOP_S)))        # where its last frame there ends
-    loud = max(frames, key=lambda f: f[2])
-    return dict(line, hz=round(loud[1], 1), note=note_name(loud[1]), start_s=round(frames[0][0] / rate, 3),
-                end_s=round(last / rate, 3), db=round(min(0.0, line['db'] + loud[2] - line['dbfs']), 1) + 0.0,
-                median_hz=round(float(np.median([f[1] for f in frames])), 1), dbfs=loud[2], frames=frames,
-                pieces=[[p0, min(p1, last)] for p0, p1 in line['pieces'] if p0 < edge])
+def _trimmed_lines(sound, seconds):
+    """A loop's tonal lines as they sound in its first `seconds`: tracked on its audio cut there, so that no frame hears
+    past it, each level under the whole loop's loudest peak as its own lines are."""
+    n = int(round(seconds * sound.rate))
+    if n >= len(sound.x):
+        return sound.lines
+    lines = tonal_lines(sound.x[:n], sound.rate)
+    if not sound.lines:
+        return lines
+    offset = sound.lines[0]['db'] - sound.lines[0]['dbfs']        # the whole loop's reference, from its loudest line
+    return [dict(line, db=round(min(0.0, line['dbfs'] + offset), 1) + 0.0) for line in lines]
 
 
-def _compare_lines(a, b, shift, until=None):
+def _compare_lines(these, this_rate, those, that_rate, shift):
     """Lines matched one to one: sounding at the same time once aligned (piece by piece, so not across a line's silent
     gap), then the nearest in pitch (each line's median, steadier than its loudest frame, which an attack can pull) within
-    COMPARE_CENTS. A loop's are read only before `until` ms: each line as it sounds there."""
+    COMPARE_CENTS; their ends compared in whole milliseconds."""
     def span(line, offset):
-        return line['start_s'] * 1000 - offset, line['end_s'] * 1000 - offset
+        return round(line['start_s'] * 1000) - offset, round(line['end_s'] * 1000) - offset
 
     def sounding(lines, rate, offset):
-        return [[(p0 * 1000 / rate - offset, p1 * 1000 / rate - offset) for p0, p1 in line['pieces']] if line else []
-                for line in lines]
+        return [[(p0 * 1000 / rate - offset, p1 * 1000 / rate - offset) for p0, p1 in line['pieces']] for line in lines]
 
     def overlap(xs, ys):
         return any(x0 < y1 and y0 < x1 for x0, x1 in xs for y0, y1 in ys)
 
-    keep = [0, until] if until is not None else None
-    if keep:                                                       # only what both loops play
-        these = [_clipped(line, a.rate, until) for line in a.lines]
-        those = [_clipped(line, b.rate, until) for line in b.lines]
-    else:
-        these, those = a.lines, b.lines
-    here, there = sounding(these, a.rate, shift[0]), sounding(those, b.rate, shift[1])
-    if keep:
-        mine_in = [i for i in range(len(these)) if these[i] and overlap(here[i], [keep])]
-        theirs_in = [j for j in range(len(those)) if those[j] and overlap(there[j], [keep])]
-    else:
-        mine_in, theirs_in = list(range(len(these))), list(range(len(those)))
-    pairs = sorted((abs(_cents(these[i]['median_hz'], those[j]['median_hz'])), i, j) for i in mine_in for j in theirs_in
+    here, there = sounding(these, this_rate, shift[0]), sounding(those, that_rate, shift[1])
+    pairs = sorted((abs(_cents(these[i]['median_hz'], those[j]['median_hz'])), i, j) for i in range(len(these))
+                   for j in range(len(those))
                    if overlap(here[i], there[j]) and abs(_cents(these[i]['median_hz'], those[j]['median_hz'])) <= COMPARE_CENTS)
     mine, theirs, matched = set(), set(), []
     for _, i, j in pairs:
@@ -1011,8 +999,8 @@ def _compare_lines(a, b, shift, until=None):
             changed.append(dict(_shown(x), median_hz=x['median_hz'], was_median_hz=y['median_hz'], cents=round(cents, 1),
                                 db_change=round(change, 1), was_start_s=y['start_s'], was_end_s=y['end_s'],
                                 moved=moved > LINE_MOVE_MS))
-    return {'same': same, 'changed': changed, 'new': [_shown(these[i]) for i in mine_in if i not in mine],
-            'gone': [_shown(those[j]) for j in theirs_in if j not in theirs]}
+    return {'same': same, 'changed': changed, 'new': [_shown(these[i]) for i in range(len(these)) if i not in mine],
+            'gone': [_shown(those[j]) for j in range(len(those)) if j not in theirs]}
 
 
 def _compare_events(these, those, shift, until=None):

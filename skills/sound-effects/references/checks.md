@@ -109,10 +109,11 @@ dB quieter reads -6 wherever both sound; `.` where both are more than 60 dB unde
 in it (as the overview finds it), `>+N` or `<-N` where only one side is above that, by at least N dB; `n/a` above either
 file's reach. One-shots are aligned at their onsets and read over the overview's slices both cover, with what the longer
 one has past that said, and what both hold before their onsets over the same stretch right before each; loops from their
-starts over the shorter, their lines and events too; a loop is not compared with a one-shot. Tonal lines are matched one
-to one, sounding at the same time once aligned (piece by piece, so not across a line's silent gap), then the nearest by
-median pitch within 50 cents (a line's loudest frame can sit in an attack, where its pitch reads a few cents off); a
-change under 5 cents and 1 dB, with both ends within 40 ms, counts as the same, levels being compared on one scale (each
+starts over the shorter, their lines (the longer one's tracked on its audio cut to that length) and events too; a loop is
+not compared with a one-shot. Tonal lines are matched one to one, sounding at the same time once aligned (piece by piece,
+so not across a line's silent gap), then the nearest by median pitch within 50 cents (a line's loudest frame can sit in an
+attack, where its pitch reads a few cents off); a change under 5 cents and 1 dB, with both ends within 40 ms in whole
+milliseconds, counts as the same, levels being compared on one scale (each
 line's loudest point against a full-scale sine). Events are matched one to one in time order within 30 ms, in whole
 milliseconds; a shift under 5 ms, a rise within 3 dB and the same bands count as the same. So an edit that took out one
 of three repeated notes shows that one as gone. And each one's roll-off. It describes the difference; it gives no score of
