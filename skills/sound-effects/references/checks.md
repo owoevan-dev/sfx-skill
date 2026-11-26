@@ -123,9 +123,11 @@ lists every one. The 50 cents, 30 ms and the bounds of the same are this skill's
 can read above it, the overview's cells being averages over longer slices): its peak; its attack, from 10 % to 90 % of
 the amplitude of that peak on the rise that leads to it, read on the band's power smoothed to its resolution (about two
 periods of its width), with the band's share already reached in the file's first millisecond said where that is 10 % or
-more and the attack so measured lasts 10 ms or more; and its decline, read on the power smoothed over five times that (at
-most 100 ms), so that noise in the band does not read as a fall; a band whose smoothing is longer than the sound says it
-is too short for that band. A decline counts once the band falls 10 dB under its peak. Its slope in dB/s is fitted from 5 to 25
+more, that millisecond's own power holding 10 % too (so silence before a fade-in is not read as sound), and the attack so
+measured lasts 10 ms or more; and its decline, read on the power smoothed over five times that (at most 100 ms), so that
+noise in the band does not read as a fall; a band whose smoothing is longer than the sound says it is too short for that
+band. A decline counts once the band falls 10 dB under its peak; a dip that swells back before that is no decline (the
+decline is read from the highest point after it). Its slope in dB/s is fitted from 5 to 25
 dB under the peak, or as far as the decline goes (a decrease slope after Peeters et al. 2011, kept to the decline), with
 the time to fall 60 dB at that slope, marked `~` where the decline is shorter and that time extrapolated; a fall over that
 range quicker than the band's smoothing is faster than the band can show, and is said so, with no slope. It ends where
@@ -135,7 +137,8 @@ next such stretch by less than a quarter of what its early fall, from 5 to 10 dB
 by at most 3 dB; given from where the level first comes within 1 dB of that next stretch); where it rises again (its mean
 over 50 ms climbing 6 dB over its lowest since: a swell); at a later strike (an event in that band, as the overview finds
 them, more than 30 ms after the peak; the fit stops half a smoothing window before it); or cut by the file's end while
-still falling. A band that never falls 10 dB is held. A loop has no decay. The 10 % and 90 %, the five resolutions and
+still falling. Where the level climbs back inside the fitted stretch so that the fit does not fall, no slope is given and
+the row says so. A band that never falls 10 dB is held. A loop has no decay. The 10 % and 90 %, the five resolutions and
 100 ms, the 10 dB, 5 to 25 dB, the stretches, the quarter, 3 dB, 1 dB, 50 ms and 6 dB are this skill's choices.
 
 ## Flags and their thresholds

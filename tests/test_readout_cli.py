@@ -181,6 +181,24 @@ class ReadoutCommand(unittest.TestCase):
         rows = json.loads(run(*window, '--hz', '1e-3-1000', '--json').stdout)
         self.assertEqual(rows[0]['bands']['labels'][-1], '1k')
 
+    def test_a_page_asked_for_with_json_is_refused_even_the_first(self):
+        for extra in (('--from', '0', '--to', '2', '--slice-ms', '10'), ('--view', 'decay')):
+            with self.subTest(extra=extra):
+                proc = run('readout', self.render, '--sound', 'air', *extra, '--page', '1', '--json')
+                self.assertEqual(proc.returncode, 1, proc.stdout)
+                self.assertIn('--page', proc.stdout)
+        proc = run('readout', self.render, '--sound', 'air', '--page', '1')     # no zoom or view to page
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+
+    def test_a_wav_file_takes_no_choice_of_sound_or_variants(self):
+        one = self.base / 'one.wav'
+        wav.write(one, (0.3 * np.sin(2 * np.pi * 440 * np.arange(24000) / 48000)).astype(np.float32), 48000)
+        for extra in (('--sound', 'air'), ('--all-variants',), ('--sound', 'air', '--view', 'decay')):
+            with self.subTest(extra=extra):
+                proc = run('readout', one, *extra, '--json')
+                self.assertEqual(proc.returncode, 1, proc.stdout)
+                self.assertIn('a WAV file is one sound', proc.stdout)
+
     def test_the_help_says_how_a_long_window_is_sliced(self):
         self.assertIn('100 for a window over 4 s', ' '.join(run('readout', '--help').stdout.split()))
 

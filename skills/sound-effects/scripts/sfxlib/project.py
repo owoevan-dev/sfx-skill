@@ -478,7 +478,7 @@ def _check_chain(c, chain, path):
             c.choice(chain['console'], 'model', p, chip.CONSOLES)
     if 'eq' in chain:
         p = _join(path, 'eq')
-        if c.fields(chain['eq'], p, {'low_cut_hz', 'high_cut_hz', 'peak'}):
+        if c.fields(chain['eq'], p, {'low_cut_hz', 'high_cut_hz', 'peak', 'low_shelf', 'high_shelf'}):
             c.number(chain['eq'], 'low_cut_hz', p, 10.0, 20000.0)
             c.number(chain['eq'], 'high_cut_hz', p, 20.0, 24000.0)
             if 'peak' in chain['eq']:
@@ -487,6 +487,12 @@ def _check_chain(c, chain, path):
                     c.number(chain['eq']['peak'], 'hz', pp, 20.0, 20000.0)
                     c.number(chain['eq']['peak'], 'gain_db', pp, -24.0, 24.0)
                     c.number(chain['eq']['peak'], 'q', pp, 0.1, 20.0)
+            for name in ('low_shelf', 'high_shelf'):
+                if name in chain['eq']:
+                    sp = _join(p, name)
+                    if c.fields(chain['eq'][name], sp, {'hz', 'gain_db'}, ('hz', 'gain_db')):
+                        c.number(chain['eq'][name], 'hz', sp, 20.0, 20000.0)
+                        c.number(chain['eq'][name], 'gain_db', sp, -24.0, 24.0)
     if 'saturation' in chain:
         p = _join(path, 'saturation')
         if c.fields(chain['saturation'], p, {'drive', 'mix'}):

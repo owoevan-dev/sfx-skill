@@ -108,8 +108,8 @@ After the layers are summed, each stage the sound names runs once, always in thi
 | Stage | Fields |
 |---|---|
 | `console` | `model`: `nes` (first-order high-pass at 90 and 440 Hz, low-pass at 14 kHz) or `famicom` (high-pass at 37 Hz), the consoles' output filters as the NESdev Wiki gives them |
-| `eq` | `low_cut_hz`, `high_cut_hz` (two-pole), `peak`: `{"hz", "gain_db", "q"}` |
-| `tilt` | `db` (-12 to 12): a low shelf of -db/2 and a high shelf of +db/2 at 1 kHz (the Audio EQ Cookbook's shelves): brighter above 0, darker below |
+| `eq` | `low_cut_hz`, `high_cut_hz` (two-pole), `peak`: `{"hz", "gain_db", "q"}`, `low_shelf` and `high_shelf`: `{"hz", "gain_db"}` (-24 to 24 dB; the Audio EQ Cookbook's shelves, slope 1): everything below (or above) `hz` moves by `gain_db`, half of it at `hz` |
+| `tilt` | `db` (-12 to 12): a low shelf of -db/2 and a high shelf of +db/2 at 1 kHz (the Audio EQ Cookbook's shelves): brighter above 0, darker below. To move only the lows or only the highs against the rest, use `eq`'s shelves |
 | `saturation` | `drive` 0-1, `mix` 0-1 |
 | `compressor` | `threshold_db` (-18), `ratio` (4), `knee_db` (6), `attack_ms` (5), `release_ms` (80), `makeup_db` (0), `mix` (1): a feed-forward compressor with a soft knee (the gain computer and smoothing of Giannoulis, Massberg and Reiss 2012). A slow attack lets the transient through and sharpens it; only an attack clearly shorter than the transient holds it down (sound-design.md, section 3) |
 | `delay` | `time` (required), `feedback` up to 0.95, `mix`, `damping_hz` |

@@ -79,7 +79,7 @@ ZOOM_ROWS = 40
 PAGE_LINES = 25                     # a page of a view holds at most this many lines ...
 PAGE_CHARS = 2500                   # ... and characters, and says how to see the rest
 BANDS = {'octave': (LABELS, CENTRES, CROSS_OCT), 'third': (THIRD_LABELS, THIRD_CENTRES, CROSS_OCT / 3)}
-FRAME_DATA = ('hzs', 'covered_s', 'pieces', 'dbfs')   # what the Analysis keeps of each line and the views leave out
+FRAME_DATA = ('hzs', 'covered_s', 'pieces', 'dbfs', 'frames')   # what the Analysis keeps of each line and the views leave out
 COMPARE_CENTS = 50.0                # compare: lines further apart than this are not one line changed ...
 COMPARE_EVENT_MS = 30               # ... nor events further apart in time one event moved
 SAME_CENTS, SAME_DB, SAME_MS = 5.0, 1.0, 5    # ... and smaller changes than these count as the same
@@ -374,6 +374,7 @@ def tonal_lines(x, rate):
     floor = top - LINE_RANGE_DB                                 # lines are tracked down to this under the loudest one,
     top = max(top, loudest)                                     # and their levels given under the loudest peak, tonal or not
     pieces = _tracks(long_found, long_frames, hop, rate, floor) + _tracks(short_found, short_frames, hop, rate, floor)
+    full_scale = 20 * math.log10(long_fft / 4)                  # a full-scale sine's peak in the long window
     out = []
     for points in _join([p['points'] for p in pieces], hop, rate):     # one pitch seen by both windows is one line
         start, end = points[0][0] * hop / rate, (points[-1][0] + 1) * hop / rate
@@ -390,8 +391,9 @@ def tonal_lines(x, rate):
         out.append({'hz': round(loud[1], 1), 'note': note_name(loud[1]), 'start_s': round(start, 3), 'end_s': round(end, 3),
                     'db': round(min(0.0, loud[2] - top), 1) + 0.0, 'median_hz': round(float(np.median(hzs)), 1),
                     'from_hz': round(hzs[0], 1), 'to_hz': round(hzs[-1], 1), 'low_hz': round(min(hzs), 1),
-                    'high_hz': round(max(hzs), 1), 'hzs': hzs, 'dbfs': loud[2] - 20 * math.log10(long_fft / 4),
-                    'covered_s': round(len(points) * hop / rate, 3), 'pieces': pieces})
+                    'high_hz': round(max(hzs), 1), 'hzs': hzs, 'dbfs': loud[2] - full_scale,
+                    'covered_s': round(len(points) * hop / rate, 3), 'pieces': pieces,
+                    'frames': [(f * hop, hz, level - full_scale) for f, hz, level in points]})
     out.sort(key=lambda line: -line['db'])
     return out
 
@@ -544,9 +546,10 @@ class Analysis:
     0 for a loop), last_ms, active_s; channel_env, each channel's band powers per millisecond (channels x bands x ms); env,
     their sum, no band above twice the sound's power in its millisecond (the split rings before a sudden sound, and that is
     cut off); counts, the samples in each millisecond; lines, every tonal line, loudest first, with its frame-by-frame
-    frequencies (`hzs`), the time its frames hold (`covered_s`), the stretches it sounds in (`pieces`, [from, to) samples) and
-    its mains label; rolloff_hz. `events_all` lists every event, the main one marked; `channel_lines_events(c)` gives one
-    channel's lines and events the same way."""
+    frequencies (`hzs`), each frame's first sample, frequency and level against a full-scale sine (`frames`), the time its
+    frames hold (`covered_s`), the stretches it sounds in (`pieces`, [from, to) samples) and its mains label; rolloff_hz.
+    `events_all` lists every event, the main one marked; `channel_lines_events(c)` gives one channel's lines and events the
+    same way."""
 
     def __init__(self, x, rate, loop=False, peak_at=None):
         self.x, self.rate, self.loop, self.peak_at = _channels(x), rate, bool(loop), peak_at
@@ -774,7 +777,8 @@ def view_zoom(a, start_s, end_s, bands='octave', hz=None, channel=None, slice_ms
         return out
     c = None if channel is None else ('left', 'right').index(channel)
     spans = [max(1, math.ceil(_resolve_ms(f, bands) / width)) for f in centres]     # the rows each band's cell covers
-    starts = 2 * total if a.loop else total                       # the reference's stretches start in these milliseconds
+    starts = -(-2 * n * 1000 // a.rate) if a.loop else total     # the reference's stretches start in these milliseconds
+                                                                  # (a loop's first two turns, to the sample)
     end = max(hi, starts + max(spans) * width)
     if a.loop:
         each, whole, counts = loop_energy(a.x, a.rate, end, centres, cross)
@@ -913,9 +917,8 @@ def view_compare(a, b):
                 notes.append(f'only {side} one has {sound.onset_ms} ms before its onset')
     above = np.array([c / math.sqrt(2) >= min(a.rate, b.rate) / 2 for c in CENTRES])
     powers = [(a.band_power(sa, ea), b.band_power(sb, eb)) for _, sa, ea, sb, eb in rows]
-    top = max([_overview_cells(a)[3], _overview_cells(b)[3]] +                # the louder one's loudest cell, anywhere
-              [float(max(p[~above].max(), q[~above].max())) for p, q in powers])
-    floor = top * 10 ** (-FLOOR_DB / 10)
+    top = max(_overview_cells(a)[3], _overview_cells(b)[3])       # the louder one's loudest cell anywhere, as the overview
+    floor = top * 10 ** (-FLOOR_DB / 10)                          # finds it (a shorter slice here can hold more)
     table = []
     for (label, sa, ea, sb, eb), (p, q) in zip(rows, powers):
         db = []
@@ -948,26 +951,45 @@ def _shown(line):
     return {k: line[k] for k in ('hz', 'note', 'start_s', 'end_s', 'db')}
 
 
+def _clipped(line, rate, until):
+    """A loop's line as it sounds before `until` ms: its pitch, level, ends and stretches from those frames alone (None
+    where it has none there)."""
+    edge = until * rate / 1000                                     # in samples
+    frames = [f for f in line['frames'] if f[0] < edge]
+    if not frames:
+        return None
+    last = frames[-1][0] + max(1, int(round(rate * HOP_S)))        # where its last frame there ends
+    loud = max(frames, key=lambda f: f[2])
+    return dict(line, hz=round(loud[1], 1), note=note_name(loud[1]), start_s=round(frames[0][0] / rate, 3),
+                end_s=round(last / rate, 3), db=round(min(0.0, line['db'] + loud[2] - line['dbfs']), 1) + 0.0,
+                median_hz=round(float(np.median([f[1] for f in frames])), 1), dbfs=loud[2], frames=frames,
+                pieces=[[p0, min(p1, last)] for p0, p1 in line['pieces'] if p0 < edge])
+
+
 def _compare_lines(a, b, shift, until=None):
     """Lines matched one to one: sounding at the same time once aligned (piece by piece, so not across a line's silent
     gap), then the nearest in pitch (each line's median, steadier than its loudest frame, which an attack can pull) within
-    COMPARE_CENTS. A loop's are read only before `until` ms."""
+    COMPARE_CENTS. A loop's are read only before `until` ms: each line as it sounds there."""
     def span(line, offset):
         return line['start_s'] * 1000 - offset, line['end_s'] * 1000 - offset
 
-    def sounding(sound, offset):
-        return [[(p0 * 1000 / sound.rate - offset, p1 * 1000 / sound.rate - offset) for p0, p1 in line['pieces']]
-                for line in sound.lines]
+    def sounding(lines, rate, offset):
+        return [[(p0 * 1000 / rate - offset, p1 * 1000 / rate - offset) for p0, p1 in line['pieces']] if line else []
+                for line in lines]
 
     def overlap(xs, ys):
         return any(x0 < y1 and y0 < x1 for x0, x1 in xs for y0, y1 in ys)
 
     keep = [0, until] if until is not None else None
-    these, those = a.lines, b.lines
-    here, there = sounding(a, shift[0]), sounding(b, shift[1])
     if keep:                                                       # only what both loops play
-        mine_in = [i for i in range(len(these)) if overlap(here[i], [keep])]
-        theirs_in = [j for j in range(len(those)) if overlap(there[j], [keep])]
+        these = [_clipped(line, a.rate, until) for line in a.lines]
+        those = [_clipped(line, b.rate, until) for line in b.lines]
+    else:
+        these, those = a.lines, b.lines
+    here, there = sounding(these, a.rate, shift[0]), sounding(those, b.rate, shift[1])
+    if keep:
+        mine_in = [i for i in range(len(these)) if these[i] and overlap(here[i], [keep])]
+        theirs_in = [j for j in range(len(those)) if those[j] and overlap(there[j], [keep])]
     else:
         mine_in, theirs_in = list(range(len(these))), list(range(len(those)))
     pairs = sorted((abs(_cents(these[i]['median_hz'], those[j]['median_hz'])), i, j) for i in mine_in for j in theirs_in
@@ -1106,12 +1128,13 @@ def view_decay(a):
     the band's power smoothed to its resolution (about two periods of its width): from ATTACK_FROM to ATTACK_TO of its
     peak amplitude, both on the rise that leads to the peak. The decline is read on the power smoothed over DECAY_SMOOTH
     resolutions (at most DECAY_SMOOTH_MAX_MS), so noise in the band does not read as a fall, from that level's peak; it
-    counts once it falls DECAY_MIN_DB, and ends at a later strike (an event in the band, as the overview finds them), where
-    it falls under the overview's floor, where it levels off (within LEVEL_OFF_DB of its last low for LEVEL_OFF_MS and
-    LEVEL_OFF_SHARE of the time it took to fall), or cut by the file's end. Its slope in dB/s is fitted from DECAY_FIT_DB[0]
-    to DECAY_FIT_DB[1] under the peak, or as far as it goes (Peeters et al. 2011's decrease slope kept to the decline), with
-    the time to fall 60 dB at that slope, extrapolated when the decline is shorter. A band that never falls that far is
-    held. A loop has no decay."""
+    counts once it falls DECAY_MIN_DB (a dip that swells back before that is none: it is read from the highest point after
+    it), and ends at a later strike (an event in the band, as the overview finds them), where it falls under the overview's
+    floor, where it levels off (within LEVEL_OFF_DB of its last low for LEVEL_OFF_MS and LEVEL_OFF_SHARE of the time it
+    took to fall), or cut by the file's end. Its slope in dB/s is fitted from DECAY_FIT_DB[0] to DECAY_FIT_DB[1] under the
+    peak, or as far as it goes (Peeters et al. 2011's decrease slope kept to the decline), with the time to fall 60 dB at
+    that slope, extrapolated when the decline is shorter; where the fitted stretch climbs back and the fit does not fall,
+    no slope is given (`unsteady`). A band that never falls that far is held. A loop has no decay."""
     out = {'decay': True, 'seconds': round(len(a.x) / a.rate, 3), 'loop': a.loop, 'silent': a.silent}
     if a.silent or a.loop:
         return out
@@ -1144,8 +1167,9 @@ def view_decay(a):
             start -= 1
         row = {'band': label, 'peak_s': round(peak_ms / 1000, 3), 'peak_db': round(float(level[peak_ms]), 1),
                'attack_ms': rise - start, 'attack_s': [round(start / 1000, 3), round(rise / 1000, 3)]}
-        if start == 0 and amp[0] >= ATTACK_FROM * amp[top_ms]:      # its 10 % lies before the file, or in its first ms
-            row['starts_at'] = round(float(amp[0] / amp[top_ms]), 2)
+        own = math.sqrt(float(a.env[i][0]))                        # the first millisecond's own power, which no smoothing
+        if start == 0 and min(own, amp[0]) >= ATTACK_FROM * amp[top_ms]:     # carries back from later: its 10 % lies
+            row['starts_at'] = round(float(amp[0] / amp[top_ms]), 2)          # before the file, or in that millisecond
         strikes = [round(e['time_s'] * 1000) for e in a.events_all
                    if label in e['bands'] and round(e['time_s'] * 1000) > peak_ms + MERGE_MS]
         rows.append(dict(row, **_decline(level, peak_ms, strikes[0] if strikes else None, width)))
@@ -1164,11 +1188,24 @@ def _decline(level, peak_ms, strike_ms, width):
     if strike_ms is not None and strike_ms < end:                  # before the smoothing starts to hear it
         end, kind = max(peak_ms + 1, strike_ms - width // 2), 'strike'
     part = level[peak_ms:end]
-    swell = _rises(part)
-    if swell is not None:
-        kind, rose_at = 'rises', peak_ms + swell
-        part = part[:int(np.argmin(part[:swell])) + 1]             # the decline ends at its low before the swell
-    low = np.minimum.accumulate(part)
+    search = 0
+    while True:
+        swell = _rises(part[search:])
+        if swell is None:
+            break
+        at = search + swell
+        if peak - float(np.min(part[:at])) < DECAY_MIN_DB:         # a dip that swells back before falling 10 dB is no
+            search = at                                            # decline: look on past it
+            continue
+        kind, rose_at = 'rises', peak_ms + at
+        part = part[:int(np.argmin(part[:at])) + 1]                # the decline ends at its low before the swell
+        break
+    begin = 0                                                      # where the decline starts
+    if search:                                                     # after a dip that swelled back: from the top after it
+        down = np.flatnonzero(part[search:] <= peak - DECAY_MIN_DB)
+        if down.size:
+            begin = search + int(np.argmax(part[search:search + int(down[0]) + 1]))
+    held = {'kind': 'held', **({'strike_s': round(strike_ms / 1000, 3)} if kind == 'strike' else {})}
     ending = {'kind': kind}
     if kind == 'floor':
         ending['at_s'] = round(end / 1000, 3)
@@ -1176,12 +1213,11 @@ def _decline(level, peak_ms, strike_ms, width):
         ending['at_s'] = round(strike_ms / 1000, 3)
     elif kind == 'rises':
         ending['at_s'] = round(rose_at / 1000, 3)
-    if peak - low[-1] < DECAY_MIN_DB:
-        if kind != 'floor':                                        # a quiet band can fall under the floor first
-            ending = {'kind': 'held', **({'strike_s': ending['at_s']} if kind == 'strike' else {})}
-        return {'slope_db_s': None, 't60_s': None, 'extrapolated': None, 'abrupt': False, 'end': ending}
-    first = int(np.argmax(part <= peak - DECAY_FIT_DB[0]))
-    tenth = int(np.argmax(part <= peak - DECAY_MIN_DB))
+    if peak - float(np.min(part[begin:])) < DECAY_MIN_DB:          # it never falls 10 dB from there (a quiet band can
+        return {'slope_db_s': None, 't60_s': None, 'extrapolated': None, 'abrupt': False,      # fall under the floor first)
+                'end': ending if kind == 'floor' else held}
+    first = begin + int(np.argmax(part[begin:] <= peak - DECAY_FIT_DB[0]))
+    tenth = begin + int(np.argmax(part[begin:] <= peak - DECAY_MIN_DB))
     early = DECAY_MIN_DB - DECAY_FIT_DB[0]                          # dB from the 5 dB to the 10 dB crossing
     stop = _plateau(part, first, tenth, early / max(tenth - first, 1))
     if stop is not None:
@@ -1195,7 +1231,9 @@ def _decline(level, peak_ms, strike_ms, width):
         return {'slope_db_s': None, 't60_s': None, 'extrapolated': None, 'abrupt': True, 'end': ending}
     t = np.arange(first, last + 1) / 1000
     slope = float(np.polyfit(t, part[first:last + 1], 1)[0])
-    return {'slope_db_s': round(slope, 1), 't60_s': round(-60 / slope, 3) if slope < 0 else None,
+    if slope >= 0:                                                 # the fitted stretch climbs back: no slope to give
+        return {'slope_db_s': None, 't60_s': None, 'extrapolated': None, 'abrupt': False, 'unsteady': True, 'end': ending}
+    return {'slope_db_s': round(slope, 1), 't60_s': round(-60 / slope, 3),
             'extrapolated': bool(peak - float(np.min(part)) < 60), 'abrupt': False, 'end': ending}
 
 
@@ -1256,6 +1294,7 @@ def text_decay(z, name):
                'held': lambda: 'held: never 10 dB under its peak' +
                                (f' before a later strike at {_secs(end["strike_s"])} s' if 'strike_s' in end else '')}
         extra = ('; faster than this band can show' if row['abrupt'] else '') + (
+            '; no steady fall to fit a slope to' if row.get('unsteady') else '') + (
             f'; already at {row["starts_at"]:.0%} in the file\'s first millisecond'
             if 'starts_at' in row and row['attack_ms'] >= ATTACK_NOTE_MS else '')
         slope = '' if row['slope_db_s'] is None else f'{row["slope_db_s"]:.0f} dB/s'

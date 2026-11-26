@@ -227,15 +227,15 @@ def _zoom_options(args):
     zoom = args.from_s is not None or args.to_s is not None
     if zoom and (args.from_s is None or args.to_s is None):
         return zoom, None, 'zoom in with both --from and --to'
-    if not zoom and (args.slice_ms is not None or args.hz is not None or args.channel or args.page != 1
+    if not zoom and (args.slice_ms is not None or args.hz is not None or args.channel or args.page is not None
                      or args.bands != 'octave'):
         return zoom, None, '--slice-ms, --bands, --hz, --channel and --page go with --from and --to'
-    if zoom and args.json and args.page != 1:
+    if zoom and args.json and args.page is not None:
         return zoom, None, '--page goes with the printed text; JSON holds the whole window'
     hz = None if args.hz is None else _range(args.hz)
     if args.hz is not None and hz is None:
         return zoom, None, f'--hz takes LOW-HIGH in Hz, such as 500-4000, not {args.hz!r}'
-    if args.page < 1:
+    if args.page is not None and args.page < 1:
         return zoom, None, '--page counts from 1'
     return zoom, hz, None
 
@@ -262,6 +262,8 @@ def _readout_jobs(target, args):
     elif target.suffix.lower() == '.wav' and target.is_file():
         if args.variant is not None:
             return [], "--variant picks a variant of a render folder's sound; a WAV file is one sound"
+        if args.sound or args.all_variants:
+            return [], "--sound and --all-variants pick a render folder's sounds and variants; a WAV file is one sound"
         jobs.append((None, target.name, target, None, None))
     else:
         return [], f'{target} is neither a render folder nor a WAV file'
@@ -295,9 +297,9 @@ def _view_problem(args):
     if (args.from_s is not None or args.to_s is not None or args.slice_ms is not None or args.hz is not None
             or args.channel or args.bands != 'octave'):
         return 'a view reads the whole sound; --from, --to, --slice-ms, --bands, --hz and --channel go with a zoom'
-    if args.json and args.page != 1:
+    if args.json and args.page is not None:
         return '--page goes with the printed text; JSON holds every view whole'
-    if args.page < 1:
+    if args.page is not None and args.page < 1:
         return '--page counts from 1'
     if args.variant is not None and (args.all_variants or args.variant < 1):
         return '--variant takes one variant, numbered from 1, instead of --all-variants'
@@ -336,11 +338,11 @@ def _readout_each(args, view, text):
             found.append({'sound': name, **result})
             continue
         pages = text(result, name)
-        if args.page > len(pages):
+        if (args.page or 1) > len(pages):
             print(f'readout: {name} fills {len(pages)} page{"s" if len(pages) > 1 else ""}')
             print()
             continue
-        print('\n'.join(pages[args.page - 1]))
+        print('\n'.join(pages[(args.page or 1) - 1]))
         print()
         shown += 1
     if args.json:
@@ -390,11 +392,11 @@ def _readout_compare(args):
             found.append({'sound': name, **result})
             continue
         pages = readout.text_compare(result, name, this_name, other_name)
-        if args.page > len(pages):
+        if (args.page or 1) > len(pages):
             print(f'readout: {name} fills {len(pages)} page{"s" if len(pages) > 1 else ""}')
             print()
             continue
-        print('\n'.join(pages[args.page - 1]))
+        print('\n'.join(pages[(args.page or 1) - 1]))
         print()
         shown += 1
     only_there = [job[1] for job in left.values()]
@@ -456,11 +458,11 @@ def cmd_readout(args):
             found.append({'sound': name, **result})
         elif zoom:
             pages = readout.text_zoom(result, name)
-            if args.page > len(pages):                  # said, and the other sounds go on
+            if (args.page or 1) > len(pages):                  # said, and the other sounds go on
                 print(f'readout: {name} fills {len(pages)} page{"s" if len(pages) > 1 else ""} at these settings')
                 print()
                 continue
-            print('\n'.join(pages[args.page - 1]))
+            print('\n'.join(pages[(args.page or 1) - 1]))
             print()
             shown += 1
         else:

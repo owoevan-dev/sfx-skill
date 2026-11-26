@@ -680,8 +680,8 @@ class ZoomReview2(unittest.TestCase):
         z = readout.view_zoom(readout.analyse(x, RATE, loop=True), 0.1, 0.2, slice_ms=1)
         self.assertEqual(cell(z, 181, '8k'), 0)                         # the third turn's whole millisecond is not counted
 
-    def test_no_window_of_a_loop_reads_above_0_db(self):
-        x = np.zeros(4812)                                            # 100.25 ms
+    def test_no_window_of_a_loop_reads_above_0_db_and_its_loudest_reads_0(self):
+        x = np.zeros(4812)                                            # 100.25 ms: two turns end at 200.5 ms
         x[24:72] = 0.3 * np.sin(2 * np.pi * 8000 * np.arange(48) / RATE)       # a millisecond from 0.5 ms
         a = readout.analyse(x, RATE, loop=True)
         tops = []
@@ -690,7 +690,7 @@ class ZoomReview2(unittest.TestCase):
                 if lo + part * 1000 < 100.25:
                     z = readout.view_zoom(a, lo / 1000 + part, lo / 1000 + part + 0.1002, slice_ms=1)
                     tops.append(max(v for r in z['bands']['slices'] for v in r['db'] if isinstance(v, int)))
-        self.assertLessEqual(max(tops), 0)
+        self.assertEqual(max(tops), 0)                                # no stretch from 201 ms, past two turns, counts
 
     def test_a_loops_milliseconds_round_to_the_nearest_sample(self):
         x = np.zeros(4410)                                            # 100 ms at 44.1 kHz
@@ -752,13 +752,13 @@ class ZoomReview2(unittest.TestCase):
 
     def test_a_loops_line_is_placed_to_the_sample(self):
         rate, n = 44100, 17872                                         # a turn of 405.26 ms
-        a = readout.analyse(1e-3 * np.sin(2 * np.pi * 50 * np.arange(n) / rate), rate, loop=True)
-        a.lines = [dict(hz=1000.0, note='B5+21', start_s=0.115, end_s=0.2, db=0.0, median_hz=1000.0, from_hz=1000.0,
-                        to_hz=1000.0, low_hz=1000.0, high_hz=1000.0, mains=False, hzs=[1000.0], covered_s=0.085,
-                        pieces=[[5060, 8820]])]
+        x = np.zeros(n)
+        x[4410:12789] = 0.4 * np.sin(2 * np.pi * 1000 * np.arange(8379) / rate)    # 1 kHz from 0.100 to 0.290 s
+        a = readout.analyse(x, rate, loop=True)
+        self.assertEqual(a.lines[0]['pieces'][0][0], 5060)            # the tracker's first frame of it, in samples
         self.assertEqual(readout.view_zoom(a, 0.4, 0.52)['lines'], [])   # it comes again at sample 22932, 0.520 s exactly
         line = readout.view_zoom(a, 0.4, 0.521)['lines'][0]
-        self.assertEqual((line['start_s'], line['end_s']), (0.52, round((8820 + n) / rate, 6)))
+        self.assertEqual((line['start_s'], line['end_s']), (0.52, round((a.lines[0]['pieces'][-1][1] + n) / rate, 6)))
 
     def test_a_line_starting_inside_a_millisecond_is_listed_there(self):
         rate = 44100                                                   # frames fall between whole milliseconds
@@ -1135,6 +1135,59 @@ class Decay(unittest.TestCase):
         within_a_page(self, pages)
         self.assertEqual(len(pages[0]), 2 + len(z['bands']))          # the head, the columns, one row a band
         self.assertIn('slope', '\n'.join(pages[0]))
+
+
+class ReleaseReview(unittest.TestCase):
+    """Cases from the release's final review."""
+
+    def test_unequal_loops_compare_a_line_only_over_what_both_play(self):
+        x = tone(440, 1.0, 0.1)
+        x[int(0.72 * RATE):] *= 4                                      # 12 dB up, after the shorter loop has ended
+        z = readout.view_compare(readout.analyse(x, RATE, loop=True), readout.analyse(tone(440, 0.6, 0.1), RATE, loop=True))
+        self.assertEqual((z['lines']['same'], z['lines']['changed'], z['lines']['new'], z['lines']['gone']), (1, [], [], []))
+
+    def test_the_floor_is_under_the_overviews_loudest_cell_not_a_shorter_slices(self):
+        quiet = 0.4 * 10 ** (-62 / 20)                                 # 58 dB under the longer loop's loudest overview cell
+        longer = tone(8000, 1.0, quiet)
+        longer[int(0.05 * RATE):int(0.1 * RATE)] += tone(1000, 0.05, 0.4)      # an accent that one 50 ms slice holds whole
+        shorter = tone(8000, 0.6, quiet)
+        z = readout.view_compare(readout.analyse(longer, RATE, loop=True), readout.analyse(shorter, RATE, loop=True))
+        self.assertEqual(set(column(z, '8k')[2:]), {0})                # after the accent, whose edges reach 8k themselves
+
+    def test_silence_before_a_fade_in_is_not_a_band_already_sounding(self):
+        x = np.zeros(int(0.5 * RATE))
+        body = tone(63, 0.495, 0.4)
+        body[:720] *= np.linspace(0, 1, 720)                           # 15 ms in, after 5 ms of digital silence
+        x[240:] = body
+        z = readout.view_decay(readout.analyse(x, RATE))
+        self.assertNotIn('starts_at', band(z, '63'))
+        self.assertNotIn('already', '\n'.join(readout.text_decay(z, 'hum')[0]))
+
+    def test_a_dip_that_comes_back_before_the_fall_does_not_hold_the_decline(self):
+        t = np.arange(int(1.2 * RATE)) / RATE
+        db = np.interp(t, [0, 0.1, 0.2, 0.3, 1.0], [0, -8.8, -1, -1, -85])     # 8.8 dB down and back, then 84 dB down
+        x = 0.4 * 10 ** (db / 20) * np.sin(2 * np.pi * 1000 * t)
+        x[:96] *= np.linspace(0, 1, 96)
+        row = band(readout.view_decay(readout.analyse(x, RATE)), '1k')
+        self.assertEqual(row['end']['kind'], 'floor')
+        self.assertAlmostEqual(row['slope_db_s'], -120, delta=12)
+
+    def test_a_fit_that_does_not_fall_gives_no_slope_and_says_so(self):
+        level = np.interp(np.arange(2400), [0, 100, 200, 300, 500, 510, 550, 551, 590, 600, 1200, 2200],
+                          [0, -8, -1, -1, -1, -6.5, -6.5, -2.5, -2.5, -10.2, -10.2, -70])   # a dip that swells back; then
+        row = readout._decline(level, 0, None, 14)                     # down, back near the peak, down to a long -10 dB
+        self.assertEqual((row['slope_db_s'], row['t60_s'], row.get('unsteady')), (None, None, True))
+        self.assertEqual(row['end']['kind'], 'levels_off')
+        z = {'silent': False, 'loop': False, 'bands': [dict(row, band='1k', peak_s=0.0, peak_db=0.0, attack_ms=1)]}
+        self.assertIn('no steady fall', '\n'.join(readout.text_decay(z, 'drone')[0]))
+
+    def test_a_short_bump_back_near_the_peak_does_not_move_where_the_decline_starts(self):
+        t = np.arange(RATE) / RATE
+        db = -120 * t
+        db[(t >= 0.12) & (t < 0.13)] = -4                              # 10 ms back within 5 dB of the peak, 14 dB down
+        x = 0.4 * 10 ** (db / 20) * np.sin(2 * np.pi * 2000 * t)
+        x[:96] *= np.linspace(0, 1, 96)
+        self.assertAlmostEqual(band(readout.view_decay(readout.analyse(x, RATE)), '2k')['slope_db_s'], -120, delta=8)
 
 
 if __name__ == '__main__':

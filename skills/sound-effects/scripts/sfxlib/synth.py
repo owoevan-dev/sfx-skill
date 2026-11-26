@@ -262,7 +262,8 @@ def _chain(x, chain, loop=False):
         x = chip.console(x, chain['console'].get('model', 'nes'), loop=loop)
     if 'eq' in chain:
         e = chain['eq']
-        x = fx.eq(x, e.get('low_cut_hz'), e.get('high_cut_hz'), e.get('peak'), loop=loop)
+        x = fx.eq(x, e.get('low_cut_hz'), e.get('high_cut_hz'), e.get('peak'), e.get('low_shelf'), e.get('high_shelf'),
+                  loop=loop)
     if 'tilt' in chain:
         x = fx.tilt(x, chain['tilt'].get('db', 0.0), loop=loop)
     if 'saturation' in chain:

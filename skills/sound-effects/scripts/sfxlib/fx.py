@@ -157,8 +157,10 @@ def room(x, size=1.0, decay_s=0.6, mix=0.2, loop=False):
     return _per_channel(x, one)
 
 
-def eq(x, low_cut_hz=None, high_cut_hz=None, peak=None, loop=False):
-    """Two-pole low cut and high cut (q 0.707) and one bell {'hz', 'gain_db', 'q'}; same length."""
+def eq(x, low_cut_hz=None, high_cut_hz=None, peak=None, low_shelf=None, high_shelf=None, loop=False):
+    """Two-pole low cut and high cut (q 0.707), one bell {'hz', 'gain_db', 'q'}, and a low and a high shelf {'hz',
+    'gain_db'} (the Audio EQ Cookbook's, slope 1: everything below or above hz moves by gain_db, half of it at hz); same
+    length."""
     sections = []
     if low_cut_hz:
         sections.append(filters.biquad('highpass', float(low_cut_hz), 0.7071))
@@ -166,6 +168,9 @@ def eq(x, low_cut_hz=None, high_cut_hz=None, peak=None, loop=False):
         sections.append(filters.biquad('lowpass', float(high_cut_hz), 0.7071))
     if peak:
         sections.append(filters.biquad('peak', float(peak['hz']), float(peak.get('q', 1.0)), float(peak['gain_db'])))
+    for kind, shelf in (('lowshelf', low_shelf), ('highshelf', high_shelf)):
+        if shelf:
+            sections.append(filters.biquad(kind, float(shelf['hz']), gain_db=float(shelf['gain_db'])))
     if not sections:
         return np.array(x, dtype=np.float64, copy=True)
     run = filters.apply_circular if loop else filters.apply
