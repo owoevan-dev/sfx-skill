@@ -319,5 +319,48 @@ class ReviewCases5(Files):
         self.assertEqual(song['parts'][0]['name'], 'horn')
 
 
+def port(number):
+    return b'\xff\x21\x01' + bytes([number])
+
+
+class Ports(Files):
+    """A piano's two staves on two tracks of one port and channel, the program and the pedal or bend on one of them (as
+    MuseScore writes a part's staves), and another port's instrument on the same channel."""
+
+    def piano(self, label, right=(), violin=None, setup=None):
+        conductor = track([(0, name('Piano piece')), (0, tempo(120)), (0, meter(4, 2))])
+        rh = track([(0, name('Piano RH')), (0, port(0)), (0, b'\xc0\x00'), *right,
+                    (0, b'\x90\x48\x64'), (4 * PPQ, b'\x80\x48\x40')])
+        lh = track([(0, name('Piano LH')), (0, port(0)), (0, b'\x90\x30\x64'), (4 * PPQ, b'\x80\x30\x40')])
+        tracks = [conductor, rh, lh]
+        if violin is not None:
+            tracks.append(track([(0, name('Violin on output 2')), (0, port(1)), (0, b'\xc0\x28'), *violin,
+                                 (0, b'\x90\x4c\x64'), (4 * PPQ, b'\x80\x4c\x40')]))
+        if setup is not None:
+            tracks.append(track([(0, port(setup[0])), *setup[1]]))
+        return midifile.load(self.write(smf(tracks), label))
+
+    def test_a_pedal_on_the_other_staff_is_named(self):
+        song = self.piano('pedal', right=[(0, b'\xb0\x40\x7f')])
+        self.assertEqual(midifile.quote(song, '3', 1, 1)['controls'], ['sustain pedal'])
+
+    def test_a_bend_on_the_other_staff_is_named(self):
+        song = self.piano('bend', right=[(0, b'\xe0\x00\x50')])
+        self.assertEqual(midifile.quote(song, '3', 1, 1)['controls'], ['pitch bend'])
+
+    def test_a_staff_that_sets_no_program_takes_its_ports_not_another_ports(self):
+        parts = {p['id']: p for p in self.piano('program', violin=[])['parts']}
+        self.assertEqual([parts[i]['program'] for i in ('2', '3', '4')], [0, 0, 0x28])
+
+    def test_another_ports_setup_program_stays_on_its_port(self):
+        parts = {p['id']: p for p in self.piano('setup-program', setup=(1, [(0, b'\xc0\x32')]))['parts']}
+        self.assertEqual([parts[i]['program'] for i in ('2', '3')], [0, 0])
+
+    def test_another_ports_pedal_stays_on_its_port(self):
+        song = self.piano('isolated', violin=[(0, b'\xb0\x40\x7f')], setup=(1, [(0, b'\xe0\x00\x50')]))
+        self.assertEqual(midifile.quote(song, '3', 1, 1)['controls'], [])
+        self.assertEqual(midifile.quote(song, '4', 1, 1)['controls'], ['pitch bend', 'sustain pedal'])
+
+
 if __name__ == '__main__':
     unittest.main()

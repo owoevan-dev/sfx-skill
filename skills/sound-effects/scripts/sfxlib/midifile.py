@@ -3,13 +3,17 @@
 Reads the format of The MIDI Association's "Standard MIDI Files 1.0" (RP-001): a header chunk (format 0 or 1, a division
 in ticks per quarter note) and track chunks of events with variable-length delta times, running status, note-on with
 velocity 0 as a note-off, and the meta events for tempo (FF 51), time signature (FF 58), track name (FF 03, read as UTF-8
-when it is valid UTF-8, else as Latin-1) and the end of a track (FF 2F). Every other event is skipped by its length; chunks of other types are skipped whole. Format 2 (independent
-patterns) and SMPTE divisions are refused in a sentence, as are a file over MAX_BYTES and a chunk that runs past the end.
+when it is valid UTF-8, else as Latin-1), MIDI port (FF 21) and the end of a track (FF 2F). Every other event is skipped
+by its length; chunks of other types are skipped whole. Format 2 (independent patterns) and SMPTE divisions are refused
+in a sentence, as are a file over MAX_BYTES and a chunk that runs past the end.
 
 A part is one track's notes on one channel. Channel 10 is General MIDI's percussion: its numbers are the keys of a kit.
-A part's program changes, pedal and bend come from its own track and from setup tracks (tracks without notes), in track
-order at one tick; where those set no program by its first note, it opens on the one its channel has from the other
-tracks. The title is the first track's name, else the file's.
+Channels are told apart by port: a track's channel events go to port 0 until an FF 21 in it names another, and a part is
+on the port in effect at its first note. A part's program changes come from its own track and from setup tracks (tracks
+without notes) on its port and channel, in track order at one tick; where those set no program by its first note, it
+opens on the one the other tracks give its port and channel. Its pedal and bend come from every track on its port and
+channel, since a player applies them to the channel (a piano's two staves on two tracks share them). The title is the
+first track's name, else the file's.
 A note-off ends the earliest note still open on its key and channel (so a note-on and a note-off of one key at one tick end the old
 note, not the new one), a note still sounding when its key is struck again ends there, and a note left open at the end of its
 track ends there.
@@ -60,10 +64,11 @@ def _decoded(raw):
 
 
 def _track(data, pos, end, index):
-    """The events of one track chunk: notes [(on tick, off tick, key, velocity, channel)], tempo and meter events, the name,
-    programs [(tick, channel, program)], sustain and pitch-bend ticks per channel, and the last tick."""
+    """The events of one track chunk: notes [(on tick, off tick, key, velocity, channel, port)], tempo and meter events, the
+    name, programs [(tick, channel, program, port)], sustain and pitch-bend ticks per (port, channel), and the last tick."""
     tick = 0
     status = None
+    port = 0                                        # FF 21 names the port this track's channel events go to from there
     open_notes = {}
     notes, tempos, meters, programs = [], [], [], []
     controls = {}
@@ -98,6 +103,8 @@ def _track(data, pos, end, index):
                     meters.append((tick, seq, numerator, 2 ** power, thirty_seconds))
             elif kind == 0x03 and name is None:
                 name = _decoded(body)
+            elif kind == 0x21 and length >= 1:
+                port = body[0]
             elif kind == 0x2F:
                 ended = True
                 break
@@ -124,22 +131,22 @@ def _track(data, pos, end, index):
         if a > 127 or b > 127:
             raise MusicError(f'track {index}: a channel message carries a value over 127')
         if kind == 0x90 and b > 0:
-            open_notes.setdefault((channel, a), []).append((tick, b))
+            open_notes.setdefault((channel, a), []).append((tick, b, port))
         elif kind == 0x80 or (kind == 0x90 and b == 0):
             waiting = open_notes.get((channel, a))
             if waiting:                             # the earliest note still open on this key ends here
-                on, velocity = waiting.pop(0)
-                notes.append((on, tick, a, velocity, channel))
+                on, velocity, on_port = waiting.pop(0)
+                notes.append((on, tick, a, velocity, channel, on_port))
         elif kind == 0xC0:
-            programs.append((tick, channel, a))
+            programs.append((tick, channel, a, port))
         elif kind == 0xB0 and a == SUSTAIN:
-            controls.setdefault(channel, []).append(('sustain pedal', tick, b >= 64))
+            controls.setdefault((port, channel), []).append(('sustain pedal', tick, b >= 64))
         elif kind == 0xB0 and a == RESET_ALL:                   # Reset All Controllers: the pedal up, the bend centred
-            controls.setdefault(channel, []).extend([('sustain pedal', tick, False), ('pitch bend', tick, False)])
+            controls.setdefault((port, channel), []).extend([('sustain pedal', tick, False), ('pitch bend', tick, False)])
         elif kind == 0xE0:
-            controls.setdefault(channel, []).append(('pitch bend', tick, (a | (b << 7)) != 8192))
+            controls.setdefault((port, channel), []).append(('pitch bend', tick, (a | (b << 7)) != 8192))
     for (channel, key), waiting in open_notes.items():
-        notes += [(on, tick, key, velocity, channel) for on, velocity in waiting]
+        notes += [(on, tick, key, velocity, channel, on_port) for on, velocity, on_port in waiting]
     return {'notes': _one_at_a_time(notes), 'tempos': tempos, 'meters': meters, 'programs': programs, 'controls': controls, 'name': name,
             'last': tick, 'ended': ended}
 
@@ -148,15 +155,15 @@ def _one_at_a_time(notes):
     """One note at a time on a key and channel: a note still sounding when its key is struck again ends there; of two note-ons
     at the same tick the one held longer is kept (the key sounds until its last release); a note with no length is dropped."""
     out, last = [], {}
-    for on, off, key, velocity, channel in sorted(notes, key=lambda n: (n[4], n[2], n[0], -n[1])):
-        prev = last.get((channel, key))
+    for on, off, key, velocity, channel, port in sorted(notes, key=lambda n: (n[5], n[4], n[2], n[0], -n[1])):
+        prev = last.get((port, channel, key))
         if prev is not None and prev[0] == on:
             continue
         if prev is not None and on < prev[1]:
-            out[prev[2]] = (prev[0], on, key, out[prev[2]][3], channel)
+            out[prev[2]] = (prev[0], on, key, out[prev[2]][3], channel, port)
         if off > on:
-            last[(channel, key)] = (on, off, len(out))
-            out.append((on, off, key, velocity, channel))
+            last[(port, channel, key)] = (on, off, len(out))
+            out.append((on, off, key, velocity, channel, port))
     return [n for n in out if n[1] > n[0]]
 
 
@@ -250,28 +257,30 @@ def _bars(meters, ppq, last):
 
 
 def _parts(tracks):
-    """Tracks that share a channel are often separate instruments (on two ports, FF 21, or a channel reused), so a part
-    takes its program changes and controllers from its own track and from setup tracks (those without notes), in track
-    order at one tick as a player takes them. A part whose own and setup tracks set no program by its first note opens on
-    the one its channel has from the other tracks then; it lists the other tracks' later changes only when its own and
-    setup tracks set no program at all."""
+    """A channel is a port and a channel number (FF 21). Tracks that share one are often separate instruments (a channel
+    reused, each track with its own program), so a part takes its program changes from its own track and from setup tracks
+    (those without notes) on its port and channel, in track order at one tick as a player takes them. A part whose own and
+    setup tracks set no program by its first note opens on the one the other tracks give its port and channel then (a
+    staff whose program another staff sets); it lists the other tracks' later changes only when its own and setup tracks
+    set no program at all. Its pedal and bend come from every track on its port and channel, in track order at one tick:
+    a player applies them to the channel."""
     parts = []
     for index, tr in enumerate(tracks, start=1):
         channels = sorted({n[4] for n in tr['notes']})
         for channel in channels:
             notes = sorted(n for n in tr['notes'] if n[4] == channel)
-            first = notes[0][0]
+            first, port = notes[0][0], notes[0][5]                 # on the port in effect at its first note
             pid = str(index) if len(channels) == 1 else f'{index}.{channel + 1}'
             sources = [other for j, other in enumerate(tracks, start=1) if j == index or not other['notes']]
-            mine = sorted(((t, p) for other in sources for t, ch, p in other['programs'] if ch == channel),
+            mine = sorted(((t, p) for other in sources for t, ch, p, pt in other['programs'] if (pt, ch) == (port, channel)),
                           key=lambda c: c[0])                                                  # stable: track order
             rest = sorted(((t, p) for j, other in enumerate(tracks, start=1) if j != index and other['notes']
-                           for t, ch, p in other['programs'] if ch == channel), key=lambda c: c[0])
+                           for t, ch, p, pt in other['programs'] if (pt, ch) == (port, channel)), key=lambda c: c[0])
             program = next((p for t, p in reversed(mine) if t <= first), None)
             if program is None:
                 program = next((p for t, p in reversed(rest) if t <= first), None)
             later = [(t, p) for t, p in (mine or rest) if t > first]
-            controls = [e for other in sources for e in other['controls'].get(channel, [])]
+            controls = [e for other in tracks for e in other['controls'].get((port, channel), [])]
             parts.append({'id': pid, 'track': index, 'channel': channel + 1, 'name': tr['name'], 'program': program,
                           'later_programs': later, 'notes': notes, 'drums': channel == DRUM_CHANNEL, 'controls': controls})
     return parts
@@ -373,7 +382,7 @@ def quote(song, part_id, first, last):
     if len(picked) > MAX_NOTES:
         raise MusicError(f'{span} of part {_text(part_id)} hold {len(picked)} notes and a layer holds {MAX_NOTES}: ask for fewer bars')
     notes, cut = [], 0
-    for on, off, key, velocity, _ in picked:
+    for on, off, key, velocity, *_ in picked:
         if off > stop:
             cut += 1
         at = seconds(song, on) - zero
