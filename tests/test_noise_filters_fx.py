@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 import helpers  # noqa: F401
-from sfxlib import filters, fx, noise
+from sfxlib import filters, fx, noise, project, synth
 
 RATE = 48000
 
@@ -133,6 +133,81 @@ class Effects(unittest.TestCase):
         y = fx.eq(x, low_cut_hz=200.0)
         ratio = np.sqrt(np.mean(y[RATE // 2:] ** 2) / np.mean(x[RATE // 2:] ** 2))
         self.assertLess(20 * math.log10(ratio), -20)
+
+
+def change_db(f, **shelves):
+    """How many dB eq moves a steady sine of f Hz (whole periods of its second half, after the filter has settled)."""
+    x = np.sin(2 * np.pi * f * np.arange(RATE) / RATE)
+    y = fx.eq(x, **shelves)
+    return 10 * math.log10(np.mean(y[RATE // 2:] ** 2) / np.mean(x[RATE // 2:] ** 2))
+
+
+def band_db(y, low, high):
+    y = y.mean(axis=1) if y.ndim == 2 else y
+    power = np.abs(np.fft.rfft(y)) ** 2
+    hz = np.fft.rfftfreq(len(y), 1 / RATE)
+    return 10 * math.log10(power[(hz >= low) & (hz < high)].sum())
+
+
+class EqShelves(unittest.TestCase):
+    """eq's low and high shelves (the Audio EQ Cookbook's, slope 1): everything below or above hz moves by gain_db, half
+    of it at hz."""
+    LOW = {'low_shelf': {'hz': 200.0, 'gain_db': -6.0}}
+    HIGH = {'high_shelf': {'hz': 2000.0, 'gain_db': 6.0}}
+
+    def test_a_shelf_moves_its_side_by_its_gain_and_half_of_it_at_its_frequency(self):
+        self.assertAlmostEqual(change_db(50, **self.LOW), -6.0, delta=0.1)
+        self.assertAlmostEqual(change_db(200, **self.LOW), -3.0, delta=0.02)
+        self.assertAlmostEqual(change_db(5000, **self.LOW), 0.0, delta=0.02)
+        self.assertAlmostEqual(change_db(8000, **self.HIGH), 6.0, delta=0.1)
+        self.assertAlmostEqual(change_db(2000, **self.HIGH), 3.0, delta=0.02)
+        self.assertAlmostEqual(change_db(50, **self.HIGH), 0.0, delta=0.02)
+
+    def test_both_shelves_apply_together(self):
+        self.assertAlmostEqual(change_db(50, **self.LOW, **self.HIGH), -6.0, delta=0.1)
+        self.assertAlmostEqual(change_db(8000, **self.LOW, **self.HIGH), 6.0, delta=0.1)
+
+    def test_each_shelf_cuts_and_boosts_as_asked(self):
+        for name, hz, far in (('low_shelf', 200.0, 50), ('high_shelf', 2000.0, 8000)):
+            for gain in (-6.0, 6.0):
+                with self.subTest(shelf=name, gain=gain):
+                    self.assertAlmostEqual(change_db(far, **{name: {'hz': hz, 'gain_db': gain}}), gain, delta=0.1)
+                    self.assertAlmostEqual(change_db(hz, **{name: {'hz': hz, 'gain_db': gain}}), gain / 2, delta=0.02)
+
+    def test_a_sound_chain_with_both_shelves_moves_both_ends(self):
+        spec = {'layers': [{'source': {'type': 'noise', 'color': 'pink'}, 'length': 0.5}]}
+        plain = synth.render_sound(spec, seed=1)
+        shelved = synth.render_sound(dict(spec, chain={'eq': {'low_shelf': {'hz': 300.0, 'gain_db': -6.0},
+                                                              'high_shelf': {'hz': 3000.0, 'gain_db': 6.0}}}), seed=1)
+
+        def moved(lo, hi):                                             # against the middle, which both shelves leave
+            return (band_db(shelved, lo, hi) - band_db(plain, lo, hi)) - (band_db(shelved, 800, 1200) - band_db(plain, 800, 1200))
+
+        self.assertAlmostEqual(moved(20, 60), -6.0, delta=0.7)
+        self.assertAlmostEqual(moved(12000, 20000), 6.0, delta=0.7)
+
+    def test_a_sound_chain_passes_its_shelves_to_eq(self):
+        spec = {'layers': [{'source': {'type': 'noise', 'color': 'pink'}, 'length': 0.5}]}
+        plain = synth.render_sound(spec, seed=1)
+        for name, hz, gain, inside, outside in (('low_shelf', 300.0, -6.0, (20, 60), (3000, 10000)),
+                                                ('high_shelf', 3000.0, 6.0, (12000, 20000), (20, 200))):
+            shelved = synth.render_sound(dict(spec, chain={'eq': {name: {'hz': hz, 'gain_db': gain}}}), seed=1)
+            moved = ((band_db(shelved, *inside) - band_db(plain, *inside))
+                     - (band_db(shelved, *outside) - band_db(plain, *outside)))
+            self.assertAlmostEqual(moved, gain, delta=0.5, msg=name)
+
+    def test_shelf_values_are_checked(self):
+        sound = {'id': 's', 'category': 'ui', 'layers': [{'source': {'type': 'noise', 'color': 'pink'}, 'length': 0.3}]}
+
+        def validated(eq):
+            return project.validate({'schema': 'sound-effects/1', 'title': 't', 'sounds': [dict(sound, chain={'eq': eq})]})
+
+        validated({'low_shelf': {'hz': 200, 'gain_db': -3}, 'high_shelf': {'hz': 4000, 'gain_db': 2}})
+        for eq in ({'low_shelf': {'hz': 200}}, {'high_shelf': {'gain_db': 2}}, {'low_shelf': {'hz': 5, 'gain_db': -3}},
+                   {'high_shelf': {'hz': 4000, 'gain_db': 30}}, {'low_shelf': {'hz': 200, 'gain_db': -3, 'q': 1}},
+                   {'high_shelf': 2000}):
+            with self.assertRaises(project.ProjectError, msg=str(eq)):
+                validated(eq)
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 {
   "name": "sfx-skill",
   "displayName": "SFX Skill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Design original sound effects for games and apps as editable layers: the agent builds each sound from synthesis and CC0 field recordings, and the skill renders variants, matches their loudness, makes seamless loops, measures every file and writes an audition page and exports for Godot, Unity, Unreal, Roblox and the web. No audio-generation model is involved.",
   "author": {
     "name": "owoevan-dev",

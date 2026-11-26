@@ -421,5 +421,24 @@ class ReverseOffset(unittest.TestCase):
         self.assertAlmostEqual(dominant_hz(y[:3000]), 600, delta=60)
 
 
+class JsonWithoutALibrary(unittest.TestCase):
+    def test_json_without_a_library_is_an_empty_librarys_json(self):
+        import subprocess
+        import sys
+        folder = helpers.scratch('samples_json_empty')
+        env = dict(helpers.child_env(), SFX_SKILL_LIBRARY=str(folder / 'no_library'))
+
+        def run(*args):
+            return subprocess.run([sys.executable, str(helpers.SCRIPTS / 'sfx.py'), 'samples', *args], capture_output=True,
+                                  text=True, encoding='utf-8', errors='replace', env=env, timeout=300)
+
+        listing = run('--json')
+        self.assertEqual(listing.returncode, 0, listing.stdout + listing.stderr)
+        self.assertEqual(json.loads(listing.stdout), {'packs': {}, 'files': [], 'matched': 0, 'some_words': []})
+        self.assertIn('without --json', listing.stderr)                # the person still learns how to fill one
+        self.assertEqual(json.loads(run('--find', 'wood knock', '--json').stdout)['files'], [])
+        self.assertEqual(json.loads(run('--labels', '--json').stdout), {})
+
+
 if __name__ == '__main__':
     unittest.main()

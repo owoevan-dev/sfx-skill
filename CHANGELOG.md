@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+- **Read a sound as numbers.** `sfx.py readout RENDER` (or a WAV file) prints each sound's ten octave bands over time from its
+  onset, its steady pitches with note names and its sudden rises, so the agent reads exactly what it used to estimate from a
+  spectrogram. A steady line at a mains frequency is marked, and the main event follows the sound's `peak_at`. It describes and
+  flags nothing; the spectrogram stays for what it leaves open.
+- **A closer look when the overview leaves a question.** `readout render_1 --sound ID --from 0.2 --to 0.4` zooms into a window
+  with finer slices and every pitch and rise in it (`--hz` for some bands, `--channel` for one side, `--variant` for another
+  variant). `--view decay` gives each octave band's attack, its slope, the time to fall 60 dB and how it ends.
+  `--view compare --against render_1` reads a new render against the last one in dB by band and slice, with the pitches and
+  rises that changed, came or went. Each prints a page per sound; most sounds need none of them.
+- **Quote a MIDI file.** `sfx.py music theme.mid` lists a Standard MIDI File's tempo, meter and parts, and `--track 2 --bars 1-2`
+  quotes a part's notes for an instrument or Surge layer, as for a music-skill project. Music written in any program can now be
+  quoted.
+- **Shelves in `eq`.** `low_shelf` and `high_shelf` (`{"hz", "gain_db"}`) move everything below or above a frequency by that many
+  dB, so a punch's low end can sit 3 dB lower against the rest with one field.
+- Importing FSD50K's own sets from its Zenodo record now also screens a recording's description for adult content, not only its
+  title and tags.
+- `sfx.py` is split into a module per family of commands, with no change of behaviour.
+
 ## 0.2.0
 
 - **Surge XT layers.** With [music-skill](https://github.com/owoevan-dev/music-skill) installed, a `surge` layer plays one of the

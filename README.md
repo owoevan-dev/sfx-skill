@@ -66,7 +66,7 @@ These sounds and their project files are CC0. They are on the release [examples-
 
 Synthesis works as soon as the skill is installed. For real recordings, the agent asks you once before it downloads the library: 2.9 GB to fetch, and about 7.2 GB on disk until you remove the downloaded archives.
 
-**Need music too?** [music-skill](https://github.com/owoevan-dev/music-skill) writes original instrumental music and game loops as editable notes. With both installed, the agent can read your music's tempo, sections and harmony and quote its theme in a sound, and you hear the sounds over the track on the audition page. music-skill's setup also brings [Surge XT](https://surge-synthesizer.github.io), whose patches suit magic and sci-fi sounds that move and ring by themselves. Each skill works without the other.
+**Need music too?** [music-skill](https://github.com/owoevan-dev/music-skill) writes original instrumental music and game loops as editable notes. With both installed, the agent can read your music's tempo, sections and harmony and quote its theme in a sound, and you hear the sounds over the track on the audition page. Music made with anything else can be quoted from a MIDI file. music-skill's setup also brings [Surge XT](https://surge-synthesizer.github.io), whose patches suit magic and sci-fi sounds that move and ring by themselves. Each skill works without the other.
 
 ## Why not just generate it?
 
@@ -86,7 +86,7 @@ If an agent is already building your game, it knows what each sound has to do: w
 1. **Brief and palette.** The agent settles the game's world, materials and style, which events need sounds and which of them loop, and turns that into a palette the whole set shares.
 2. **Design.** Each sound is written as layers: oscillators, FM, chip voices, noise, struck modes, rain, wind, recordings and, with music-skill, Surge XT patches, each with its own envelope, pitch and filter. Forty-three recipes for interface, retro, sci-fi, magic, impact and ambience sounds are starting points to adapt.
 3. **Render.** Every sound comes out with its variants, the set at one loudness under a true-peak ceiling, as 48 kHz 24-bit WAV.
-4. **Measure.** The agent cannot hear, so the skill reads each file for it: clicks, cut endings, offsets, the loudest moment against the intended one, how bright, dense and long the sound is, and a picture of its spectrum.
+4. **Measure.** The agent cannot hear, so the skill reads each file for it: clicks, cut endings, offsets, the loudest moment against the intended one, how bright, dense and long the sound is; then its bands over time, its steady pitches and its sudden rises, as numbers it can read exactly, beside a picture of its spectrum. When a question is left, it can zoom into a moment, read how each band rises and fades, or check what an edit changed against the version before.
 5. **Listen.** You hear the sounds on a single-file audition page: each variant, random variants without repeats, rapid repeats, loops across their join, and sequences such as hover, select and confirm, also over your game's music. The page speaks your language. Your notes go back to the agent.
 6. **Export.** Files and a manifest of suggested settings for Godot, Unity, Unreal, Roblox and the web. The Godot and Unity exports have been imported into those engines; the Unreal and Roblox ones follow their documentation, and [reports](https://github.com/owoevan-dev/sfx-skill/issues) from either are welcome.
 

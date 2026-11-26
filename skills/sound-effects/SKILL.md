@@ -4,7 +4,7 @@ description: "Designs and makes original sound effects for games and apps. The a
 license: MIT
 compatibility: "Python 3.10+ with NumPy. FFmpeg, if present, adds FLAC, Ogg and MP3 and reads recordings that are not WAV. An installed music-production skill adds layers on sampled instruments and Surge XT. CC0 field recordings are an optional download from the FSD50K dataset, with the user's agreement. No audio model."
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Sound effects
@@ -33,8 +33,9 @@ Run the commands from the game's project folder, by the full path of this skill'
 `scripts/sfx.py`), so that renders land in the project and never inside the skill.
 
 1. **Setup.** `python scripts/sfx.py doctor` passes (Python and NumPy; without NumPy it prints the command that installs
-   them) and shows whether FFmpeg, a sample library (`--library LIB` for one elsewhere) and Surge XT are there. With `--config <music-production configuration>`
-   it also checks music-production's own setup and that Surge XT can play. It looks for music-production beside this skill
+   them) and shows whether FFmpeg and a sample library (`--library LIB` for one elsewhere) are there and whether it finds
+   music-production, which brings Surge XT. With `--config <music-production configuration>` it also checks
+   music-production's own setup and whether Surge XT can play; without it, it says so. It looks for music-production beside this skill
    and in `~/.claude/skills`; installed as a plugin, music-production sits in a folder of its own, so when it is among your
    skills but `doctor` does not find it, find that folder (the one holding `scripts/studio.py`, under your plugins folder)
    and pass it as `--music-skill DIR` to `doctor`, `surge` and `render`, before suggesting an install.
@@ -47,7 +48,7 @@ Run the commands from the game's project folder, by the full path of this skill'
    list: recommend the library (what it takes is under **Recordings** below) and mention that the user can hand you a
    folder or zip of sounds they already have. A game of only interface or chip sounds needs neither, so do not ask.
    If the list holds magic, sci-fi or tonal cues that ring on (notifications, rewards, level-ups), or the user wants the
-   game's music too, and `doctor` shows no Surge XT, say that once too: the music-production skill's setup adds it (about
+   game's music too, and `doctor` finds no music-production or, given `--config`, no Surge XT, say that once too: the music-production skill's setup adds it (about
    0.5 GB), it suits sounds that should move and ring by themselves, and the same skill writes music. Install it only if
    they agree; without it these sounds are made from the other layers. A set of only short interface sounds, chip sounds
    or recordings does not need it, so do not ask.
@@ -97,7 +98,7 @@ Run the commands from the game's project folder, by the full path of this skill'
    layers, `--record-takes --config CONFIG` for Surge layers with no take yet, `--samples LIB` for a library elsewhere) writes the masters, `resolved.json` (every value each file was made
    from, and each layer's peak), `check.json` and `audition.html`. Read the flags and each sound's traits in
    `check.json` (`check render_1 --traits` prints them as a table): how dense, bright, long and heavy it is, set against
-   the brief ([checks.md](references/checks.md)). No flags does not mean clean: a noise inside a recording or a sample can look like part of the sound, so look at the spectrogram (`spectrogram render_1`) of anything with a long tail. Change what they point at in a new render folder (`render_2`, ...). While you work on one sound, `--sound ID` renders
+   the brief ([checks.md](references/checks.md)). No flags does not mean clean: a noise inside a recording or a sample can look like part of the sound. `readout render_1` prints each sound as numbers you can read exactly: its ten octave bands over time from the onset, its steady pitches (tonal lines, with note names, and any at a mains frequency marked) and its sudden rises (events). Read it for anything with a long tail, a recording or a pitch that matters, and look at the spectrogram (`spectrogram render_1`) for what it leaves open. For most sounds the overview is enough; each zoom or view prints a page per sound. When a flag, an event or a report leaves a question about a moment, a band or one side, zoom in: `readout render_1 --sound ID --from 0.2 --to 0.4` prints finer slices and every line and event in that window (`--hz 500-4000` for a band, `--channel left` for one side, `--variant 2` for another variant). When the brief is about how fast a one-shot starts, how long it rings or how it stops, `--view decay` gives each band's attack, its slope, the time to fall 60 dB at that slope and how it ends. Render each change in a new folder (`render_2`, ...). To check a target (3 dB lower, a semitone up) or a part the brief says to keep, `readout render_2 --view compare --against render_1` shows new minus old in dB by band and slice, with the tonal lines and events that changed, came or went. While you work on one sound, `--sound ID` renders
    it alone and `--no-page` skips the page; render the whole project before you send it.
 5. **Listen.** Send the user `audition.html`. It plays each variant, random variants without repeats, rapid repeats
    and the flows; loops play looping, with a button that starts two seconds before the join. The user sets a level,
@@ -125,7 +126,7 @@ a long loop keeps the page small.
 ## The game's music
 
 When the music comes from a music-production project, its `song.json` shows what the sounds will sit against, and a sound
-can quote it. Which notes to use and where a sound sits are your choice: nothing here fits a sound to the music by itself.
+can quote it; a Standard MIDI File of the music works for quoting too. Which notes to use and where a sound sits are your choice: nothing here fits a sound to the music by itself.
 
 - `python scripts/sfx.py music song.json` prints what the project declares: tempo, meter, the sections by bar and second,
   its harmony and plan, and what each part holds (its range and, for pitched parts, the pitch classes it plays). It works
@@ -135,6 +136,10 @@ can quote it. Which notes to use and where a sound sits are your choice: nothing
   the last bar is cut there, and it names what the performance adds to those bars that the written notes leave out (swing,
   gate, per-note timing, rubato, slurs, a bend, or a pedal or controller the part's engine plays). Quote only music that is
   the user's own or that they may use this way.
+- `python scripts/sfx.py music theme.mid` lists a MIDI file's tempo, meter and parts (a track's notes on one channel,
+  numbered such as `2` or `1.10`, with their General MIDI program); `--track 2 --bars 1-2` quotes them the same way.
+  Channel 10 is General MIDI's percussion, whose numbers are a kit's keys. The quote is the file's notes as written, held for
+  as long as each key is down: a sustain pedal or pitch bend the file sends in those bars is named as left out.
 - On the audition page, **Music** loads a file from the user's computer and loops it at its own level under the sounds. The
   file stays in the browser: it is not embedded in the page or sent anywhere, and nothing of it reaches the masters.
 
@@ -169,9 +174,10 @@ measures well: report measurements as measurements and let the user's ears decid
 | `banks --config CONFIG [--find TEXT] [--bank NAME] [--json]` | lists the sample banks instrument layers may use and their presets |
 | `samples [--library LIB] [--download-fsd50k DATA] [--add-fsd50k DATA] [--add FOLDER_OR_ZIP [--licence L] [--author NAME] [--confirm-licence]] [--labels] [--find TEXT [--passing] [--not WORD] [--min-seconds S] [--max-seconds S] [--limit N]] [--events PACK/FILE [--min-gap S] [--even] [--limit N]] [--map PACK/FILE] [--spectrogram PACK/FILE ... [--output FOLDER]] [--json]` | lists the recorded sources sample layers may use; fetches and imports FSD50K's CC0 recordings; imports packs the user saved; finds recordings, best first; lists a recording's strikes as takes; prints its time map |
 | `surge [--find WORDS] [--role ROLE] [--character WORDS] [--id ID] [--limit N] [--music-skill DIR] [--json]` | lists the Surge XT patches a `surge` layer can play, with how each measured; `--id` says what one's macros and mod wheel move |
-| `music SONG [--track ID --bars 5-6] [--json]` | prints what a music-production project declares; with `--track` and `--bars`, the written notes of those bars for an `instrument` or `surge` layer |
+| `music SONG [--track ID --bars 5-6] [--json]` | prints what a music-production project (or a `.mid` file) declares; with `--track` and `--bars`, the written notes of those bars for an `instrument` or `surge` layer |
 | `render PROJECT --output FOLDER [--sound ID ...] [--no-page] [--config CONFIG] [--record-takes] [--music-skill DIR] [--samples LIB ...] [--ffmpeg PATH]` | renders, levels, writes masters, checks and writes the audition page (a new folder); `--sound` renders only those sounds; `--samples` repeats for packs kept in several libraries |
 | `check FOLDER [--traits]` | measures a render again and says what set the level, what would raise it and what the limiter took; `--traits` adds a line per sound |
+| `readout FOLDER_OR_WAV [--sound ID] [--all-variants \| --variant N] [--loop] [--from S --to S [--slice-ms MS] [--bands octave\|third] [--hz LOW-HIGH] [--channel left\|right]] [--view compare --against OTHER \| --view decay] [--page N] [--json]` | prints each sound as numbers: octave bands over time from the onset, tonal lines (frequency, note, start, end, level) and events (time, rise, bands); `--from`/`--to` zooms in on a window; `--view compare --against OTHER` reads each sound against the same one in another render (or one WAV against another), this minus that; `--view decay` how each octave band rises and fades |
 | `spectrogram FOLDER [--sound ID] [--all-variants]` | draws each sound's picture (level, loudest moment, spectrogram) into FOLDER/spectrograms, to look at |
 | `audition FOLDER [--ffmpeg PATH] [--config CONFIG]` | writes the audition page again (with an FFmpeg it finds, each clip as FLAC where that decodes to the same samples and is smaller than the WAV) |
 | `export FOLDER --target godot --output NEW [--formats wav,ogg] [--config CONFIG] [--res-path res://sfx]` | writes a render's files for an engine (godot, unity, unreal, roblox, web, generic) with a manifest (a new folder) |

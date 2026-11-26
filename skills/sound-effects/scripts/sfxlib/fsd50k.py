@@ -480,12 +480,12 @@ def is_steady(rated):
     return bool(top) and all(label in STEADY for label in top)
 
 
-def content_reasons(title, tags, labels):
+def content_reasons(title, tags, labels, description=''):
     """What keeps a recording out of a library an agent draws from without hearing it, however clean it is: adult
     content, by the words of its title and tags, and speech or singing, by its labels, which also covers a voice that may
     hold words unless it is labelled as a sound without them, such as laughter, a scream or breathing (this is a library
     of sound effects)."""
-    words = re.sub(r'[_-]+', ' ', ' '.join([str(title), *map(str, tags)]))
+    words = re.sub(r'[_-]+', ' ', ' '.join([str(title), *map(str, tags), str(description or '')]))
     reasons = ['adult content'] if ADULT_WORDS.search(words) else []
     labels = set(labels)
     if SPEECH_LABELS & labels or (VOICE_LABELS & labels and not WORDLESS_LABELS & labels):
@@ -563,7 +563,7 @@ def _describe(row, v):
     else:
         row.pop('author_note', None)
     row['screen'] = screen(row['measures'], v['predominant'], bool(note), v['steady'],
-                           content_reasons(v['title'], v['tags'], v['labels']))
+                           content_reasons(v['title'], v['tags'], v['labels'], v.get('description', '')))
 
 
 def add(folder, library, which='eval', check_md5=True, log=print):

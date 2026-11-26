@@ -51,13 +51,96 @@ check its effect. They are compared with nothing and raise no flag (traits.py gi
 | `active_s`, `attack_ms`, `decay20_ms`, `peak_s` | from the first to the last millisecond within 40 dB of the peak; from its start to the peak; from the peak to the last millisecond within 20 dB of it (edges this skill's choice); the time of the loudest millisecond | how long it speaks, how fast it hits, how long it rings, where it hits hardest |
 | `bands` | shares of the energy in six bands: `sub` 20-60 Hz, `low` 60-150, `low_mid` 150-500, `mid` 500-2000, `high_mid` 2-5 kHz, `high` 5-20 kHz (the file-level `bands` above are three other, wider bands) | where its weight lies |
 
-`python scripts/sfx.py check RENDER --traits` prints them, one line per sound. Look as well as read: `python scripts/sfx.py spectrogram RENDER` draws each sound's picture (its level with the
+`python scripts/sfx.py check RENDER --traits` prints the main ones, one line per sound (`check.json` holds them all). Look as well as read: `python scripts/sfx.py spectrogram RENDER` draws each sound's picture (its level with the
 loudest millisecond marked, and its spectrogram from 20 Hz to 20 kHz on a log scale) into RENDER/spectrograms; open
 the PNG. A click is a thin vertical line, a strike a bright column fading right, a ring a horizontal line, noise a
 smear, weight the bottom rows.
 
 Read them while you design: a punch whose `attack_ms` is long has no snap; a door whose `bands` hold almost nothing
 under 150 Hz has no weight; a bright `centroid_hz` under a dark brief is the first thing to change.
+
+## Readout
+
+`python scripts/sfx.py readout RENDER` (or `readout FILE.wav`) prints what the spectrogram shows, as numbers. A language
+model reads exact values from a table far better than from a picture: turning a chart into a table before reasoning
+over it is what made the difference in Liu et al. (2023, "DePlot", Findings of ACL), and vision-language models miss
+exact spatial detail in simple pictures (Rahmanzadehgervi et al. 2024, "Vision language models are blind", ACCV). So read
+the readout first and open the picture for what it leaves open. It describes and flags nothing; every threshold below is
+this skill's choice.
+
+| Part | What | Reading |
+|---|---|---|
+| bands | ten octave bands at the nominal centres of IEC 61260-1 (31.5 Hz, printed `31`, to 16 kHz), made by this skill's own split of one FFT of the sound (raised-cosine changes a sixth of an octave wide at the geometric midpoints between the centres, adding up to the whole; not an IEC class filter). A cell is the band's power over the slice (its energy there over the slice's length, one measurement per slice), in dB under the loudest cell; `.` is more than 60 dB under; `n/a` lies above what the file's sample rate can hold. No band is counted above twice the whole sound's power in its millisecond, which cuts off the split's ringing before a sudden sound out of silence | a one-shot's slices start at its onset (the first millisecond within 40 dB of the loudest, as `active_s`) and double in width: 0-5, 5-10, 10-20 ms and so on, with a `before` slice when something comes earlier. A loop has twelve equal slices. Read an attack in the first rows and a tail in the last: where the low end dies, whether the top outlasts the body. A brief sound inside a long slice, such as a late click, is averaged down in its row; it can still be found as an event when it meets the events' thresholds, and at most ten events print, with the number found |
+| tonal lines | steady pitches: spectral peaks at least 12 dB over the average of each side of the third of an octave around them (at least 8 bins each side, so a steep edge in a recording's spectrum is no pitch), whose instantaneous frequency, averaged over 25 ms, agrees with both bins beside them within a quarter of a bin, as a sinusoid's does and noise's does not (Friedman 1985; Charpentier 1986); joined from frame to frame within 40 cents (McAulay and Quatieri 1986), pieces of one pitch less than 0.15 s apart counted as one line, lasting at least 40 ms. Two windows, of about 85 and 21 ms at any sample rate (4096 and 1024 samples at 48 kHz), so quick glides show too; what both windows see of one pitch, and pieces of one pitch that meet, are one line, but lines that overlap only where they agree over 80 % of the frames they share (a pitch held in one channel and a glide leaving it in the other stay two) | the frequency at its loudest frame with its note (A4 = 440 Hz) and cents, its start and end (to about 40 ms), its level in dB under the loudest spectral peak, tonal or not: the loudest point of the 85 ms window's spectrum, where a click or a burst of noise counts, or the loudest pitch (a 21 ms window's peak is scaled to read as the 85 ms window's would for a steady pitch, so a pitch too brief for the long window keeps its level), both ends when it moves more than 50 cents, and its range when it moves and comes back. At most eight, loudest first. A fast sweep, or a low pitch that glides under noise, may show only in the bands, and in a loop a pitch across the join is read as two pieces, at the end and at the start, of which one under 40 ms shows no line: no line is no proof that there is no pitch |
+| mains frequency | a line whose frames hold the pitch for at least 0.5 s and at least 80 % as long as the active part lasts (gaps between pieces do not count; a hum in a recording's tail counts too), with 80 % of its points within 1.5 % of one multiple of 50 or 60 Hz, up to the eighth (400 or 480 Hz) | hum in a recording, or a drone that was meant: decide from the design. It is kept in the list even when louder partials fill it |
+| events | sudden rises: a millisecond in a band at least 12 dB over that band's loudest millisecond 5 to 25 ms before (relative rises in bands: Klapuri 1999; Bello et al. 2005). A start from silence (the band more than 80 dB under the loudest level in the 5 to 25 ms before) counts in any band; a rise in one band alone must reach 20 dB, since one narrow band swells by chance. Only rises within 40 dB of the loudest band level count. Rises within 30 ms are one event, in a loop across its join too | time, rise and the bands that rose; at most ten, the largest, with the number found when there are more. The main one is the event nearest the sound's `peak_at` when the project declares one (round the join for a loop), else the last to start before the loudest millisecond (or within 5 ms after it) with no silence between them (30 ms in which no band comes within 40 dB of the loudest band level), counted round a loop's join; a sound that swells into its loudest moment has none. Another event late in a one-shot is a second strike, a click or a noise in a recording: decide which from the design |
+| roll-off | the frequency under which 95 % of the active part's energy between 20 Hz and 20 kHz lies (Peeters et al. 2011) | how far up the sound reaches; a bass-heavy sound can still have a bright attack, which the first rows show |
+
+**Zoom** (`readout ... --from S --to S`). The window is in seconds from the file's start, read to the microsecond. A
+one-shot's must overlap the sound; a loop's starts inside the loop, lasts at most one turn and may run past its end,
+round its join, its repeats in their true time even when the loop is not a whole number of milliseconds long. The window
+is read in whole milliseconds (every one it touches) and ends at its last whole slice, which may run past a one-shot's
+end, where the sound is silent (the text says where it ends); the text shows the window read. It is cut into equal
+slices, the finest of 1, 2, 5, 10, 20, 50 and 100 ms that gives at most 40 rows (a window over 4 s takes 100 ms and more
+rows; `--slice-ms` sets a width from 1 ms to the window's length). A cell is the band's power over its slice, in dB under
+the loudest stretch of that cell's length anywhere in the sound, in any band (from any millisecond of a one-shot, silent
+past its end, or of a loop's first two turns), so windows of one sound compare and none reads above 0. The loudest cell
+reads 0 where a window can show it; a loop that is not a whole number of milliseconds long falls differently on the
+millisecond grid at each turn, so its loudest shown cell may read a little under. A band cannot separate events closer than
+about two periods of its width (2 / bandwidth: about 90 ms for the 31.5 Hz octave band, 11 ms at 250 Hz, under 1 ms from
+4 kHz up), so where the slices are finer it is measured over that whole span, past the window's end if the span runs on:
+its value stands in the first row and `^` in the rows below (`.` throughout when it is more than 60 dB under); the text
+names those bands. `--bands third` reads the 31 third-octave bands at IEC 61260-1's nominal centres (20 Hz to 20 kHz),
+made by the same split with changes a third as wide, still adding up to the sound; `--hz LOW-HIGH` keeps the bands whose
+centre lies in the range; `--channel left|right` reads one channel of a stereo sound: its cells (their millisecond limit
+set by that channel's own power), its lines (a mains label counting that channel's active part, all of a loop, as for the
+whole sound) and its events. Every event and every tonal line sounding in the window is listed, none cut, at the time it
+comes there: in a loop's window, each time it comes round; a line joined across a silence is not listed inside it. A
+page, with the blank line after it, holds at most 25 lines and 2,500 characters as printed (a line's end is two
+characters on Windows); `--page N` prints that page of each sound, and a sound the window misses or with fewer pages says
+so while the others print. JSON holds the whole window (so it takes no `--page`), or an `error` for such a sound. The
+slice widths, the 40 rows, the two periods and the page size are
+this skill's choices.
+
+**Compare** (`readout THIS --view compare --against OTHER`). Each sound of a render folder against the same sound and
+variant of another (one WAV file against another directly); a sound only one side has is named, `--sound` picking it or
+not. Each octave band's power per slice, on one scale for both, this minus that in dB, taken before rounding, so a sound 6
+dB quieter reads -6 wherever both sound; `.` where both are more than 60 dB under the louder one's loudest cell anywhere
+in it (as the overview finds it), `>+N` or `<-N` where only one side is above that, by at least N dB; `n/a` above either
+file's reach. One-shots are aligned at their onsets and read over the overview's slices both cover, with what the longer
+one has past that said, and what both hold before their onsets over the same stretch right before each; loops from their
+starts over the shorter, their lines (the longer one's tracked on its audio cut to that length) and events too; a loop is
+not compared with a one-shot. Tonal lines are matched one to one, sounding at the same time once aligned (piece by piece,
+so not across a line's silent gap), then the nearest by median pitch within 50 cents (a line's loudest frame can sit in an
+attack, where its pitch reads a few cents off); a change under 5 cents and 1 dB, with both ends within 40 ms in whole
+milliseconds, counts as the same, levels being compared on one scale (each
+line's loudest point against a full-scale sine). Events are matched one to one in time order within 30 ms, in whole
+milliseconds; a shift under 5 ms, a rise within 3 dB and the same bands count as the same. So an edit that took out one
+of three repeated notes shows that one as gone. And each one's roll-off. It describes the difference; it gives no score of
+likeness and judges nothing. It prints a page as a rule (three of each kind of change listed, the rest counted); JSON
+lists every one. The 50 cents, 30 ms and the bounds of the same are this skill's choices.
+
+**Decay** (`readout ... --view decay`). Per octave band, in dB against the overview's loudest cell (a band's short peak
+can read above it, the overview's cells being averages over longer slices): its peak; its attack, from 10 % to 90 % of
+the amplitude of that peak on the rise that leads to it, read on the band's power smoothed to its resolution (about two
+periods of its width), with the band's share already reached in the file's first millisecond said where that is 10 % or
+more, that millisecond's own power holding 10 % too (so silence before a fade-in is not read as sound), and the attack so
+measured lasts 10 ms or more; and its decline, read on the power smoothed over five times that (at most 100 ms), so that
+noise in the band does not read as a fall; a band whose smoothing is longer than the sound says it is too short for that
+band. A decline counts once the band falls 10 dB under its peak; a dip that swells back before that is no decline (the
+decline is read from the highest point after it). Its slope in dB/s is fitted from 5 to 25
+dB under the peak, or as far as the decline goes (a decrease slope after Peeters et al. 2011, kept to the decline), with
+the time to fall 60 dB at that slope, marked `~` where the decline is shorter and that time extrapolated; a fall over that
+range quicker than the band's smoothing is faster than the band can show, and is said so, with no slope. It ends where
+the band falls under the overview's floor (60 dB under its loudest cell; a quiet band can do so before falling 10 dB);
+where it levels off (the level's mean over a stretch of 100 ms, or 30 % of the time since it fell 5 dB, changes to the
+next such stretch by less than a quarter of what its early fall, from 5 to 10 dB under the peak, would take over it, and
+by at most 3 dB; given from where the level first comes within 1 dB of that next stretch); where it rises again (its mean
+over 50 ms climbing 6 dB over its lowest since: a swell); at a later strike (an event in that band, as the overview finds
+them, more than 30 ms after the peak; the fit stops half a smoothing window before it); or cut by the file's end while
+still falling. Where the level climbs back inside the fitted stretch so that the fit does not fall, no slope is given and
+the row says so. A band that never falls 10 dB is held. A loop has no decay. The 10 % and 90 %, the five resolutions and
+100 ms, the 10 dB, 5 to 25 dB, the stretches, the quarter, 3 dB, 1 dB, 50 ms and 6 dB are this skill's choices.
 
 ## Flags and their thresholds
 

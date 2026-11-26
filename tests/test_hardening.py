@@ -225,6 +225,11 @@ class TheDocumentsSayWhatHappens(unittest.TestCase):
         self.assertIn('requirements.txt', text)
         self.assertIn("from this repository's folder", text)
 
+    def test_the_guide_says_doctor_checks_surge_only_with_a_configuration(self):
+        text = (self.SKILL / 'SKILL.md').read_text(encoding='utf-8')      # without --config doctor cannot tell
+        self.assertNotIn('and Surge XT are there', text)
+        self.assertIn('whether Surge XT can play', text)
+
 
 class MastersAreAsARenderWroteThem(unittest.TestCase):
     def test_a_master_at_another_rate_is_refused(self):
