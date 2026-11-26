@@ -1157,6 +1157,22 @@ class ReleaseReview(unittest.TestCase):
         cut = readout._trimmed_lines(longer, 0.6)                      # its level under the whole loop's loudest peak
         self.assertAlmostEqual(cut[0]['db'], longer.lines[0]['db'] - 12, delta=0.5)
 
+    def test_a_cut_loops_lines_keep_the_whole_loops_reference_when_it_has_no_line(self):
+        def beep(hz, seconds):
+            x = np.zeros(int(seconds * RATE))
+            x[int(0.34 * RATE):int(0.4 * RATE)] = faded(tone(hz, 0.06, 0.0125), 2)
+            return x
+
+        x = beep(440, 1.0)                                             # a faint beep, then loud decaying noise
+        t = np.arange(int(0.6 * RATE)) / RATE
+        x[int(0.4 * RATE):] = np.random.default_rng(10).uniform(-0.7, 0.7, len(t)) * np.exp(-t / 0.12)
+        x = np.round(x * 32767) / 32767
+        longer = readout.analyse(x, RATE, loop=True)
+        self.assertEqual(longer.lines, [])                             # the whole loop has no line
+        z = readout.view_compare(longer, readout.analyse(beep(660, 0.4), RATE, loop=True))
+        self.assertEqual([line['hz'] for line in z['lines']['new']], [440.0])
+        self.assertAlmostEqual(z['lines']['new'][0]['db'], -9.1, delta=1.0)   # under the noise's loudest peak
+
     def test_line_ends_moved_exactly_40_ms_count_as_the_same(self):
         def beep(at):
             x = np.zeros(2 * RATE)

@@ -345,15 +345,21 @@ def _tracks(found, frames, hop, rate, floor):
     return lines
 
 
-def tonal_lines(x, rate):
+def tonal_lines(x, rate, reference=None):
     """The tracked tonal lines, loudest first, each a dict (times in seconds from the file's start; levels in dB under the
     loudest spectral peak, tonal or not: the long window's loudest bin or the loudest pitch, a short-window peak scaled as
     a steady pitch's would read in the long window; `pieces`, the stretches it sounds in, in samples). Two windows: a long one (N_FFT)
     resolves low and close pitches, a short one (SHORT_FFT, from SHORT_FROM_HZ up) follows glides too quick for the long
-    one; a short-window line that a long-window line already holds is dropped."""
+    one; a short-window line that a long-window line already holds is dropped. With `reference` (another reading's, as
+    `_tonal` gives it), levels are given under that instead."""
+    return _tonal(x, rate, reference)[0]
+
+
+def _tonal(x, rate, reference=None):
+    """tonal_lines' lines and the reference their levels are given under (that loudest peak; None for silence)."""
     x = _channels(x)
     if len(x) == 0 or not np.any(x):
-        return []
+        return [], None
     hop = max(1, int(round(rate * HOP_S)))
     long_fft, short_fft = _pow2(N_FFT * rate / 48000), _pow2(SHORT_FFT * rate / 48000)   # the same durations at any rate
     gain = 20 * math.log10(long_fft / short_fft)               # a sinusoid's peak in the short window is this much lower
@@ -369,10 +375,10 @@ def tonal_lines(x, rate):
         found, short_frames, _ = _peaks(x[:, c], rate, short_fft, hop, SHORT_FROM_HZ)
         short_found += [(f, hz, level + gain) for f, hz, level in found]
     if not long_found and not short_found:
-        return []
+        return [], loudest if reference is None else reference
     top = max(level for _, _, level in long_found + short_found)
     floor = top - LINE_RANGE_DB                                 # lines are tracked down to this under the loudest one,
-    top = max(top, loudest)                                     # and their levels given under the loudest peak, tonal or not
+    top = max(top, loudest) if reference is None else reference    # and their levels given under the loudest peak
     pieces = _tracks(long_found, long_frames, hop, rate, floor) + _tracks(short_found, short_frames, hop, rate, floor)
     out = []
     for points in _join([p['points'] for p in pieces], hop, rate):     # one pitch seen by both windows is one line
@@ -393,7 +399,7 @@ def tonal_lines(x, rate):
                     'high_hz': round(max(hzs), 1), 'hzs': hzs, 'dbfs': loud[2] - 20 * math.log10(long_fft / 4),
                     'covered_s': round(len(points) * hop / rate, 3), 'pieces': pieces})
     out.sort(key=lambda line: -line['db'])
-    return out
+    return out, top
 
 
 def _union(a, b):
@@ -545,8 +551,8 @@ class Analysis:
     their sum, no band above twice the sound's power in its millisecond (the split rings before a sudden sound, and that is
     cut off); counts, the samples in each millisecond; lines, every tonal line, loudest first, with its frame-by-frame
     frequencies (`hzs`), the time its frames hold (`covered_s`), the stretches it sounds in (`pieces`, [from, to) samples) and
-    its mains label; rolloff_hz. `events_all` lists every event, the main one marked; `channel_lines_events(c)` gives one
-    channel's lines and events the same way."""
+    its mains label; line_top, the loudest spectral peak their levels are under; rolloff_hz. `events_all` lists every
+    event, the main one marked; `channel_lines_events(c)` gives one channel's lines and events the same way."""
 
     def __init__(self, x, rate, loop=False, peak_at=None):
         self.x, self.rate, self.loop, self.peak_at = _channels(x), rate, bool(loop), peak_at
@@ -564,7 +570,7 @@ class Analysis:
         self.channel_env = band_envelopes(x, rate, loop, per_channel=True)
         self.env = np.minimum(_summed(self.channel_env), 2 * raw[None, :])
         self.counts = np.diff(_ms_edges(len(x), rate)).astype(float)
-        self.lines = tonal_lines(x, rate)
+        self.lines, self.line_top = _tonal(x, rate)
         for line in self.lines:
             line['mains'] = mains_line(line, self.active_s)
         self.rolloff_hz = rolloff_hz(x[_sample(self.onset_ms, rate):_sample(self.last_ms + 1, rate)], rate)
@@ -958,11 +964,7 @@ def _trimmed_lines(sound, seconds):
     n = int(round(seconds * sound.rate))
     if n >= len(sound.x):
         return sound.lines
-    lines = tonal_lines(sound.x[:n], sound.rate)
-    if not sound.lines:
-        return lines
-    offset = sound.lines[0]['db'] - sound.lines[0]['dbfs']        # the whole loop's reference, from its loudest line
-    return [dict(line, db=round(min(0.0, line['dbfs'] + offset), 1) + 0.0) for line in lines]
+    return tonal_lines(sound.x[:n], sound.rate, reference=sound.line_top)
 
 
 def _compare_lines(these, this_rate, those, that_rate, shift):
